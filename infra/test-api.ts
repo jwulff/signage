@@ -12,7 +12,7 @@ export const testApi = new sst.aws.ApiGatewayV2("SignageTestApi", {
 // Test bitmap endpoint
 testApi.route("GET /test-bitmap", {
   handler: "packages/functions/src/test-bitmap.handler",
-  link: [table],
+  link: [table, api],
   environment: {
     WEBSOCKET_URL: api.url,
   },
