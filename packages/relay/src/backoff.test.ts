@@ -60,6 +60,20 @@ describe("calculateBackoff", () => {
     });
     expect(state.nextDelay).toBe(9000); // 1000 * 3^2
   });
+
+  it("never exceeds maxDelay even with jitter", () => {
+    const maxDelay = 5000;
+    // Run many iterations at a high attempt number where delay would be capped
+    for (let i = 0; i < 100; i++) {
+      const state = calculateBackoff(10, {
+        initialDelay: 1000,
+        maxDelay,
+        maxAttempts: 20,
+        jitter: true,
+      });
+      expect(state.nextDelay).toBeLessThanOrEqual(maxDelay);
+    }
+  });
 });
 
 describe("createBackoffController", () => {

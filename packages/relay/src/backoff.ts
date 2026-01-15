@@ -56,6 +56,8 @@ export function calculateBackoff(
   if (opts.jitter) {
     const jitterRange = delay * 0.25;
     delay = delay - jitterRange + Math.random() * jitterRange * 2;
+    // Re-cap after jitter to ensure maxDelay is respected
+    delay = Math.min(delay, opts.maxDelay);
   }
 
   return {
