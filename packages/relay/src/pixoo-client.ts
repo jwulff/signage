@@ -14,28 +14,36 @@ function getUniquePicId(): number {
 }
 
 /**
- * Initialize Pixoo by switching to custom channel mode
- * Channel 3 is the custom/API-controlled display mode
+ * Initialize Pixoo for API-controlled display
+ * - Switch to channel 4 (API/cloud mode)
+ * - Reset HTTP GIF ID to clear any cached state
  */
 export async function initializePixoo(ip: string): Promise<void> {
   const url = `http://${ip}:${PIXOO_PORT}/post`;
 
-  const response = await fetch(url, {
+  // Switch to channel 4
+  const channelResp = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ Command: "Channel/SetIndex", SelectIndex: 3 }),
+    body: JSON.stringify({ Command: "Channel/SetIndex", SelectIndex: 4 }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Pixoo init failed: ${response.status}`);
+  if (!channelResp.ok) {
+    throw new Error(`Pixoo channel switch failed: ${channelResp.status}`);
   }
 
-  const result = (await response.json()) as { error_code: number };
-  if (result.error_code !== 0) {
-    throw new Error(`Pixoo init error: ${JSON.stringify(result)}`);
+  // Reset GIF state
+  const resetResp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ Command: "Draw/ResetHttpGifId" }),
+  });
+
+  if (!resetResp.ok) {
+    throw new Error(`Pixoo GIF reset failed: ${resetResp.status}`);
   }
 
-  console.log("Pixoo switched to custom channel");
+  console.log("Pixoo initialized (channel 4 + GIF reset)");
 }
 
 export async function sendFrameToPixoo(ip: string, frame: Frame): Promise<void> {
