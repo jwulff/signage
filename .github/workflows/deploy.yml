@@ -49,21 +49,16 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Remove system Pulumi from PATH
+      - name: Remove system Pulumi to avoid conflicts
         run: |
-          # SST bundles its own Pulumi - remove system Pulumi to avoid conflicts
-          echo "Original PATH: $PATH"
-          export PATH=$(echo $PATH | tr ':' '\n' | grep -v pulumi | tr '\n' ':' | sed 's/:$//')
-          echo "Updated PATH: $PATH"
-          which pulumi || echo "No system pulumi found (good)"
+          # SST v3 bundles its own Pulumi - system Pulumi causes version conflicts
+          # Remove all system Pulumi binaries
+          sudo rm -f /usr/local/bin/pulumi* || true
+          sudo rm -rf /home/runner/.pulumi || true
+          echo "System Pulumi removed"
 
       - name: Deploy with SST
-        run: |
-          # Remove system Pulumi from PATH to avoid version conflicts
-          export PATH=$(echo $PATH | tr ':' '\n' | grep -v pulumi | tr '\n' ':' | sed 's/:$//')
-          pnpm sst deploy --stage ${{ github.event.inputs.stage || 'dev' }}
-        env:
-          PULUMI_SKIP_UPDATE_CHECK: "true"
+        run: pnpm sst deploy --stage ${{ github.event.inputs.stage || 'dev' }}
 
       - name: Output URLs
         run: |
