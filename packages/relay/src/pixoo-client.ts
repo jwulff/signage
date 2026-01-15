@@ -7,12 +7,16 @@ import type { Frame } from "@signage/core";
 import { createPixooFrameCommand } from "@signage/core";
 
 const PIXOO_PORT = 80;
-let picIdCounter = 1;
+
+// Use timestamp-based PicID to avoid caching across relay restarts
+function getUniquePicId(): number {
+  return Date.now() % 100000;
+}
 
 export async function sendFrameToPixoo(ip: string, frame: Frame): Promise<void> {
   const url = `http://${ip}:${PIXOO_PORT}/post`;
-  // Use incrementing PicID to ensure Pixoo updates the display
-  const command = createPixooFrameCommand(frame, { picId: picIdCounter++ });
+  // Use timestamp-based PicID to ensure Pixoo always updates the display
+  const command = createPixooFrameCommand(frame, { picId: getUniquePicId() });
 
   const response = await fetch(url, {
     method: "POST",
