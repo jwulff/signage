@@ -13,16 +13,39 @@ function getUniquePicId(): number {
   return Date.now() % 100000;
 }
 
-export async function sendFrameToPixoo(ip: string, frame: Frame): Promise<void> {
+/**
+ * Initialize Pixoo by switching to custom channel mode
+ * Channel 3 is the custom/API-controlled display mode
+ */
+export async function initializePixoo(ip: string): Promise<void> {
   const url = `http://${ip}:${PIXOO_PORT}/post`;
-  // Use timestamp-based PicID to ensure Pixoo always updates the display
-  const command = createPixooFrameCommand(frame, { picId: getUniquePicId() });
 
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ Command: "Channel/SetIndex", SelectIndex: 3 }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Pixoo init failed: ${response.status}`);
+  }
+
+  const result = (await response.json()) as { error_code: number };
+  if (result.error_code !== 0) {
+    throw new Error(`Pixoo init error: ${JSON.stringify(result)}`);
+  }
+
+  console.log("Pixoo switched to custom channel");
+}
+
+export async function sendFrameToPixoo(ip: string, frame: Frame): Promise<void> {
+  const url = `http://${ip}:${PIXOO_PORT}/post`;
+  const picId = getUniquePicId();
+  const command = createPixooFrameCommand(frame, { picId });
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(command),
   });
 

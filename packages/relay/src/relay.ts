@@ -4,7 +4,7 @@
  */
 
 import WebSocket from "ws";
-import { sendFrameToPixoo } from "./pixoo-client";
+import { sendFrameToPixoo, initializePixoo } from "./pixoo-client";
 import type { WsMessage, FramePayload } from "@signage/core";
 import { decodeBase64ToPixels } from "@signage/core";
 
@@ -17,6 +17,13 @@ export interface RelayOptions {
 export async function startRelay(options: RelayOptions): Promise<void> {
   const { pixooIp, wsUrl, terminalId } = options;
 
+  // Initialize Pixoo to custom channel mode
+  try {
+    await initializePixoo(pixooIp);
+  } catch (error) {
+    console.error("Failed to initialize Pixoo:", error);
+  }
+
   let reconnectAttempts = 0;
   const maxReconnectAttempts = 10;
   const reconnectDelay = 5000;
@@ -24,6 +31,8 @@ export async function startRelay(options: RelayOptions): Promise<void> {
   const connect = () => {
     console.log("Connecting to WebSocket...");
     const ws = new WebSocket(wsUrl);
+
+    let pingInterval: NodeJS.Timeout | null = null;
 
     ws.on("open", () => {
       console.log("WebSocket connected!");
@@ -38,6 +47,19 @@ export async function startRelay(options: RelayOptions): Promise<void> {
         };
         ws.send(JSON.stringify(registerMsg));
       }
+
+      // Send keepalive ping every 5 minutes to prevent idle disconnect
+      pingInterval = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          const ping: WsMessage = {
+            type: "ping",
+            payload: {},
+            timestamp: Date.now(),
+          };
+          ws.send(JSON.stringify(ping));
+          console.log("Keepalive ping sent");
+        }
+      }, 5 * 60 * 1000);
     });
 
     ws.on("message", async (data) => {
@@ -73,6 +95,10 @@ export async function startRelay(options: RelayOptions): Promise<void> {
 
     ws.on("close", () => {
       console.log("WebSocket disconnected");
+      if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+      }
       if (reconnectAttempts < maxReconnectAttempts) {
         reconnectAttempts++;
         console.log(
