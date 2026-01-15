@@ -7,6 +7,7 @@ import WebSocket from "ws";
 import { sendFrameToPixoo, initializePixoo } from "./pixoo-client";
 import type { WsMessage, FramePayload } from "@signage/core";
 import { decodeBase64ToPixels } from "@signage/core";
+import { createBackoffController } from "./backoff";
 
 export interface RelayOptions {
   pixooIp: string;
@@ -24,9 +25,11 @@ export async function startRelay(options: RelayOptions): Promise<void> {
     console.error("Failed to initialize Pixoo:", error);
   }
 
-  let reconnectAttempts = 0;
-  const maxReconnectAttempts = 10;
-  const reconnectDelay = 5000;
+  const backoff = createBackoffController({
+    initialDelay: 1000,
+    maxDelay: 30000,
+    maxAttempts: 10,
+  });
 
   const connect = () => {
     console.log("Connecting to WebSocket...");
@@ -36,7 +39,7 @@ export async function startRelay(options: RelayOptions): Promise<void> {
 
     ws.on("open", () => {
       console.log("WebSocket connected!");
-      reconnectAttempts = 0;
+      backoff.reset();
 
       // Register terminal if specified
       if (terminalId) {
@@ -99,16 +102,17 @@ export async function startRelay(options: RelayOptions): Promise<void> {
         clearInterval(pingInterval);
         pingInterval = null;
       }
-      if (reconnectAttempts < maxReconnectAttempts) {
-        reconnectAttempts++;
-        console.log(
-          `Reconnecting in ${reconnectDelay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})...`
-        );
-        setTimeout(connect, reconnectDelay);
-      } else {
+
+      const state = backoff.next();
+      if (state.exhausted) {
         console.error("Max reconnection attempts reached. Exiting.");
         process.exit(1);
       }
+
+      console.log(
+        `Reconnecting in ${state.nextDelay}ms (attempt ${state.attempt + 1}/10)...`
+      );
+      setTimeout(connect, state.nextDelay);
     });
 
     ws.on("error", (error) => {
