@@ -13,7 +13,8 @@ const ddb = DynamoDBDocumentClient.from(client);
 
 export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
   const connectionId = event.requestContext.connectionId;
-  const queryParams = event.queryStringParameters || {};
+  // Query params are available on $connect but not in the base type
+  const queryParams = (event as unknown as { queryStringParameters?: Record<string, string> }).queryStringParameters || {};
   const terminalId = queryParams.terminalId;
   const terminalType = queryParams.type || "unknown";
 
