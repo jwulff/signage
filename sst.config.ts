@@ -17,10 +17,12 @@ export default $config({
   async run() {
     // Import infrastructure stacks
     const { api } = await import("./infra/api");
+    const { testApi } = await import("./infra/test-api");
     const { web } = await import("./infra/web");
 
     return {
       websocketUrl: api.url,
+      testApiUrl: testApi.url,
       webUrl: web.url,
     };
   },

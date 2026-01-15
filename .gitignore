@@ -30,3 +30,5 @@ coverage/
 
 # SST
 .open-next/
+sst-env.d.ts
+**/sst-env.d.ts
