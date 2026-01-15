@@ -1,0 +1,34 @@
+#!/bin/bash
+#
+# Pre-push hook for signage repository
+# Ensures tests pass before pushing
+
+set -e
+
+echo "Running pre-push checks..."
+
+# Get the current branch
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+# Skip checks for main branch (should be handled by CI)
+if [ "$BRANCH" = "main" ]; then
+    echo "Skipping pre-push checks for main branch (CI handles this)"
+    exit 0
+fi
+
+# Check if pnpm is available
+if ! command -v pnpm &> /dev/null; then
+    echo "Warning: pnpm not found, skipping local tests"
+    exit 0
+fi
+
+# Run tests
+echo "Running tests..."
+if pnpm test; then
+    echo "Tests passed!"
+else
+    echo "Tests failed! Please fix before pushing."
+    exit 1
+fi
+
+echo "Pre-push checks complete."
