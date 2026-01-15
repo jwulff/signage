@@ -22,3 +22,19 @@ testApi.route("GET /test-bitmap", {
 testApi.route("GET /health", {
   handler: "packages/functions/src/health.handler",
 });
+
+// News digest endpoint - AI-powered news with web grounding
+testApi.route("GET /news-digest", {
+  handler: "packages/functions/src/news-digest.handler",
+  link: [table, api],
+  environment: {
+    WEBSOCKET_URL: api.url,
+  },
+  permissions: [
+    {
+      actions: ["bedrock:InvokeModel"],
+      resources: ["arn:aws:bedrock:us-east-1::foundation-model/*"],
+    },
+  ],
+  timeout: "30 seconds", // Allow time for Bedrock + cycling through headlines
+});
