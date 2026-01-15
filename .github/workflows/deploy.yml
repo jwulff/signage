@@ -39,6 +39,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build packages
+        run: pnpm build
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -46,8 +49,21 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
+      - name: Remove system Pulumi from PATH
+        run: |
+          # SST bundles its own Pulumi - remove system Pulumi to avoid conflicts
+          echo "Original PATH: $PATH"
+          export PATH=$(echo $PATH | tr ':' '\n' | grep -v pulumi | tr '\n' ':' | sed 's/:$//')
+          echo "Updated PATH: $PATH"
+          which pulumi || echo "No system pulumi found (good)"
+
       - name: Deploy with SST
-        run: pnpm sst deploy --stage ${{ github.event.inputs.stage || 'dev' }}
+        run: |
+          # Remove system Pulumi from PATH to avoid version conflicts
+          export PATH=$(echo $PATH | tr ':' '\n' | grep -v pulumi | tr '\n' ':' | sed 's/:$//')
+          pnpm sst deploy --stage ${{ github.event.inputs.stage || 'dev' }}
+        env:
+          PULUMI_SKIP_UPDATE_CHECK: "true"
 
       - name: Output URLs
         run: |
