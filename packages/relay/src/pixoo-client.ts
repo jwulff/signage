@@ -48,6 +48,14 @@ export async function initializePixoo(ip: string): Promise<void> {
 
 export async function sendFrameToPixoo(ip: string, frame: Frame): Promise<void> {
   const url = `http://${ip}:${PIXOO_PORT}/post`;
+
+  // Reset GIF state before each frame to ensure display updates
+  await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ Command: "Draw/ResetHttpGifId" }),
+  });
+
   const picId = getUniquePicId();
   const command = createPixooFrameCommand(frame, { picId });
 
