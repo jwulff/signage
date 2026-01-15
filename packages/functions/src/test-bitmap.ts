@@ -12,7 +12,8 @@ import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { createSolidFrame, setPixel, encodeFrameToBase64 } from "@signage/core";
-import type { RGB } from "@signage/core";
+import type { RGB, Frame } from "@signage/core";
+import { getCharBitmap, CHAR_WIDTH, CHAR_HEIGHT, measureText } from "./font";
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
@@ -81,19 +82,100 @@ function hslToRgb(h: number, s: number, l: number): RGB {
   };
 }
 
+/**
+ * Draw text on a frame
+ */
+function drawText(
+  frame: Frame,
+  text: string,
+  startX: number,
+  startY: number,
+  color: RGB
+): void {
+  let cursorX = startX;
+
+  for (const char of text) {
+    const bitmap = getCharBitmap(char);
+
+    for (let row = 0; row < CHAR_HEIGHT; row++) {
+      for (let col = 0; col < CHAR_WIDTH; col++) {
+        // Check if this pixel is set (bit is 1)
+        const bit = (bitmap[row] >> (CHAR_WIDTH - 1 - col)) & 1;
+        if (bit) {
+          setPixel(frame, cursorX + col, startY + row, color);
+        }
+      }
+    }
+
+    cursorX += CHAR_WIDTH + 1; // Move to next character position with 1px spacing
+  }
+}
+
+/**
+ * Generate a text frame
+ */
+function generateTextFrame(
+  width: number,
+  height: number,
+  text: string,
+  textColor: RGB = { r: 255, g: 255, b: 255 },
+  bgColor: RGB = { r: 0, g: 0, b: 0 }
+) {
+  const frame = createSolidFrame(width, height, bgColor);
+
+  // Split text into lines if needed
+  const lines = text.split("\\n");
+  const lineHeight = CHAR_HEIGHT + 2;
+  const totalHeight = lines.length * lineHeight - 2;
+
+  // Center vertically
+  let startY = Math.floor((height - totalHeight) / 2);
+
+  for (const line of lines) {
+    // Center horizontally
+    const textWidth = measureText(line);
+    const startX = Math.floor((width - textWidth) / 2);
+
+    drawText(frame, line, startX, startY, textColor);
+    startY += lineHeight;
+  }
+
+  return frame;
+}
+
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const queryParams = event.queryStringParameters || {};
   const pattern = queryParams.pattern || "rainbow";
   const width = parseInt(queryParams.width || "64", 10);
   const height = parseInt(queryParams.height || "64", 10);
+  const text = queryParams.text || "Hello";
+  const color = queryParams.color || "white";
 
   console.log(`Generating ${pattern} test pattern ${width}x${height}`);
 
+  // Parse color
+  const colorMap: Record<string, RGB> = {
+    white: { r: 255, g: 255, b: 255 },
+    red: { r: 255, g: 0, b: 0 },
+    green: { r: 0, g: 255, b: 0 },
+    blue: { r: 0, g: 0, b: 255 },
+    yellow: { r: 255, g: 255, b: 0 },
+    cyan: { r: 0, g: 255, b: 255 },
+    magenta: { r: 255, g: 0, b: 255 },
+    orange: { r: 255, g: 165, b: 0 },
+    pink: { r: 255, g: 105, b: 180 },
+  };
+  const textColor = colorMap[color] || colorMap.white;
+
   // Generate the test frame
-  const frame =
-    pattern === "bars"
-      ? generateColorBarsFrame(width, height)
-      : generateRainbowFrame(width, height);
+  let frame;
+  if (pattern === "text") {
+    frame = generateTextFrame(width, height, text, textColor);
+  } else if (pattern === "bars") {
+    frame = generateColorBarsFrame(width, height);
+  } else {
+    frame = generateRainbowFrame(width, height);
+  }
 
   const frameData = encodeFrameToBase64(frame);
 

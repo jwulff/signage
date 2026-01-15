@@ -7,10 +7,12 @@ import type { Frame } from "@signage/core";
 import { createPixooFrameCommand } from "@signage/core";
 
 const PIXOO_PORT = 80;
+let picIdCounter = 1;
 
 export async function sendFrameToPixoo(ip: string, frame: Frame): Promise<void> {
   const url = `http://${ip}:${PIXOO_PORT}/post`;
-  const command = createPixooFrameCommand(frame);
+  // Use incrementing PicID to ensure Pixoo updates the display
+  const command = createPixooFrameCommand(frame, { picId: picIdCounter++ });
 
   const response = await fetch(url, {
     method: "POST",
@@ -24,7 +26,7 @@ export async function sendFrameToPixoo(ip: string, frame: Frame): Promise<void> 
     throw new Error(`Pixoo request failed: ${response.status} ${response.statusText}`);
   }
 
-  const result = await response.json();
+  const result = (await response.json()) as { error_code: number };
   if (result.error_code !== 0) {
     throw new Error(`Pixoo error: ${JSON.stringify(result)}`);
   }
