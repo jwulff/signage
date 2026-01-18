@@ -167,6 +167,78 @@ pnpm dev            # Start dev server
 pnpm build          # Production build
 ```
 
+### Local Dev (`packages/local-dev`)
+Local WebSocket server for testing without AWS deployment.
+
+```bash
+cd packages/local-dev
+pnpm start          # Start local server
+pnpm dev            # Start with file watching
+```
+
+---
+
+## Local Development (No AWS)
+
+For rapid iteration without deploying to AWS, use the local development server.
+
+### Quick Start
+
+```bash
+# From repo root
+pnpm dev:local
+```
+
+This runs both the local WebSocket server and web emulator. Open http://localhost:5173.
+
+### First-Time Setup
+
+On first run, the server prompts for widget credentials:
+
+```
+┌─────────────────────────────────────────┐
+│     Local Development Setup             │
+└─────────────────────────────────────────┘
+
+─── Blood Sugar Widget (Dexcom) ───
+Set up Dexcom credentials? (y/n):
+```
+
+Enter your Dexcom Share credentials (or skip to use mock data). Credentials are saved to `.env.local` (gitignored).
+
+### Configuration File
+
+Credentials are stored in `.env.local` at the repo root:
+
+```bash
+# .env.local (auto-generated, gitignored)
+DEXCOM_USERNAME=your_username
+DEXCOM_PASSWORD=your_password
+```
+
+To reconfigure, delete `.env.local` and restart the server.
+
+### Running Separately
+
+```bash
+# Terminal 1: Start WebSocket server
+pnpm dev:server
+
+# Terminal 2: Start web emulator
+pnpm dev:web
+```
+
+### Architecture
+
+The local server uses the **same rendering code** as production (`@signage/functions/rendering`). Only the transport layer differs:
+
+| Component | Production | Local |
+|-----------|------------|-------|
+| WebSocket | API Gateway | ws://localhost:8080 |
+| Clients | DynamoDB | In-memory Set |
+| Scheduling | EventBridge | setInterval |
+| Secrets | SST Secrets | .env.local |
+
 ---
 
 ## SST Development

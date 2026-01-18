@@ -48,3 +48,60 @@ export interface WidgetState {
   errorCount: number;
   lastError?: string;
 }
+
+/**
+ * Configuration for widget history/time-series storage.
+ */
+export interface WidgetHistoryConfig {
+  /** Whether history storage is enabled for this widget */
+  enabled: boolean;
+  /** How long to keep data points in hours (e.g., 24 for blood sugar) */
+  retentionHours: number;
+  /** How far back to fetch when backfilling in hours */
+  backfillDepthHours: number;
+  /** Gap size in minutes that triggers a backfill */
+  backfillThresholdMinutes: number;
+  /** Window in minutes to prevent duplicate points */
+  dedupeWindowMinutes: number;
+  /** Type of storage pattern */
+  storageType: "time-series" | "content-cache";
+}
+
+/**
+ * A single time-series data point.
+ */
+export interface TimeSeriesPoint<T = unknown> {
+  /** Unix timestamp in milliseconds */
+  timestamp: number;
+  /** The data value for this point */
+  value: T;
+  /** Optional metadata for the point */
+  meta?: Record<string, unknown>;
+}
+
+/**
+ * Extended widget updater interface with history support.
+ */
+export interface WidgetUpdaterWithHistory extends WidgetUpdater {
+  /** Configuration for history storage */
+  historyConfig?: WidgetHistoryConfig;
+  /**
+   * Fetch historical data points for backfill.
+   * @param since Start timestamp in milliseconds
+   * @param until End timestamp in milliseconds
+   * @returns Array of time-series points
+   */
+  fetchHistory?(since: number, until: number): Promise<TimeSeriesPoint[]>;
+}
+
+/**
+ * History metadata stored in DynamoDB for tracking backfill state.
+ */
+export interface WidgetHistoryMeta {
+  pk: string; // WIDGET#{widgetId}#HISTORY
+  sk: "META";
+  widgetId: string;
+  lastDataPointAt: number;
+  lastBackfillAt?: number;
+  totalPointsStored?: number;
+}

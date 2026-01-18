@@ -4,7 +4,11 @@
  */
 
 import { Resource } from "sst";
-import type { WidgetUpdater } from "../types";
+import type {
+  WidgetUpdaterWithHistory,
+  WidgetHistoryConfig,
+  TimeSeriesPoint,
+} from "../types";
 
 export interface BloodSugarData {
   /** Glucose value in mg/dL */
@@ -183,10 +187,48 @@ function mgdlToMmol(mgdl: number): number {
   return Math.round((mgdl / 18.0182) * 10) / 10;
 }
 
-export const bloodSugarUpdater: WidgetUpdater = {
+/** Blood sugar history configuration */
+const HISTORY_CONFIG: WidgetHistoryConfig = {
+  enabled: true,
+  retentionHours: 24,
+  backfillDepthHours: 24,
+  backfillThresholdMinutes: 15,
+  dedupeWindowMinutes: 5,
+  storageType: "time-series",
+};
+
+/**
+ * Convert a Dexcom reading to a time-series point for storage.
+ */
+function readingToTimeSeriesPoint(
+  reading: DexcomReading,
+  prevReading?: DexcomReading
+): TimeSeriesPoint<Pick<BloodSugarData, "glucose" | "glucoseMmol" | "rangeStatus">> {
+  const mgdl = reading.Value;
+  const timestamp = parseDexcomTimestamp(reading.WT);
+  const delta = prevReading ? mgdl - prevReading.Value : 0;
+
+  return {
+    timestamp,
+    value: {
+      glucose: mgdl,
+      glucoseMmol: mgdlToMmol(mgdl),
+      rangeStatus: classifyRange(mgdl),
+    },
+    meta: {
+      trend: reading.Trend,
+      trendArrow: mapTrendArrow(reading.Trend),
+      delta,
+    },
+  };
+}
+
+export const bloodSugarUpdater: WidgetUpdaterWithHistory = {
   id: "bloodsugar",
   name: "Blood Sugar Widget",
   schedule: "rate(1 minute)",
+
+  historyConfig: HISTORY_CONFIG,
 
   async update(): Promise<BloodSugarData> {
     const sessionId = await getSessionId(
@@ -220,5 +262,40 @@ export const bloodSugarUpdater: WidgetUpdater = {
       isStale: isStale(latestTimestamp),
       rangeStatus: classifyRange(latestMgdl),
     };
+  },
+
+  async fetchHistory(since: number, until: number): Promise<TimeSeriesPoint[]> {
+    const sessionId = await getSessionId(
+      Resource.DexcomUsername.value,
+      Resource.DexcomPassword.value
+    );
+
+    // Calculate minutes from since to until
+    const minutes = Math.ceil((until - since) / 60000);
+    // Dexcom supports up to 1440 minutes (24h)
+    const clampedMinutes = Math.min(minutes, 1440);
+
+    // Blood sugar readings are every 5 minutes, so max ~288 per 24h
+    const maxCount = Math.ceil(clampedMinutes / 5) + 10; // +10 for safety margin
+
+    console.log(
+      `Fetching blood sugar history: ${clampedMinutes} minutes, maxCount=${maxCount}`
+    );
+
+    const readings = await fetchGlucoseReadings(sessionId, maxCount, clampedMinutes);
+
+    if (!readings || readings.length === 0) {
+      return [];
+    }
+
+    // Convert to time-series points, filtering to requested range
+    // Readings come newest-first, reverse for chronological order
+    const chronological = [...readings].reverse();
+
+    return chronological
+      .map((reading, idx) =>
+        readingToTimeSeriesPoint(reading, chronological[idx - 1])
+      )
+      .filter((point) => point.timestamp >= since && point.timestamp <= until);
   },
 };

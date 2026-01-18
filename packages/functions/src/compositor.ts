@@ -15,55 +15,22 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { ScheduledHandler } from "aws-lambda";
-import { createSolidFrame, setPixel, encodeFrameToBase64 } from "@signage/core";
-import type { RGB, Frame } from "@signage/core";
-import { getCharBitmap, CHAR_WIDTH, CHAR_HEIGHT } from "./font";
+import { encodeFrameToBase64 } from "@signage/core";
+import type { Frame } from "@signage/core";
+import {
+  generateCompositeFrame,
+  classifyRange,
+  DISPLAY_WIDTH,
+  DISPLAY_HEIGHT,
+  type BloodSugarDisplayData,
+} from "./rendering/index.js";
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
 
-// Display constants
-const DISPLAY_WIDTH = 64;
-const DISPLAY_HEIGHT = 64;
-
-// Region boundaries
-const CLOCK_REGION_START = 0;
-const CLOCK_REGION_END = 31;
-const BG_REGION_START = 32;
-const BG_REGION_END = 63;
-
-// Colors
-const COLORS = {
-  // Clock colors
-  clockHeader: { r: 0, g: 200, b: 255 } as RGB,   // Cyan
-  clockTime: { r: 255, g: 255, b: 255 } as RGB,   // White
-  clockAmPm: { r: 100, g: 100, b: 100 } as RGB,   // Gray
-
-  // Blood sugar colors
-  bgHeader: { r: 0, g: 200, b: 255 } as RGB,      // Cyan
-  urgentLow: { r: 255, g: 0, b: 0 } as RGB,       // Red
-  low: { r: 255, g: 165, b: 0 } as RGB,           // Orange
-  normal: { r: 0, g: 255, b: 0 } as RGB,          // Green
-  high: { r: 255, g: 255, b: 0 } as RGB,          // Yellow
-  veryHigh: { r: 255, g: 0, b: 0 } as RGB,        // Red
-  stale: { r: 128, g: 128, b: 128 } as RGB,       // Gray
-  delta: { r: 100, g: 100, b: 100 } as RGB,       // Gray
-
-  // Background
-  bg: { r: 0, g: 0, b: 0 } as RGB,
-};
-
 // Dexcom API constants
 const DEXCOM_BASE_URL = "https://share2.dexcom.com/ShareWebServices/Services";
 const DEXCOM_APP_ID = "d89443d2-327c-4a6f-89e5-496bbb0317db";
-
-// Glucose thresholds (mg/dL)
-const THRESHOLDS = {
-  URGENT_LOW: 55,
-  LOW: 70,
-  HIGH: 180,
-  VERY_HIGH: 250,
-} as const;
 
 // Stale threshold: 10 minutes
 const STALE_THRESHOLD_MS = 10 * 60 * 1000;
@@ -72,92 +39,6 @@ interface DexcomReading {
   WT: string;
   Value: number;
   Trend: string;
-}
-
-type RangeStatus = "urgentLow" | "low" | "normal" | "high" | "veryHigh";
-
-interface BloodSugarData {
-  glucose: number;
-  trend: string;
-  delta: number;
-  timestamp: number;
-  rangeStatus: RangeStatus;
-  isStale: boolean;
-}
-
-/**
- * Draw text on a frame at specified position, respecting vertical bounds
- */
-function drawText(
-  frame: Frame,
-  text: string,
-  startX: number,
-  startY: number,
-  color: RGB,
-  minY: number = 0,
-  maxY: number = DISPLAY_HEIGHT - 1
-): void {
-  let cursorX = startX;
-
-  for (const char of text) {
-    const bitmap = getCharBitmap(char);
-
-    for (let row = 0; row < CHAR_HEIGHT; row++) {
-      for (let col = 0; col < CHAR_WIDTH; col++) {
-        const bit = (bitmap[row] >> (CHAR_WIDTH - 1 - col)) & 1;
-        if (bit) {
-          const x = cursorX + col;
-          const y = startY + row;
-          if (x >= 0 && x < DISPLAY_WIDTH && y >= minY && y <= maxY) {
-            setPixel(frame, x, y, color);
-          }
-        }
-      }
-    }
-
-    cursorX += CHAR_WIDTH + 1;
-  }
-}
-
-/**
- * Calculate the pixel width of a text string
- */
-function measureText(text: string): number {
-  return text.length * (CHAR_WIDTH + 1) - 1;
-}
-
-/**
- * Center text horizontally
- */
-function centerX(text: string): number {
-  return Math.floor((DISPLAY_WIDTH - measureText(text)) / 2);
-}
-
-/**
- * Classify glucose value into range categories
- */
-function classifyRange(mgdl: number): RangeStatus {
-  if (mgdl < THRESHOLDS.URGENT_LOW) return "urgentLow";
-  if (mgdl < THRESHOLDS.LOW) return "low";
-  if (mgdl <= THRESHOLDS.HIGH) return "normal";
-  if (mgdl <= THRESHOLDS.VERY_HIGH) return "high";
-  return "veryHigh";
-}
-
-/**
- * Get trend arrow character
- */
-function getTrendArrow(trend: string): string {
-  const arrows: Record<string, string> = {
-    doubleup: "^^",
-    singleup: "^",
-    fortyfiveup: "/",
-    flat: "-",
-    fortyfivedown: "\\",
-    singledown: "v",
-    doubledown: "vv",
-  };
-  return arrows[trend.toLowerCase()] ?? "?";
 }
 
 /**
@@ -240,7 +121,7 @@ async function fetchGlucoseReadings(sessionId: string): Promise<DexcomReading[]>
 /**
  * Fetch blood sugar data from Dexcom
  */
-async function fetchBloodSugarData(): Promise<BloodSugarData | null> {
+async function fetchBloodSugarData(): Promise<BloodSugarDisplayData | null> {
   try {
     const sessionId = await getSessionId(
       Resource.DexcomUsername.value,
@@ -272,90 +153,6 @@ async function fetchBloodSugarData(): Promise<BloodSugarData | null> {
     console.error("Failed to fetch blood sugar data:", error);
     return null;
   }
-}
-
-/**
- * Render clock widget to top region of frame
- */
-function renderClockRegion(frame: Frame): void {
-  // Get current time in Pacific timezone
-  const now = new Date();
-  const pacificTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
-  let hours = pacificTime.getHours();
-  const ampm = hours >= 12 ? "PM" : "AM";
-  hours = hours % 12 || 12;
-  const minutes = String(pacificTime.getMinutes()).padStart(2, "0");
-  const timeStr = `${hours}:${minutes}`;
-
-  // Row 2: Time (larger, centered)
-  drawText(frame, timeStr, centerX(timeStr), 4, COLORS.clockTime, CLOCK_REGION_START, CLOCK_REGION_END);
-
-  // Row 18: AM/PM
-  drawText(frame, ampm, centerX(ampm), 18, COLORS.clockAmPm, CLOCK_REGION_START, CLOCK_REGION_END);
-}
-
-/**
- * Calculate minutes since a timestamp
- */
-function minutesAgo(timestamp: number): number {
-  return Math.floor((Date.now() - timestamp) / 60000);
-}
-
-/**
- * Render blood sugar widget to bottom region of frame
- */
-function renderBloodSugarRegion(frame: Frame, data: BloodSugarData | null): void {
-  if (!data) {
-    // Show error state
-    const errText = "BG ERR";
-    drawText(frame, errText, centerX(errText), 46, COLORS.urgentLow, BG_REGION_START, BG_REGION_END);
-    return;
-  }
-
-  const { glucose, trend, delta, timestamp, rangeStatus, isStale: stale } = data;
-  const valueColor = stale ? COLORS.stale : COLORS[rangeStatus];
-
-  // Row 35: Glucose value (large, centered)
-  const glucoseStr = String(glucose);
-  drawText(frame, glucoseStr, centerX(glucoseStr), 35, valueColor, BG_REGION_START, BG_REGION_END);
-
-  // Row 45: Trend arrow + delta (e.g., "^ +5")
-  const trendArrow = getTrendArrow(trend);
-  const deltaStr = delta >= 0 ? `+${delta}` : String(delta);
-  const trendAndDelta = `${trendArrow} ${deltaStr}`;
-  drawText(frame, trendAndDelta, centerX(trendAndDelta), 45, valueColor, BG_REGION_START, BG_REGION_END);
-
-  // Row 55: Minutes since reading (e.g., "3m")
-  const mins = minutesAgo(timestamp);
-  const agoStr = `${mins}m`;
-  drawText(frame, agoStr, centerX(agoStr), 55, COLORS.delta, BG_REGION_START, BG_REGION_END);
-}
-
-/**
- * Draw a horizontal separator line
- */
-function drawSeparator(frame: Frame, y: number, color: RGB): void {
-  for (let x = 4; x < DISPLAY_WIDTH - 4; x++) {
-    setPixel(frame, x, y, color);
-  }
-}
-
-/**
- * Generate the composite frame with all widgets
- */
-function generateCompositeFrame(bloodSugarData: BloodSugarData | null): Frame {
-  const frame = createSolidFrame(DISPLAY_WIDTH, DISPLAY_HEIGHT, COLORS.bg);
-
-  // Render clock in top region
-  renderClockRegion(frame);
-
-  // Draw separator line
-  drawSeparator(frame, 32, { r: 40, g: 40, b: 40 });
-
-  // Render blood sugar in bottom region
-  renderBloodSugarRegion(frame, bloodSugarData);
-
-  return frame;
 }
 
 /**
@@ -469,8 +266,11 @@ async function updateDisplay(): Promise<{
     console.log("Blood sugar data unavailable");
   }
 
-  // Generate composite frame
-  const frame = generateCompositeFrame(bloodSugarData);
+  // Generate composite frame using shared rendering module
+  const frame = generateCompositeFrame({
+    bloodSugar: bloodSugarData,
+    timezone: "America/Los_Angeles",
+  });
 
   // Get current time in Pacific for logging
   const now = new Date();

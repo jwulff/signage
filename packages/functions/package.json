@@ -2,6 +2,9 @@
   "name": "@signage/functions",
   "version": "0.1.0",
   "type": "module",
+  "exports": {
+    "./rendering": "./src/rendering/index.ts"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run --passWithNoTests",

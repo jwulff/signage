@@ -226,3 +226,157 @@ describe("bloodSugarUpdater.update", () => {
     expect(result.delta).toBe(0);
   });
 });
+
+describe("bloodSugarUpdater.historyConfig", () => {
+  it("has history enabled", () => {
+    expect(bloodSugarUpdater.historyConfig?.enabled).toBe(true);
+  });
+
+  it("has 24 hour retention", () => {
+    expect(bloodSugarUpdater.historyConfig?.retentionHours).toBe(24);
+  });
+
+  it("has 24 hour backfill depth", () => {
+    expect(bloodSugarUpdater.historyConfig?.backfillDepthHours).toBe(24);
+  });
+
+  it("has 15 minute backfill threshold", () => {
+    expect(bloodSugarUpdater.historyConfig?.backfillThresholdMinutes).toBe(15);
+  });
+
+  it("has 5 minute dedupe window", () => {
+    expect(bloodSugarUpdater.historyConfig?.dedupeWindowMinutes).toBe(5);
+  });
+
+  it("uses time-series storage type", () => {
+    expect(bloodSugarUpdater.historyConfig?.storageType).toBe("time-series");
+  });
+});
+
+describe("bloodSugarUpdater.fetchHistory", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    global.fetch = fetchMock;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    vi.clearAllMocks();
+  });
+
+  function mockDexcomHistoryResponses(readings: Array<{
+    Value: number;
+    Trend: string;
+    WT: string;
+  }>) {
+    fetchMock
+      // AuthenticatePublisherAccount
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve("mock-account-id"),
+      })
+      // LoginPublisherAccountById
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve("mock-session-id"),
+      })
+      // ReadPublisherLatestGlucoseValues (history)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(readings),
+      });
+  }
+
+  it("is defined as a function", () => {
+    expect(bloodSugarUpdater.fetchHistory).toBeDefined();
+    expect(typeof bloodSugarUpdater.fetchHistory).toBe("function");
+  });
+
+  it("returns empty array when no readings available", async () => {
+    mockDexcomHistoryResponses([]);
+
+    const result = await bloodSugarUpdater.fetchHistory!(
+      Date.now() - 60 * 60 * 1000,
+      Date.now()
+    );
+
+    expect(result).toEqual([]);
+  });
+
+  it("returns time series points with correct structure", async () => {
+    const now = Date.now();
+    const fiveMinutesAgo = now - 5 * 60 * 1000;
+    const tenMinutesAgo = now - 10 * 60 * 1000;
+
+    mockDexcomHistoryResponses([
+      { Value: 130, Trend: "SingleUp", WT: `Date(${fiveMinutesAgo})` },
+      { Value: 120, Trend: "Flat", WT: `Date(${tenMinutesAgo})` },
+    ]);
+
+    const result = await bloodSugarUpdater.fetchHistory!(
+      tenMinutesAgo - 1000,
+      now
+    );
+
+    expect(result).toHaveLength(2);
+    // Points should be in chronological order (oldest first)
+    expect(result[0].timestamp).toBe(tenMinutesAgo);
+    expect(result[0].value).toEqual({
+      glucose: 120,
+      glucoseMmol: 6.7,
+      rangeStatus: "normal",
+    });
+    expect(result[0].meta).toEqual({
+      trend: "Flat",
+      trendArrow: "→",
+      delta: 0, // First point has no previous
+    });
+
+    expect(result[1].timestamp).toBe(fiveMinutesAgo);
+    expect(result[1].value).toEqual({
+      glucose: 130,
+      glucoseMmol: 7.2,
+      rangeStatus: "normal",
+    });
+    expect(result[1].meta).toEqual({
+      trend: "SingleUp",
+      trendArrow: "↑",
+      delta: 10, // 130 - 120
+    });
+  });
+
+  it("filters points to requested time range", async () => {
+    const now = Date.now();
+    const oneHourAgo = now - 60 * 60 * 1000;
+
+    mockDexcomHistoryResponses([
+      { Value: 130, Trend: "Flat", WT: `Date(${now - 30 * 60 * 1000})` },
+      { Value: 120, Trend: "Flat", WT: `Date(${oneHourAgo - 30 * 60 * 1000})` },
+    ]);
+
+    // Request only the last hour
+    const result = await bloodSugarUpdater.fetchHistory!(oneHourAgo, now);
+
+    // Should only include the point from 30 minutes ago
+    expect(result).toHaveLength(1);
+    const value = result[0].value as { glucose: number };
+    expect(value.glucose).toBe(130);
+  });
+
+  it("requests appropriate maxCount for time range", async () => {
+    mockDexcomHistoryResponses([]);
+
+    // Request 6 hours of data
+    const sixHoursAgo = Date.now() - 6 * 60 * 60 * 1000;
+    await bloodSugarUpdater.fetchHistory!(sixHoursAgo, Date.now());
+
+    // Should have called the glucose endpoint with appropriate params
+    const glucoseCall = fetchMock.mock.calls[2];
+    expect(glucoseCall[0]).toContain("minutes=360"); // 6 hours = 360 minutes
+    // maxCount should be ~ 360/5 + 10 = 82
+    expect(glucoseCall[0]).toMatch(/maxCount=\d{2,}/);
+  });
+});
