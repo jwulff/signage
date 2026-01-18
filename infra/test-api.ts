@@ -33,7 +33,10 @@ testApi.route("GET /news-digest", {
   permissions: [
     {
       actions: ["bedrock:InvokeModel"],
-      resources: ["arn:aws:bedrock:us-east-1::foundation-model/*"],
+      resources: [
+        "arn:aws:bedrock:us-east-1::foundation-model/*",
+        "arn:aws:bedrock:us-east-1:*:inference-profile/*",
+      ],
     },
   ],
   timeout: "30 seconds", // Allow time for Bedrock + cycling through headlines
