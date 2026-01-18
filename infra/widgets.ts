@@ -7,15 +7,13 @@ import { table } from "./storage";
 import { api } from "./api";
 import { dexcomUsername, dexcomPassword } from "./secrets";
 
-// Clock widget - updates every minute
-export const clockCron = new sst.aws.Cron("ClockWidget", {
+// Display compositor - combines all widgets into a single frame
+// Updates every minute with clock + blood sugar
+export const compositorCron = new sst.aws.Cron("DisplayCompositor", {
   schedule: "rate(1 minute)",
   function: {
-    handler: "packages/functions/src/clock.scheduled",
-    link: [table, api],
-    environment: {
-      WEBSOCKET_URL: api.url,
-    },
+    handler: "packages/functions/src/compositor.scheduled",
+    link: [table, api, dexcomUsername, dexcomPassword],
     timeout: "30 seconds",
     memory: "256 MB",
   },
@@ -28,17 +26,6 @@ export const reconcileCron = new sst.aws.Cron("ConnectionReconcile", {
     handler: "packages/functions/src/widgets/reconcile.handler",
     link: [table],
     timeout: "60 seconds",
-    memory: "256 MB",
-  },
-});
-
-// Blood sugar widget - updates every minute
-export const bloodSugarCron = new sst.aws.Cron("BloodsugarWidget", {
-  schedule: "rate(1 minute)",
-  function: {
-    handler: "packages/functions/src/widgets/dispatcher.handler",
-    link: [table, api, dexcomUsername, dexcomPassword],
-    timeout: "30 seconds",
     memory: "256 MB",
   },
 });
