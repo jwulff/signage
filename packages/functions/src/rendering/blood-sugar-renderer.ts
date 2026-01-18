@@ -216,26 +216,51 @@ export function renderBloodSugarRegion(
   const valueColor = isStale ? COLORS.stale : COLORS[rangeStatus];
 
   // Top: Arrow + reading + delta + time
-  // e.g., [→] 194 +8 1m
+  // Use spaces when there's room, remove them when tight
   const deltaStr = delta >= 0 ? `+${delta}` : String(delta);
   const mins = minutesAgo(timestamp);
-  const textPart = `${glucose} ${deltaStr} ${mins}m`;
 
-  // Calculate total width: arrow (7) + space (2) + text
-  const textWidth = measureText(textPart);
-  const totalWidth = ARROW_WIDTH + 2 + textWidth;
+  // Calculate widths for different spacing options
+  const glucoseStr = String(glucose);
+  const timeStr = `${mins}m`;
+
+  // Full spacing: "194 +8 5m"
+  const fullText = `${glucoseStr} ${deltaStr} ${timeStr}`;
+  const fullWidth = ARROW_WIDTH + 2 + measureText(fullText);
+
+  // Tight spacing: "194+8 5m" (remove space after glucose)
+  const tightText = `${glucoseStr}${deltaStr} ${timeStr}`;
+  const tightWidth = ARROW_WIDTH + 2 + measureText(tightText);
+
+  // Available width (with margins)
+  const availableWidth = DISPLAY_WIDTH - TEXT_MARGIN * 2;
+
+  // Choose spacing based on fit
+  const useFullSpacing = fullWidth <= availableWidth;
+  const totalWidth = useFullSpacing ? fullWidth : tightWidth;
 
   // Center, but ensure margins on both sides
   const maxStartX = DISPLAY_WIDTH - totalWidth - TEXT_MARGIN;
   const centered = Math.floor((DISPLAY_WIDTH - totalWidth) / 2);
   const startX = Math.max(TEXT_MARGIN, Math.min(centered, maxStartX));
 
-  // Draw arrow
+  // Draw arrow in glucose color
   drawTrendArrow(frame, trend, startX, TEXT_ROW, valueColor);
 
-  // Draw text after arrow
-  const textX = startX + ARROW_WIDTH + 2;
-  drawText(frame, textPart, textX, TEXT_ROW, valueColor, BG_REGION_START, BG_REGION_END);
+  // Draw glucose value in range color
+  let textX = startX + ARROW_WIDTH + 2;
+  drawText(frame, glucoseStr, textX, TEXT_ROW, valueColor, BG_REGION_START, BG_REGION_END);
+  textX += measureText(glucoseStr);
+
+  // Add space if using full spacing
+  if (useFullSpacing) {
+    textX += 6; // space width
+  }
+
+  // Draw delta and time in white
+  const secondaryColor = COLORS.clockTime; // white
+  const deltaTimeStr = useFullSpacing ? `${deltaStr} ${timeStr}` : `${deltaStr} ${timeStr}`;
+  drawText(frame, deltaTimeStr, textX, TEXT_ROW, secondaryColor, BG_REGION_START, BG_REGION_END);
 
   // Bottom: Full-width sparkline chart
   if (history && history.points.length > 0) {
