@@ -5,8 +5,8 @@
 
 import { program } from "commander";
 import { createInterface } from "readline";
-import { startRelay } from "./relay";
-import { scanForDevices, getSavedPixooIp, savePixooIp } from "./discovery";
+import { startRelay } from "./relay.js";
+import { scanForDevices, getSavedPixooIp, savePixooIp } from "./discovery.js";
 
 /**
  * Prompt user for yes/no
