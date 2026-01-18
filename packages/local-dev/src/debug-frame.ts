@@ -8,11 +8,11 @@ import {
   type BloodSugarDisplayData,
 } from "@signage/functions/rendering";
 
-// Sample blood sugar data
+// Sample blood sugar data - testing double digit delta
 const sampleBloodSugar: BloodSugarDisplayData = {
-  glucose: 194,
+  glucose: 213,
   trend: "FortyFiveUp",
-  delta: 8,
+  delta: 13,
   timestamp: Date.now() - 5 * 60 * 1000, // 5 minutes ago
   rangeStatus: "high",
   isStale: false,
