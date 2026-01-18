@@ -69,3 +69,19 @@ export interface FramePayload {
     data: string;
   };
 }
+
+/** Widget configuration */
+export interface WidgetConfig {
+  widgetId: WidgetId;
+  enabled: boolean;
+  settings?: Record<string, unknown>;
+}
+
+/** Widget state stored in DynamoDB */
+export interface WidgetState {
+  widgetId: WidgetId;
+  lastRun: string;
+  lastData: unknown;
+  errorCount: number;
+  lastError?: string;
+}

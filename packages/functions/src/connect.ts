@@ -4,7 +4,7 @@
  */
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { APIGatewayProxyWebsocketHandlerV2 } from "aws-lambda";
 
@@ -32,6 +32,17 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
         terminalType,
         connectedAt: new Date().toISOString(),
       },
+    })
+  );
+
+  // Atomically increment connection counter
+  await ddb.send(
+    new UpdateCommand({
+      TableName: Resource.SignageTable.name,
+      Key: { pk: "CONNECTION_COUNT#GLOBAL", sk: "COUNTER" },
+      UpdateExpression: "ADD #count :inc SET updatedAt = :now",
+      ExpressionAttributeNames: { "#count": "count" },
+      ExpressionAttributeValues: { ":inc": 1, ":now": new Date().toISOString() },
     })
   );
 
