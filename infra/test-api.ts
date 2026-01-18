@@ -45,3 +45,13 @@ testApi.route("GET /news-digest", {
   ],
   timeout: "30 seconds", // Allow time for Bedrock + cycling through headlines
 });
+
+// Clock widget endpoint - displays current time
+testApi.route("GET /clock", {
+  handler: "packages/functions/src/clock.handler",
+  link: [table, api],
+  environment: {
+    WEBSOCKET_URL: api.url,
+  },
+  timeout: "30 seconds",
+});
