@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "sst dev",
+    "dev:local": "pnpm --filter @signage/local-dev start & sleep 1 && VITE_WEBSOCKET_URL=ws://localhost:8080 pnpm --filter @signage/web dev",
+    "dev:server": "pnpm --filter @signage/local-dev start",
+    "dev:web": "VITE_WEBSOCKET_URL=ws://localhost:8080 pnpm --filter @signage/web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
