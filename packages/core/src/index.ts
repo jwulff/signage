@@ -1,4 +1,4 @@
 // @signage/core - Shared types and Pixoo protocol implementation
 
-export * from "./types";
-export * from "./pixoo";
+export * from "./types.js";
+export * from "./pixoo.js";

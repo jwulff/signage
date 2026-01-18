@@ -13,7 +13,7 @@ import { Resource } from "sst";
 import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
 import { createSolidFrame, setPixel, encodeFrameToBase64 } from "@signage/core";
 import type { RGB, Frame } from "@signage/core";
-import { getCharBitmap, CHAR_WIDTH, CHAR_HEIGHT, measureText } from "./font";
+import { getCharBitmap, CHAR_WIDTH, CHAR_HEIGHT, measureText } from "./font.js";
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
