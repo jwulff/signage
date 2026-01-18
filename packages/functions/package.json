@@ -9,11 +9,12 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@signage/core": "workspace:*",
-    "@aws-sdk/client-dynamodb": "^3.700.0",
-    "@aws-sdk/lib-dynamodb": "^3.700.0",
     "@aws-sdk/client-apigatewaymanagementapi": "^3.700.0",
     "@aws-sdk/client-bedrock-runtime": "^3.700.0",
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0",
+    "@signage/core": "workspace:*",
+    "dexcom-share-api": "^1.0.8",
     "sst": "^3.5.0"
   },
   "devDependencies": {
