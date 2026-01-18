@@ -4,6 +4,7 @@
  */
 
 import type { WidgetRegistry } from "./types";
+import { bloodSugarUpdater } from "./updaters/blood-sugar";
 import { clockUpdater } from "./updaters/clock";
 
 /**
@@ -11,6 +12,7 @@ import { clockUpdater } from "./updaters/clock";
  * Add new widgets here as they are implemented.
  */
 export const widgetRegistry: WidgetRegistry = {
+  [bloodSugarUpdater.id]: bloodSugarUpdater,
   [clockUpdater.id]: clockUpdater,
 };
 
