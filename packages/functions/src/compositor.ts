@@ -80,6 +80,7 @@ interface BloodSugarData {
   glucose: number;
   trend: string;
   delta: number;
+  timestamp: number;
   rangeStatus: RangeStatus;
   isStale: boolean;
 }
@@ -263,6 +264,7 @@ async function fetchBloodSugarData(): Promise<BloodSugarData | null> {
       glucose,
       trend: latest.Trend,
       delta,
+      timestamp,
       rangeStatus: classifyRange(glucose),
       isStale: isStale(timestamp),
     };
@@ -293,29 +295,40 @@ function renderClockRegion(frame: Frame): void {
 }
 
 /**
+ * Calculate minutes since a timestamp
+ */
+function minutesAgo(timestamp: number): number {
+  return Math.floor((Date.now() - timestamp) / 60000);
+}
+
+/**
  * Render blood sugar widget to bottom region of frame
  */
 function renderBloodSugarRegion(frame: Frame, data: BloodSugarData | null): void {
   if (!data) {
     // Show error state
     const errText = "BG ERR";
-    drawText(frame, errText, centerX(errText), 44, COLORS.urgentLow, BG_REGION_START, BG_REGION_END);
+    drawText(frame, errText, centerX(errText), 46, COLORS.urgentLow, BG_REGION_START, BG_REGION_END);
     return;
   }
 
-  const { glucose, trend, delta, rangeStatus, isStale: stale } = data;
+  const { glucose, trend, delta, timestamp, rangeStatus, isStale: stale } = data;
   const valueColor = stale ? COLORS.stale : COLORS[rangeStatus];
 
-  // Row 34: "BG" header + glucose value on same line
+  // Row 35: Glucose value (large, centered)
   const glucoseStr = String(glucose);
-  const headerAndValue = `BG ${glucoseStr}`;
-  drawText(frame, headerAndValue, centerX(headerAndValue), 36, valueColor, BG_REGION_START, BG_REGION_END);
+  drawText(frame, glucoseStr, centerX(glucoseStr), 35, valueColor, BG_REGION_START, BG_REGION_END);
 
-  // Row 50: Trend arrow + delta
+  // Row 45: Trend arrow + delta (e.g., "^ +5")
   const trendArrow = getTrendArrow(trend);
   const deltaStr = delta >= 0 ? `+${delta}` : String(delta);
   const trendAndDelta = `${trendArrow} ${deltaStr}`;
-  drawText(frame, trendAndDelta, centerX(trendAndDelta), 50, COLORS.delta, BG_REGION_START, BG_REGION_END);
+  drawText(frame, trendAndDelta, centerX(trendAndDelta), 45, valueColor, BG_REGION_START, BG_REGION_END);
+
+  // Row 55: Minutes since reading (e.g., "3m")
+  const mins = minutesAgo(timestamp);
+  const agoStr = `${mins}m`;
+  drawText(frame, agoStr, centerX(agoStr), 55, COLORS.delta, BG_REGION_START, BG_REGION_END);
 }
 
 /**
