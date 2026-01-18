@@ -34,8 +34,8 @@ testApi.route("GET /news-digest", {
     {
       actions: ["bedrock:InvokeModel"],
       resources: [
-        "arn:aws:bedrock:us-east-1::foundation-model/*",
-        "arn:aws:bedrock:us-east-1:*:inference-profile/*",
+        "arn:aws:bedrock:*::foundation-model/*",
+        "arn:aws:bedrock:*:*:inference-profile/*",
       ],
     },
   ],
