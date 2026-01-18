@@ -142,14 +142,20 @@ Key files:
 Local CLI that bridges AWS to Pixoo.
 
 **Current Pixoo IP**: `192.168.1.224`
-**Production WebSocket**: `wss://mew9rfc709.execute-api.us-east-1.amazonaws.com/$default`
+
+| Environment | WebSocket URL |
+|-------------|---------------|
+| Production | `wss://ws.signage.example.com` |
+| Development | `wss://ws.dev.signage.example.com` |
 
 ```bash
 cd packages/relay
 
-# IMPORTANT: Use npx tsx directly, NOT pnpm dev
-# pnpm expands $default as an empty shell variable
-npx tsx src/cli.ts --pixoo 192.168.1.224 --ws 'wss://mew9rfc709.execute-api.us-east-1.amazonaws.com/$default'
+# Production
+npx tsx src/cli.ts --ws wss://ws.signage.example.com
+
+# Development
+npx tsx src/cli.ts --ws wss://ws.dev.signage.example.com
 ```
 
 ### Web (`packages/web`)

@@ -1,7 +1,12 @@
 import { table } from "./storage";
 
 // WebSocket API for terminal connections
-export const api = new sst.aws.ApiGatewayWebSocket("SignageApi", {});
+export const api = new sst.aws.ApiGatewayWebSocket("SignageApi", {
+  domain:
+    $app.stage === "prod"
+      ? "ws.signage.example.com"
+      : `ws.${$app.stage}.signage.example.com`,
+});
 
 // Connection handlers
 api.route("$connect", {

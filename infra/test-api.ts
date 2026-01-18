@@ -3,6 +3,10 @@ import { table } from "./storage";
 
 // HTTP API for test endpoints
 export const testApi = new sst.aws.ApiGatewayV2("SignageTestApi", {
+  domain:
+    $app.stage === "prod"
+      ? "api.signage.example.com"
+      : `api.${$app.stage}.signage.example.com`,
   cors: {
     allowOrigins: ["*"],
     allowMethods: ["GET", "POST"],
