@@ -49,7 +49,7 @@ Connect a local Pixoo64 device to the cloud:
 ```bash
 cd packages/relay
 pnpm build
-node dist/cli.js --ws wss://by1t5j0e7h.execute-api.us-east-1.amazonaws.com
+node dist/cli.js --ws 'wss://mew9rfc709.execute-api.us-east-1.amazonaws.com/$default'
 ```
 
 On first run, it will ask to scan for your Pixoo and save the IP for next time.
@@ -183,16 +183,16 @@ Future runs use the saved IP automatically.
 
 ```bash
 # Normal usage (uses saved IP or prompts to scan)
-node dist/cli.js --ws wss://by1t5j0e7h.execute-api.us-east-1.amazonaws.com
+node dist/cli.js --ws 'wss://mew9rfc709.execute-api.us-east-1.amazonaws.com/$default'
 
 # Specify IP (saves for next time)
 node dist/cli.js \
   --pixoo 192.168.1.100 \
-  --ws wss://by1t5j0e7h.execute-api.us-east-1.amazonaws.com
+  --ws 'wss://mew9rfc709.execute-api.us-east-1.amazonaws.com/$default'
 
 # With terminal ID
 node dist/cli.js \
-  --ws wss://by1t5j0e7h.execute-api.us-east-1.amazonaws.com \
+  --ws 'wss://mew9rfc709.execute-api.us-east-1.amazonaws.com/$default' \
   --terminal living-room
 ```
 
@@ -236,7 +236,7 @@ pnpm deploy:prod
 |----------|-----|
 | Web Emulator | https://d3138ekbi7z9yw.cloudfront.net |
 | Test API | https://hpaqthkicl.execute-api.us-east-1.amazonaws.com |
-| WebSocket | wss://by1t5j0e7h.execute-api.us-east-1.amazonaws.com |
+| WebSocket | wss://mew9rfc709.execute-api.us-east-1.amazonaws.com/$default |
 
 ## License
 
