@@ -173,18 +173,32 @@ Keep each headline under 40 characters. Be concise. Only output the numbered lis
 
 /**
  * Get active WebSocket connections from DynamoDB
+ * Paginates through all results to handle tables with >1MB of connection data
  */
 async function getActiveConnections() {
-  const result = await ddb.send(
-    new ScanCommand({
-      TableName: Resource.SignageTable.name,
-      FilterExpression: "begins_with(pk, :prefix)",
-      ExpressionAttributeValues: {
-        ":prefix": "CONNECTION#",
-      },
-    })
-  );
-  return result.Items || [];
+  const allItems: Record<string, unknown>[] = [];
+  let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+  do {
+    const result = await ddb.send(
+      new ScanCommand({
+        TableName: Resource.SignageTable.name,
+        FilterExpression: "begins_with(pk, :prefix)",
+        ExpressionAttributeValues: {
+          ":prefix": "CONNECTION#",
+        },
+        ExclusiveStartKey: lastEvaluatedKey,
+      })
+    );
+
+    if (result.Items) {
+      allItems.push(...result.Items);
+    }
+
+    lastEvaluatedKey = result.LastEvaluatedKey;
+  } while (lastEvaluatedKey);
+
+  return allItems;
 }
 
 /**
