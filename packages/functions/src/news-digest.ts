@@ -125,7 +125,7 @@ Keep each headline under 40 characters. Be concise. Only output the numbered lis
 
   const response = await bedrockClient.send(
     new ConverseCommand({
-      modelId: "us.anthropic.claude-3-haiku-20240307-v1:0",
+      modelId: "us.amazon.nova-lite-v1:0",
       messages: [
         {
           role: "user",
@@ -136,10 +136,14 @@ Keep each headline under 40 characters. Be concise. Only output the numbered lis
         maxTokens: 500,
         temperature: 0.7,
       },
-      additionalModelRequestFields: {
-        webSearchConfig: {
-          sourceType: "WEB_SEARCH",
-        },
+      toolConfig: {
+        tools: [
+          {
+            systemTool: {
+              name: "nova_grounding",
+            },
+          },
+        ],
       },
     })
   );
