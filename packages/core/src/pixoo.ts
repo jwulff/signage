@@ -11,7 +11,7 @@
  * - Total: 64 * 64 * 3 = 12,288 bytes raw, ~16KB base64
  */
 
-import type { Frame, RGB } from "./types";
+import type { Frame, RGB } from "./types.js";
 
 /** Default Pixoo64 display size */
 export const PIXOO64_SIZE = 64;

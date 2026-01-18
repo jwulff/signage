@@ -5,10 +5,10 @@
 
 import WebSocket from "ws";
 import https from "https";
-import { sendFrameToPixoo, initializePixoo } from "./pixoo-client";
+import { sendFrameToPixoo, initializePixoo } from "./pixoo-client.js";
 import type { WsMessage, FramePayload } from "@signage/core";
 import { decodeBase64ToPixels } from "@signage/core";
-import { createBackoffController } from "./backoff";
+import { createBackoffController } from "./backoff.js";
 
 // Force HTTP/1.1 to prevent ALPN from negotiating HTTP/2 (which doesn't support WebSocket)
 const agent = new https.Agent({
