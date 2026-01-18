@@ -19,7 +19,7 @@ export default $config({
     const { api } = await import("./infra/api");
     const { testApi } = await import("./infra/test-api");
     const { web } = await import("./infra/web");
-    const { clockCron, reconcileCron } = await import("./infra/widgets");
+    const { clockCron, reconcileCron, bloodSugarCron } = await import("./infra/widgets");
 
     return {
       websocketUrl: api.url,
@@ -27,6 +27,7 @@ export default $config({
       webUrl: web.url,
       clockCron: clockCron.nodes.rule.name,
       reconcileCron: reconcileCron.nodes.rule.name,
+      bloodSugarCron: bloodSugarCron.nodes.rule.name,
     };
   },
 });

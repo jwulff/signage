@@ -5,6 +5,14 @@
 
 declare module "sst" {
   export interface Resource {
+    DexcomPassword: {
+      type: "sst.sst.Secret";
+      value: string;
+    };
+    DexcomUsername: {
+      type: "sst.sst.Secret";
+      value: string;
+    };
     SignageApi: {
       managementEndpoint: string;
       type: "sst.aws.ApiGatewayWebSocket";
