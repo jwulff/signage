@@ -10,7 +10,7 @@ import {
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
-import type { APIGatewayProxyHandlerV2 } from "aws-lambda";
+import type { APIGatewayProxyHandlerV2, ScheduledHandler } from "aws-lambda";
 import { createSolidFrame, setPixel, encodeFrameToBase64 } from "@signage/core";
 import type { RGB, Frame } from "@signage/core";
 import { getCharBitmap, CHAR_WIDTH, CHAR_HEIGHT } from "./font";
@@ -164,41 +164,41 @@ async function broadcastFrame(
   return { success, failed };
 }
 
-export const handler: APIGatewayProxyHandlerV2 = async () => {
-  console.log("Clock widget requested");
-
+/**
+ * Core clock update logic - shared between HTTP and scheduled handlers
+ */
+async function updateClock(): Promise<{
+  success: boolean;
+  skipped?: boolean;
+  reason?: string;
+  time?: string;
+  connections?: number;
+  broadcast?: { success: number; failed: number };
+  error?: string;
+}> {
   // Check for active connections first
   const connections = await getActiveConnections();
 
   if (connections.length === 0) {
     console.log("No active connections, skipping frame broadcast");
-    return {
-      statusCode: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
-      body: JSON.stringify({
-        success: true,
-        skipped: true,
-        reason: "No active connections",
-      }),
-    };
+    return { success: true, skipped: true, reason: "No active connections" };
   }
 
   console.log(`Found ${connections.length} active connections`);
 
-  // Get WebSocket endpoint
-  const wsApiUrl = process.env.WEBSOCKET_URL;
-  if (!wsApiUrl) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "WEBSOCKET_URL not configured" }),
-    };
+  // Get WebSocket endpoint - try SST Resource first, then env var
+  let endpoint: string;
+  try {
+    endpoint = `https://${Resource.SignageApi.managementEndpoint}`;
+  } catch {
+    const wsApiUrl = process.env.WEBSOCKET_URL;
+    if (!wsApiUrl) {
+      return { success: false, error: "WEBSOCKET_URL not configured" };
+    }
+    const url = new URL(wsApiUrl);
+    endpoint = `https://${url.host}/${url.pathname.split("/")[1] || ""}`;
   }
 
-  const url = new URL(wsApiUrl);
-  const endpoint = `https://${url.host}/${url.pathname.split("/")[1] || ""}`;
   const apiClient = new ApiGatewayManagementApiClient({ endpoint });
 
   // Get current time in 12-hour format
@@ -213,23 +213,43 @@ export const handler: APIGatewayProxyHandlerV2 = async () => {
 
   // Generate and broadcast frame
   const frame = generateClockFrame(timeStr, ampm);
-  const { success, failed } = await broadcastFrame(
+  const broadcast = await broadcastFrame(
     apiClient,
     connections as Array<{ connectionId: string }>,
     frame
   );
 
   return {
-    statusCode: 200,
+    success: true,
+    time: `${timeStr} ${ampm}`,
+    connections: connections.length,
+    broadcast,
+  };
+}
+
+/**
+ * HTTP handler for manual testing via /clock endpoint
+ */
+export const handler: APIGatewayProxyHandlerV2 = async () => {
+  console.log("Clock widget requested (HTTP)");
+  const result = await updateClock();
+
+  const statusCode = result.error ? 500 : 200;
+  return {
+    statusCode,
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
     },
-    body: JSON.stringify({
-      success: true,
-      time: `${timeStr} ${ampm}`,
-      connections: connections.length,
-      broadcast: { success, failed },
-    }),
+    body: JSON.stringify(result),
   };
+};
+
+/**
+ * Scheduled handler for cron-triggered updates
+ */
+export const scheduled: ScheduledHandler = async () => {
+  console.log("Clock widget triggered (scheduled)");
+  const result = await updateClock();
+  console.log("Clock update result:", JSON.stringify(result));
 };
