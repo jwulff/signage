@@ -7,6 +7,10 @@ export const web = new sst.aws.StaticSite("SignageWeb", {
     command: "pnpm build",
     output: "dist",
   },
+  domain:
+    $app.stage === "prod"
+      ? "signage.wulfffamily.com"
+      : `${$app.stage}.signage.wulfffamily.com`,
   environment: {
     VITE_WEBSOCKET_URL: api.url,
   },

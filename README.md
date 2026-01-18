@@ -24,7 +24,7 @@ Signage is a serverless system that pushes real-time content to LED matrix displ
 
 Open the web emulator in your browser:
 ```
-https://d3138ekbi7z9yw.cloudfront.net
+https://signage.wulfffamily.com
 ```
 
 ### Send a Test Frame
@@ -33,13 +33,13 @@ Trigger a test pattern (broadcasts to all connected terminals):
 
 ```bash
 # Rainbow gradient
-curl "https://hpaqthkicl.execute-api.us-east-1.amazonaws.com?pattern=rainbow"
+curl "https://api.signage.wulfffamily.com/test-bitmap?pattern=rainbow"
 
 # Color bars
-curl "https://hpaqthkicl.execute-api.us-east-1.amazonaws.com?pattern=bars"
+curl "https://api.signage.wulfffamily.com/test-bitmap?pattern=bars"
 
 # Custom text
-curl "https://hpaqthkicl.execute-api.us-east-1.amazonaws.com?pattern=text&text=Hello&color=pink"
+curl "https://api.signage.wulfffamily.com/test-bitmap?pattern=text&text=Hello&color=pink"
 ```
 
 ### Run the Relay (for Pixoo64)
@@ -49,7 +49,7 @@ Connect a local Pixoo64 device to the cloud:
 ```bash
 cd packages/relay
 pnpm build
-node dist/cli.js --ws 'wss://mew9rfc709.execute-api.us-east-1.amazonaws.com/$default'
+node dist/cli.js --ws wss://ws.signage.wulfffamily.com
 ```
 
 On first run, it will ask to scan for your Pixoo and save the IP for next time.
@@ -98,16 +98,16 @@ The test endpoint generates frames and broadcasts to all connected terminals.
 
 ```bash
 # Rainbow gradient
-curl "https://hpaqthkicl.execute-api.us-east-1.amazonaws.com"
+curl "https://api.signage.wulfffamily.com/test-bitmap"
 
 # Pink text saying "Hi"
-curl "https://hpaqthkicl.execute-api.us-east-1.amazonaws.com?pattern=text&text=Hi&color=pink"
+curl "https://api.signage.wulfffamily.com/test-bitmap?pattern=text&text=Hi&color=pink"
 
 # Multi-line text (use \n)
-curl "https://hpaqthkicl.execute-api.us-east-1.amazonaws.com?pattern=text&text=Line1\\nLine2"
+curl "https://api.signage.wulfffamily.com/test-bitmap?pattern=text&text=Line1\\nLine2"
 
 # Color test bars
-curl "https://hpaqthkicl.execute-api.us-east-1.amazonaws.com?pattern=bars"
+curl "https://api.signage.wulfffamily.com/test-bitmap?pattern=bars"
 ```
 
 ### Response
@@ -183,16 +183,16 @@ Future runs use the saved IP automatically.
 
 ```bash
 # Normal usage (uses saved IP or prompts to scan)
-node dist/cli.js --ws 'wss://mew9rfc709.execute-api.us-east-1.amazonaws.com/$default'
+node dist/cli.js --ws wss://ws.signage.wulfffamily.com
 
 # Specify IP (saves for next time)
 node dist/cli.js \
   --pixoo 192.168.1.100 \
-  --ws 'wss://mew9rfc709.execute-api.us-east-1.amazonaws.com/$default'
+  --ws wss://ws.signage.wulfffamily.com
 
 # With terminal ID
 node dist/cli.js \
-  --ws 'wss://mew9rfc709.execute-api.us-east-1.amazonaws.com/$default' \
+  --ws wss://ws.signage.wulfffamily.com \
   --terminal living-room
 ```
 
@@ -232,11 +232,19 @@ pnpm deploy:prod
 
 ## Deployed URLs
 
+### Production
 | Resource | URL |
 |----------|-----|
-| Web Emulator | https://d3138ekbi7z9yw.cloudfront.net |
-| Test API | https://hpaqthkicl.execute-api.us-east-1.amazonaws.com |
-| WebSocket | wss://mew9rfc709.execute-api.us-east-1.amazonaws.com/$default |
+| Web Emulator | https://signage.wulfffamily.com |
+| Test API | https://api.signage.wulfffamily.com |
+| WebSocket | wss://ws.signage.wulfffamily.com |
+
+### Development
+| Resource | URL |
+|----------|-----|
+| Web Emulator | https://dev.signage.wulfffamily.com |
+| Test API | https://api.dev.signage.wulfffamily.com |
+| WebSocket | wss://ws.dev.signage.wulfffamily.com |
 
 ## License
 
