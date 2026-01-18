@@ -186,18 +186,13 @@ async function updateClock(): Promise<{
 
   console.log(`Found ${connections.length} active connections`);
 
-  // Get WebSocket endpoint - try SST Resource first, then env var
-  let endpoint: string;
-  try {
-    endpoint = `https://${Resource.SignageApi.managementEndpoint}`;
-  } catch {
-    const wsApiUrl = process.env.WEBSOCKET_URL;
-    if (!wsApiUrl) {
-      return { success: false, error: "WEBSOCKET_URL not configured" };
-    }
-    const url = new URL(wsApiUrl);
-    endpoint = `https://${url.host}/${url.pathname.split("/")[1] || ""}`;
+  // Get WebSocket endpoint from env var
+  const wsApiUrl = process.env.WEBSOCKET_URL;
+  if (!wsApiUrl) {
+    return { success: false, error: "WEBSOCKET_URL not configured" };
   }
+  const url = new URL(wsApiUrl);
+  const endpoint = `https://${url.host}/${url.pathname.split("/")[1] || ""}`;
 
   const apiClient = new ApiGatewayManagementApiClient({ endpoint });
 

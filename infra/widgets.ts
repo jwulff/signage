@@ -12,6 +12,9 @@ export const clockCron = new sst.aws.Cron("ClockWidget", {
   function: {
     handler: "packages/functions/src/clock.scheduled",
     link: [table, api],
+    environment: {
+      WEBSOCKET_URL: api.url,
+    },
     timeout: "30 seconds",
     memory: "256 MB",
   },
