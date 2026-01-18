@@ -4,10 +4,16 @@
  */
 
 import WebSocket from "ws";
+import https from "https";
 import { sendFrameToPixoo, initializePixoo } from "./pixoo-client";
 import type { WsMessage, FramePayload } from "@signage/core";
 import { decodeBase64ToPixels } from "@signage/core";
 import { createBackoffController } from "./backoff";
+
+// Force HTTP/1.1 to prevent ALPN from negotiating HTTP/2 (which doesn't support WebSocket)
+const agent = new https.Agent({
+  ALPNProtocols: ["http/1.1"],
+});
 
 export interface RelayOptions {
   pixooIp: string;
@@ -33,7 +39,7 @@ export async function startRelay(options: RelayOptions): Promise<void> {
 
   const connect = () => {
     console.log("Connecting to WebSocket...");
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocket(wsUrl, { agent });
 
     let pingInterval: NodeJS.Timeout | null = null;
 
