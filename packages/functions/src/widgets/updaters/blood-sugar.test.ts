@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   bloodSugarUpdater,
   classifyRange,
@@ -6,11 +6,6 @@ import {
   isStale,
   type BloodSugarData,
 } from "./blood-sugar";
-
-// Mock the dexcom-share-api module
-vi.mock("dexcom-share-api", () => ({
-  DexcomClient: vi.fn(),
-}));
 
 // Mock SST Resource
 vi.mock("sst", () => ({
@@ -128,29 +123,59 @@ describe("bloodSugarUpdater", () => {
 });
 
 describe("bloodSugarUpdater.update", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  const originalFetch = global.fetch;
+
   beforeEach(() => {
+    fetchMock = vi.fn();
+    global.fetch = fetchMock;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
     vi.clearAllMocks();
   });
 
+  /**
+   * Helper to create Dexcom API mock responses.
+   */
+  function mockDexcomResponses(readings: Array<{
+    Value: number;
+    Trend: string;
+    WT: string;
+  }>) {
+    fetchMock
+      // AuthenticatePublisherAccount
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve("mock-account-id"),
+      })
+      // LoginPublisherAccountById
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve("mock-session-id"),
+      })
+      // ReadPublisherLatestGlucoseValues
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(readings),
+      });
+  }
+
   it("returns properly structured data on success", async () => {
-    const { DexcomClient } = await import("dexcom-share-api");
-
-    const mockReading = {
-      mgdl: 120,
-      mmol: 6.7,
-      trend: "Flat",
-      timestamp: Date.now() - 5 * 60 * 1000,
-    };
-
-    const mockClient = {
-      getEstimatedGlucoseValues: vi.fn().mockResolvedValue([mockReading]),
-    };
-    vi.mocked(DexcomClient).mockImplementation(() => mockClient as never);
+    const now = Date.now();
+    mockDexcomResponses([
+      {
+        Value: 120,
+        Trend: "Flat",
+        WT: `Date(${now - 5 * 60 * 1000})`,
+      },
+    ]);
 
     const result = (await bloodSugarUpdater.update()) as BloodSugarData;
 
     expect(result.glucose).toBe(120);
-    expect(result.glucoseMmol).toBe(6.7);
+    expect(result.glucoseMmol).toBe(6.7); // 120 / 18.0182 ≈ 6.66
     expect(result.trend).toBe("Flat");
     expect(result.trendArrow).toBe("→");
     expect(result.rangeStatus).toBe("normal");
@@ -159,12 +184,7 @@ describe("bloodSugarUpdater.update", () => {
   });
 
   it("handles empty readings array", async () => {
-    const { DexcomClient } = await import("dexcom-share-api");
-
-    const mockClient = {
-      getEstimatedGlucoseValues: vi.fn().mockResolvedValue([]),
-    };
-    vi.mocked(DexcomClient).mockImplementation(() => mockClient as never);
+    mockDexcomResponses([]);
 
     await expect(bloodSugarUpdater.update()).rejects.toThrow(
       "No glucose readings available"
@@ -172,56 +192,35 @@ describe("bloodSugarUpdater.update", () => {
   });
 
   it("marks stale data correctly", async () => {
-    const { DexcomClient } = await import("dexcom-share-api");
-
-    const mockReading = {
-      mgdl: 100,
-      mmol: 5.6,
-      trend: "Flat",
-      timestamp: Date.now() - 15 * 60 * 1000, // 15 minutes ago
-    };
-
-    const mockClient = {
-      getEstimatedGlucoseValues: vi.fn().mockResolvedValue([mockReading]),
-    };
-    vi.mocked(DexcomClient).mockImplementation(() => mockClient as never);
+    const now = Date.now();
+    mockDexcomResponses([
+      {
+        Value: 100,
+        Trend: "Flat",
+        WT: `Date(${now - 15 * 60 * 1000})`, // 15 minutes ago
+      },
+    ]);
 
     const result = (await bloodSugarUpdater.update()) as BloodSugarData;
     expect(result.isStale).toBe(true);
   });
 
   it("calculates delta between readings", async () => {
-    const { DexcomClient } = await import("dexcom-share-api");
-
     const now = Date.now();
-    const mockReadings = [
-      { mgdl: 130, mmol: 7.2, trend: "SingleUp", timestamp: now },
-      { mgdl: 120, mmol: 6.7, trend: "Flat", timestamp: now - 5 * 60 * 1000 },
-    ];
-
-    const mockClient = {
-      getEstimatedGlucoseValues: vi.fn().mockResolvedValue(mockReadings),
-    };
-    vi.mocked(DexcomClient).mockImplementation(() => mockClient as never);
+    mockDexcomResponses([
+      { Value: 130, Trend: "SingleUp", WT: `Date(${now})` },
+      { Value: 120, Trend: "Flat", WT: `Date(${now - 5 * 60 * 1000})` },
+    ]);
 
     const result = (await bloodSugarUpdater.update()) as BloodSugarData;
     expect(result.delta).toBe(10); // 130 - 120
   });
 
   it("returns delta of 0 when only one reading available", async () => {
-    const { DexcomClient } = await import("dexcom-share-api");
-
-    const mockReading = {
-      mgdl: 120,
-      mmol: 6.7,
-      trend: "Flat",
-      timestamp: Date.now(),
-    };
-
-    const mockClient = {
-      getEstimatedGlucoseValues: vi.fn().mockResolvedValue([mockReading]),
-    };
-    vi.mocked(DexcomClient).mockImplementation(() => mockClient as never);
+    const now = Date.now();
+    mockDexcomResponses([
+      { Value: 120, Trend: "Flat", WT: `Date(${now})` },
+    ]);
 
     const result = (await bloodSugarUpdater.update()) as BloodSugarData;
     expect(result.delta).toBe(0);
