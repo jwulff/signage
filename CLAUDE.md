@@ -239,6 +239,29 @@ The local server uses the **same rendering code** as production (`@signage/funct
 | Scheduling | EventBridge | setInterval |
 | Secrets | SST Secrets | .env.local |
 
+### ASCII Frame Debugger
+
+Render frames as ASCII art in the terminal for quick debugging without a browser:
+
+```bash
+pnpm --filter @signage/local-dev exec tsx src/debug-frame.ts
+```
+
+Output shows the 64x64 display with brightness indicators:
+```
+  ┌────────────────────────────────────────────────────────────────┐
+ 4│                   █     █         █████ █████                  │  <- Clock
+...
+34│    ███    ███    █   █████        █   █████       █████        │  <- Blood sugar
+...
+47│ ········█████······█▓······································▓·· │  <- Chart
+  └────────────────────────────────────────────────────────────────┘
+
+Legend: █=bright ▓=medium ▒=dim ░=faint ·=very dim (space)=off
+```
+
+Edit `packages/local-dev/src/debug-frame.ts` to test different glucose values, trends, and history data.
+
 ---
 
 ## SST Development
