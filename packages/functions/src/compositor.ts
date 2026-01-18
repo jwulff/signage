@@ -276,12 +276,13 @@ async function fetchBloodSugarData(): Promise<BloodSugarData | null> {
  * Render clock widget to top region of frame
  */
 function renderClockRegion(frame: Frame): void {
-  // Get current time
+  // Get current time in Pacific timezone
   const now = new Date();
-  let hours = now.getHours();
+  const pacificTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
+  let hours = pacificTime.getHours();
   const ampm = hours >= 12 ? "PM" : "AM";
   hours = hours % 12 || 12;
-  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const minutes = String(pacificTime.getMinutes()).padStart(2, "0");
   const timeStr = `${hours}:${minutes}`;
 
   // Row 2: Time (larger, centered)
@@ -458,12 +459,13 @@ async function updateDisplay(): Promise<{
   // Generate composite frame
   const frame = generateCompositeFrame(bloodSugarData);
 
-  // Get current time for logging
+  // Get current time in Pacific for logging
   const now = new Date();
-  let hours = now.getHours();
+  const pacificTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
+  let hours = pacificTime.getHours();
   const ampm = hours >= 12 ? "PM" : "AM";
   hours = hours % 12 || 12;
-  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const minutes = String(pacificTime.getMinutes()).padStart(2, "0");
   const timeStr = `${hours}:${minutes} ${ampm}`;
 
   // Broadcast frame
