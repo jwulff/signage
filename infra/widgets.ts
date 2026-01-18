@@ -36,7 +36,7 @@ export const reconcileCron = new sst.aws.Cron("ConnectionReconcile", {
 export const bloodSugarCron = new sst.aws.Cron("BloodsugarWidget", {
   schedule: "rate(1 minute)",
   function: {
-    handler: "packages/functions/src/widgets/dispatcher.handler",
+    handler: "packages/functions/src/blood-sugar-renderer.scheduled",
     link: [table, api, dexcomUsername, dexcomPassword],
     timeout: "30 seconds",
     memory: "256 MB",
