@@ -49,10 +49,10 @@ Connect a local Pixoo64 device to the cloud:
 ```bash
 cd packages/relay
 pnpm build
-node dist/cli.js --pixoo <PIXOO_IP> --ws wss://by1t5j0e7h.execute-api.us-east-1.amazonaws.com
+node dist/cli.js --ws wss://by1t5j0e7h.execute-api.us-east-1.amazonaws.com
 ```
 
-Find your Pixoo's IP in the Divoom app under Device Settings.
+On first run, it will ask to scan for your Pixoo and save the IP for next time.
 
 ## Architecture
 
@@ -141,32 +141,57 @@ pnpm build
 ### Usage
 
 ```bash
-node dist/cli.js --pixoo <IP> --ws <WEBSOCKET_URL> [--terminal <ID>]
+# First run - prompts to scan for Pixoo
+node dist/cli.js --ws <WEBSOCKET_URL>
+
+# Specify IP manually
+node dist/cli.js --pixoo <IP> --ws <WEBSOCKET_URL>
+
+# Scan network
+node dist/cli.js scan
+
+# Forget saved IP
+node dist/cli.js forget
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `--pixoo <ip>` | Yes | Pixoo device IP address |
+| `--pixoo <ip>` | No | Pixoo device IP (saved for next time) |
 | `--ws <url>` | Yes | WebSocket API URL |
 | `--terminal <id>` | No | Terminal ID to register as |
 
+### First Run
+
+On first run without `--pixoo`, the relay will:
+
+1. Ask if you want to scan the network
+2. Scan your subnet for Pixoo devices
+3. Let you select a device (if multiple found)
+4. Save the IP to `~/.signage/config.json`
+
+Future runs use the saved IP automatically.
+
 ### Features
 
+- **Auto-discovery**: Scans local network for Pixoo devices
+- **Persistent config**: Saves IP so you only scan once
 - **Auto-reconnect**: Exponential backoff (1s → 30s) on disconnect
 - **Keepalive**: Sends ping every 5 minutes to prevent idle timeout
 - **Channel switch**: Automatically switches Pixoo to custom channel on startup
 
-### Example
+### Examples
 
 ```bash
-# Connect to production
+# Normal usage (uses saved IP or prompts to scan)
+node dist/cli.js --ws wss://by1t5j0e7h.execute-api.us-east-1.amazonaws.com
+
+# Specify IP (saves for next time)
 node dist/cli.js \
   --pixoo 192.168.1.100 \
   --ws wss://by1t5j0e7h.execute-api.us-east-1.amazonaws.com
 
 # With terminal ID
 node dist/cli.js \
-  --pixoo 192.168.1.100 \
   --ws wss://by1t5j0e7h.execute-api.us-east-1.amazonaws.com \
   --terminal living-room
 ```
