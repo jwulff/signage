@@ -16,16 +16,21 @@ const ddb = DynamoDBDocumentClient.from(ddbClient);
 
 /**
  * Scheduled event handler for widget updates.
- * The widgetId is passed via the event's detail or resources.
+ * The widgetId is extracted from the EventBridge rule or Lambda function name.
  */
 export const handler = async (event: ScheduledEvent): Promise<void> => {
-  // Extract widget ID from the EventBridge rule name or detail
-  // SST passes the cron name in resources, e.g., ["arn:aws:events:...:rule/ClockWidget"]
+  // Try to extract widget ID from EventBridge rule name first
   const ruleName = event.resources?.[0]?.split("/").pop() || "";
-  const widgetId = extractWidgetId(ruleName);
+  let widgetId = extractWidgetId(ruleName);
+
+  // Fallback: extract from Lambda function name (e.g., "signage-prod-BloodsugarWidgetHandlerFunction-xxx")
+  if (!widgetId) {
+    const functionName = process.env.AWS_LAMBDA_FUNCTION_NAME || "";
+    widgetId = extractWidgetIdFromFunctionName(functionName);
+  }
 
   if (!widgetId) {
-    console.error("Could not determine widget ID from event:", JSON.stringify(event));
+    console.error("Could not determine widget ID from event or function name:", JSON.stringify(event));
     return;
   }
 
@@ -51,7 +56,8 @@ export const handler = async (event: ScheduledEvent): Promise<void> => {
     const data = await widget.update();
 
     // Broadcast to all connections
-    const apiEndpoint = `https://${Resource.SignageApi.managementEndpoint}`;
+    // managementEndpoint is already a complete URL including https://
+    const apiEndpoint = Resource.SignageApi.managementEndpoint;
     const { sent, failed } = await broadcastWidgetUpdate(widgetId, data, apiEndpoint);
     console.log(`Broadcast complete: ${sent} sent, ${failed} failed`);
 
@@ -71,6 +77,19 @@ export const handler = async (event: ScheduledEvent): Promise<void> => {
 function extractWidgetId(ruleName: string): string | null {
   // Remove "Widget" suffix and lowercase
   const match = ruleName.match(/^(\w+)Widget$/);
+  if (match) {
+    return match[1].toLowerCase();
+  }
+  return null;
+}
+
+/**
+ * Extract widget ID from Lambda function name.
+ * Maps "signage-prod-BloodsugarWidgetHandlerFunction-xxx" -> "bloodsugar"
+ */
+function extractWidgetIdFromFunctionName(functionName: string): string | null {
+  // Pattern: {app}-{stage}-{WidgetName}WidgetHandlerFunction-{hash}
+  const match = functionName.match(/(\w+)WidgetHandlerFunction/i);
   if (match) {
     return match[1].toLowerCase();
   }
