@@ -139,7 +139,7 @@ async function getSessionId(username: string, password: string): Promise<string>
     throw new Error(`Dexcom login failed: ${sessionResponse.status}`);
   }
 
-  return sessionResponse.json();
+  return sessionResponse.json() as Promise<string>;
 }
 
 /**
@@ -165,7 +165,7 @@ async function fetchGlucoseReadings(
     throw new Error(`Dexcom fetch failed: ${response.status}`);
   }
 
-  return response.json();
+  return response.json() as Promise<DexcomReading[]>;
 }
 
 /**
