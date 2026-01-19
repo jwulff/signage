@@ -28,6 +28,8 @@ export interface ChartConfig {
   height: number;
   /** Hours of history to show (default: 3) */
   hours?: number;
+  /** Hours offset from now - chart ends at (now - offsetHours) instead of now (default: 0) */
+  offsetHours?: number;
   /** Padding in mg/dL to add above/below data range (default: 15) */
   padding?: number;
   /** Timestamps to draw as vertical marker lines */
@@ -108,6 +110,7 @@ export function renderChart(
     width,
     height,
     hours = 3,
+    offsetHours = 0,
     padding = 15,
     timeMarkers = [],
     timezone = "America/Los_Angeles",
@@ -116,11 +119,12 @@ export function renderChart(
   if (points.length === 0) return;
 
   const now = Date.now();
-  const startTime = now - hours * 60 * 60 * 1000;
+  const endTime = now - offsetHours * 60 * 60 * 1000;
+  const startTime = endTime - hours * 60 * 60 * 1000;
   const timeRange = hours * 60 * 60 * 1000;
 
   // Filter points to the time range
-  const visiblePoints = points.filter((p) => p.timestamp >= startTime);
+  const visiblePoints = points.filter((p) => p.timestamp >= startTime && p.timestamp <= endTime);
 
   if (visiblePoints.length === 0) return;
 
@@ -153,7 +157,7 @@ export function renderChart(
   // Draw time marker vertical lines FIRST (so chart line appears on top)
   // Each marker has brightness based on sunlight percentage for that hour
   for (const marker of timeMarkers) {
-    if (marker >= startTime && marker <= now) {
+    if (marker >= startTime && marker <= endTime) {
       const timeOffset = marker - startTime;
       const markerX = x + Math.round((timeOffset / timeRange) * (width - 1));
 

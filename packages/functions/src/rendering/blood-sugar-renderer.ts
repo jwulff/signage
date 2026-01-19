@@ -322,13 +322,14 @@ export function renderBloodSugarRegion(
     // Calculate time markers (midnight, 6am, noon, 6pm) for both charts
     const timeMarkers = calculateTimeMarkers(timezone);
 
-    // Left half: 21 hour compressed history
+    // Left half: 21 hour compressed history (from -24h to -3h, offset by 3h)
     renderChart(frame, history.points, {
       x: CHART_X,
       y: CHART_Y,
       width: CHART_LEFT_WIDTH,
       height: CHART_HEIGHT,
       hours: CHART_LEFT_HOURS,
+      offsetHours: CHART_RIGHT_HOURS, // Offset by 3h so it shows -24h to -3h
       timeMarkers,
       timezone,
     });
