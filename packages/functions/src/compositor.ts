@@ -182,9 +182,9 @@ async function fetchBloodSugarData(): Promise<{
   }
 }
 
-// Seattle coordinates
-const SEATTLE_LAT = 47.6062;
-const SEATTLE_LON = -122.3321;
+// Seattle coordinates (Fremont area)
+const SEATTLE_LAT = 47.6681435;
+const SEATTLE_LON = -122.3609856;
 
 // Weather cache TTL: 30 minutes
 const WEATHER_CACHE_TTL_MS = 30 * 60 * 1000;
