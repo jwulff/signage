@@ -23,6 +23,7 @@ import {
   DISPLAY_WIDTH,
   DISPLAY_HEIGHT,
   type BloodSugarDisplayData,
+  type ClockWeatherData,
 } from "./rendering/index.js";
 
 const ddbClient = new DynamoDBClient({});
@@ -181,6 +182,53 @@ async function fetchBloodSugarData(): Promise<{
   }
 }
 
+// Seattle coordinates
+const SEATTLE_LAT = 47.6062;
+const SEATTLE_LON = -122.3321;
+
+/**
+ * Fetch weather data from Open-Meteo API (free, no API key needed)
+ * Returns temperatures for -12h, -6h, now, +6h, +12h
+ */
+async function fetchWeatherData(): Promise<ClockWeatherData | null> {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${SEATTLE_LAT}&longitude=${SEATTLE_LON}&hourly=temperature_2m&temperature_unit=fahrenheit&past_hours=12&forecast_hours=12&timezone=America/Los_Angeles`;
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Weather API failed: ${response.status}`);
+    }
+
+    interface OpenMeteoResponse {
+      hourly: {
+        time: string[];
+        temperature_2m: number[];
+      };
+    }
+
+    const data = (await response.json()) as OpenMeteoResponse;
+
+    if (!data.hourly?.temperature_2m || data.hourly.temperature_2m.length < 25) {
+      console.warn("Insufficient weather data received");
+      return null;
+    }
+
+    // Data array: index 0 = 12h ago, index 12 = now, index 24 = 12h from now
+    const temps = data.hourly.temperature_2m;
+
+    return {
+      tempMinus12h: temps[0],
+      tempMinus6h: temps[6],
+      tempNow: temps[12],
+      tempPlus6h: temps[18],
+      tempPlus12h: temps[24] ?? temps[temps.length - 1],
+    };
+  } catch (error) {
+    console.error("Failed to fetch weather data:", error);
+    return null;
+  }
+}
+
 /**
  * Get active WebSocket connections
  */
@@ -283,8 +331,13 @@ async function updateDisplay(): Promise<{
 
   const apiClient = new ApiGatewayManagementApiClient({ endpoint });
 
-  // Fetch blood sugar data and history (clock uses current time, no fetch needed)
-  const { current: bloodSugarData, history } = await fetchBloodSugarData();
+  // Fetch blood sugar and weather data in parallel
+  const [bloodSugarResult, weatherData] = await Promise.all([
+    fetchBloodSugarData(),
+    fetchWeatherData(),
+  ]);
+
+  const { current: bloodSugarData, history } = bloodSugarResult;
 
   if (bloodSugarData) {
     console.log(`Blood sugar: ${bloodSugarData.glucose} mg/dL, Trend: ${bloodSugarData.trend}, History: ${history.length} points`);
@@ -292,11 +345,18 @@ async function updateDisplay(): Promise<{
     console.log("Blood sugar data unavailable");
   }
 
+  if (weatherData) {
+    console.log(`Weather: ${weatherData.tempNow}°F now, ${weatherData.tempMinus12h}°F 12h ago, ${weatherData.tempPlus12h}°F in 12h`);
+  } else {
+    console.log("Weather data unavailable");
+  }
+
   // Generate composite frame using shared rendering module
   const frame = generateCompositeFrame({
     bloodSugar: bloodSugarData,
     bloodSugarHistory: history.length > 0 ? { points: history } : undefined,
     timezone: "America/Los_Angeles",
+    weather: weatherData ?? undefined,
   });
 
   // Get current time in Pacific for logging

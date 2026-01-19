@@ -10,3 +10,4 @@ export * from "./blood-sugar-renderer.js";
 export * from "./clock-renderer.js";
 export * from "./chart-renderer.js";
 export * from "./ascii-renderer.js";
+export type { ClockWeatherData } from "./clock-renderer.js";
