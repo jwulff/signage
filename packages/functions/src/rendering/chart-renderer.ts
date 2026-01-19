@@ -71,20 +71,20 @@ function getGlucoseColor(glucose: number): { r: number; g: number; b: number } {
   // Normal range (70-180) with gradient toward edges
   if (glucose <= TARGET_CENTER) {
     // 70-120: blend from orange-tinted to pure green
-    // t=0 at 70 (40% toward orange), t=1 at 120 (pure green)
+    // t=0 at 70 (70% toward orange), t=1 at 120 (pure green)
     const t = (glucose - TARGET_LOW) / (TARGET_CENTER - TARGET_LOW);
     return lerpColor(
-      lerpColor(COLORS.low, COLORS.normal, 0.6), // 40% orange, 60% green at edge
+      lerpColor(COLORS.low, COLORS.normal, 0.3), // 70% orange, 30% green at edge
       COLORS.normal,
       t
     );
   } else {
     // 120-180: blend from pure green to yellow-tinted
-    // t=0 at 120 (pure green), t=1 at 180 (40% toward yellow)
+    // t=0 at 120 (pure green), t=1 at 180 (70% toward yellow)
     const t = (glucose - TARGET_CENTER) / (TARGET_HIGH - TARGET_CENTER);
     return lerpColor(
       COLORS.normal,
-      lerpColor(COLORS.normal, COLORS.high, 0.4), // 60% green, 40% yellow at edge
+      lerpColor(COLORS.normal, COLORS.high, 0.7), // 30% green, 70% yellow at edge
       t
     );
   }
