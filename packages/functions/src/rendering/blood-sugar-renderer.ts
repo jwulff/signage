@@ -192,6 +192,53 @@ export interface BloodSugarHistory {
 }
 
 /**
+ * Calculate time markers for midnight, 6am, noon, 6pm in the last 24 hours
+ */
+function calculateTimeMarkers(timezone?: string): number[] {
+  const tz = timezone || "America/Los_Angeles";
+  const now = Date.now();
+  const markers: number[] = [];
+
+  // Get current hour in target timezone
+  const nowDate = new Date(now);
+  const tzHour = parseInt(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour: "2-digit",
+      hour12: false,
+    }).format(nowDate)
+  );
+
+  // Calculate how many ms ago was the start of the current hour in the target timezone
+  const msIntoCurrentHour =
+    nowDate.getMinutes() * 60 * 1000 +
+    nowDate.getSeconds() * 1000 +
+    nowDate.getMilliseconds();
+
+  // Calculate timestamps for midnight (0), 6am (6), noon (12), 6pm (18)
+  const markerHours = [0, 6, 12, 18];
+
+  for (const markerHour of markerHours) {
+    // How many hours ago was this marker?
+    let hoursAgo = tzHour - markerHour;
+    if (hoursAgo <= 0) {
+      hoursAgo += 24; // It was yesterday
+    }
+
+    // Calculate the timestamp
+    const msAgo = hoursAgo * 60 * 60 * 1000 + msIntoCurrentHour;
+    const markerTimestamp = now - msAgo;
+
+    // Only include if within the last 24 hours
+    if (now - markerTimestamp <= 24 * 60 * 60 * 1000) {
+      markers.push(markerTimestamp);
+    }
+  }
+
+  return markers;
+}
+
+/**
  * Center text with margins, clamping to stay on screen
  */
 function centerXWithMargin(text: string): number {
@@ -209,7 +256,8 @@ function centerXWithMargin(text: string): number {
 export function renderBloodSugarRegion(
   frame: Frame,
   data: BloodSugarDisplayData | null,
-  history?: BloodSugarHistory
+  history?: BloodSugarHistory,
+  timezone?: string
 ): void {
   if (!data) {
     const errText = "BG ERR";
@@ -271,6 +319,9 @@ export function renderBloodSugarRegion(
   if (history && history.points.length > 0) {
     const legendY = CHART_Y + CHART_HEIGHT - 5; // 5px tiny font, at bottom
 
+    // Calculate time markers (midnight, 6am, noon, 6pm) for both charts
+    const timeMarkers = calculateTimeMarkers(timezone);
+
     // Left half: 21 hour compressed history
     renderChart(frame, history.points, {
       x: CHART_X,
@@ -278,6 +329,7 @@ export function renderBloodSugarRegion(
       width: CHART_LEFT_WIDTH,
       height: CHART_HEIGHT,
       hours: CHART_LEFT_HOURS,
+      timeMarkers,
     });
     drawTinyText(frame, `${CHART_LEFT_HOURS}h`, CHART_X, legendY, COLORS.veryDim);
 
@@ -289,6 +341,7 @@ export function renderBloodSugarRegion(
       width: CHART_RIGHT_WIDTH,
       height: CHART_HEIGHT,
       hours: CHART_RIGHT_HOURS,
+      timeMarkers,
     });
     drawTinyText(frame, `${CHART_RIGHT_HOURS}h`, rightX, legendY, COLORS.veryDim);
   }

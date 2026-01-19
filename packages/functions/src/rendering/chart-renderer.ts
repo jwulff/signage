@@ -30,6 +30,8 @@ export interface ChartConfig {
   hours?: number;
   /** Padding in mg/dL to add above/below data range (default: 15) */
   padding?: number;
+  /** Timestamps to draw as vertical marker lines */
+  timeMarkers?: number[];
 }
 
 // Target range for coloring
@@ -105,6 +107,7 @@ export function renderChart(
     height,
     hours = 3,
     padding = 15,
+    timeMarkers = [],
   } = config;
 
   if (points.length === 0) return;
@@ -170,6 +173,22 @@ export function renderChart(
 
     prevPixelX = pixelX;
     prevPixelY = pixelY;
+  }
+
+  // Draw time marker vertical lines (very dim)
+  const markerColor = COLORS.veryDim;
+  for (const marker of timeMarkers) {
+    if (marker >= startTime && marker <= now) {
+      const timeOffset = marker - startTime;
+      const markerX = x + Math.round((timeOffset / timeRange) * (width - 1));
+
+      // Draw vertical line
+      if (markerX >= x && markerX < x + width) {
+        for (let py = y; py < y + height; py++) {
+          setPixel(frame, markerX, py, markerColor);
+        }
+      }
+    }
   }
 }
 
