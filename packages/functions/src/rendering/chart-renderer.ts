@@ -32,6 +32,8 @@ export interface ChartConfig {
   padding?: number;
   /** Timestamps to draw as vertical marker lines */
   timeMarkers?: number[];
+  /** Timezone for time marker calculations (default: America/Los_Angeles) */
+  timezone?: string;
 }
 
 // Target range for coloring
@@ -108,6 +110,7 @@ export function renderChart(
     hours = 3,
     padding = 15,
     timeMarkers = [],
+    timezone = "America/Los_Angeles",
   } = config;
 
   if (points.length === 0) return;
@@ -155,9 +158,15 @@ export function renderChart(
       const markerX = x + Math.round((timeOffset / timeRange) * (width - 1));
 
       if (markerX >= x && markerX < x + width) {
-        // Get the hour for this marker to calculate sunlight
+        // Get the hour for this marker in the target timezone
         const markerDate = new Date(marker);
-        const hour = markerDate.getHours();
+        const hour = parseInt(
+          new Intl.DateTimeFormat("en-US", {
+            timeZone: timezone,
+            hour: "2-digit",
+            hour12: false,
+          }).format(markerDate)
+        );
 
         // Calculate sunlight percentage using cosine curve
         // Peaks at noon (100%), bottoms at midnight (0%)
