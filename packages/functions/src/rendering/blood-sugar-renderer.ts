@@ -221,7 +221,7 @@ function calculateTimeMarkers(timezone?: string): number[] {
   for (const markerHour of markerHours) {
     // How many hours ago was this marker?
     let hoursAgo = tzHour - markerHour;
-    if (hoursAgo <= 0) {
+    if (hoursAgo < 0) {
       hoursAgo += 24; // It was yesterday
     }
 
