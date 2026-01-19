@@ -5,8 +5,8 @@ import { table } from "./storage";
 export const testApi = new sst.aws.ApiGatewayV2("SignageTestApi", {
   domain:
     $app.stage === "prod"
-      ? "api.signage.wulfffamily.com"
-      : `api.${$app.stage}.signage.wulfffamily.com`,
+      ? "api.signage.example.com"
+      : `api.${$app.stage}.signage.example.com`,
   cors: {
     allowOrigins: ["*"],
     allowMethods: ["GET", "POST"],

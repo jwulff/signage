@@ -1,5 +1,7 @@
 # Signage
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Personal digital signage system for Pixoo64 and other displays.
 
 ## Overview
@@ -24,7 +26,7 @@ Signage is a serverless system that pushes real-time content to LED matrix displ
 
 Open the web emulator in your browser:
 ```
-https://signage.wulfffamily.com
+https://signage.example.com
 ```
 
 ### Send a Test Frame
@@ -33,13 +35,13 @@ Trigger a test pattern (broadcasts to all connected terminals):
 
 ```bash
 # Rainbow gradient
-curl "https://api.signage.wulfffamily.com/test-bitmap?pattern=rainbow"
+curl "https://api.signage.example.com/test-bitmap?pattern=rainbow"
 
 # Color bars
-curl "https://api.signage.wulfffamily.com/test-bitmap?pattern=bars"
+curl "https://api.signage.example.com/test-bitmap?pattern=bars"
 
 # Custom text
-curl "https://api.signage.wulfffamily.com/test-bitmap?pattern=text&text=Hello&color=pink"
+curl "https://api.signage.example.com/test-bitmap?pattern=text&text=Hello&color=pink"
 ```
 
 ### Run the Relay (for Pixoo64)
@@ -49,7 +51,7 @@ Connect a local Pixoo64 device to the cloud:
 ```bash
 cd packages/relay
 pnpm build
-node dist/cli.js --ws wss://ws.signage.wulfffamily.com
+node dist/cli.js --ws wss://ws.signage.example.com
 ```
 
 On first run, it will ask to scan for your Pixoo and save the IP for next time.
@@ -98,16 +100,16 @@ The test endpoint generates frames and broadcasts to all connected terminals.
 
 ```bash
 # Rainbow gradient
-curl "https://api.signage.wulfffamily.com/test-bitmap"
+curl "https://api.signage.example.com/test-bitmap"
 
 # Pink text saying "Hi"
-curl "https://api.signage.wulfffamily.com/test-bitmap?pattern=text&text=Hi&color=pink"
+curl "https://api.signage.example.com/test-bitmap?pattern=text&text=Hi&color=pink"
 
 # Multi-line text (use \n)
-curl "https://api.signage.wulfffamily.com/test-bitmap?pattern=text&text=Line1\\nLine2"
+curl "https://api.signage.example.com/test-bitmap?pattern=text&text=Line1\\nLine2"
 
 # Color test bars
-curl "https://api.signage.wulfffamily.com/test-bitmap?pattern=bars"
+curl "https://api.signage.example.com/test-bitmap?pattern=bars"
 ```
 
 ### Response
@@ -183,16 +185,16 @@ Future runs use the saved IP automatically.
 
 ```bash
 # Normal usage (uses saved IP or prompts to scan)
-node dist/cli.js --ws wss://ws.signage.wulfffamily.com
+node dist/cli.js --ws wss://ws.signage.example.com
 
 # Specify IP (saves for next time)
 node dist/cli.js \
   --pixoo 192.168.1.100 \
-  --ws wss://ws.signage.wulfffamily.com
+  --ws wss://ws.signage.example.com
 
 # With terminal ID
 node dist/cli.js \
-  --ws wss://ws.signage.wulfffamily.com \
+  --ws wss://ws.signage.example.com \
   --terminal living-room
 ```
 
@@ -200,9 +202,10 @@ node dist/cli.js \
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20+
 - pnpm 9+
 - AWS account with credentials configured
+- [SST v3](https://sst.dev/) installed globally (`npm i -g sst`)
 
 ### Setup
 
@@ -235,17 +238,17 @@ pnpm deploy:prod
 ### Production
 | Resource | URL |
 |----------|-----|
-| Web Emulator | https://signage.wulfffamily.com |
-| Test API | https://api.signage.wulfffamily.com |
-| WebSocket | wss://ws.signage.wulfffamily.com |
+| Web Emulator | https://signage.example.com |
+| Test API | https://api.signage.example.com |
+| WebSocket | wss://ws.signage.example.com |
 
 ### Development
 | Resource | URL |
 |----------|-----|
-| Web Emulator | https://dev.signage.wulfffamily.com |
-| Test API | https://api.dev.signage.wulfffamily.com |
-| WebSocket | wss://ws.dev.signage.wulfffamily.com |
+| Web Emulator | https://dev.signage.example.com |
+| Test API | https://api.dev.signage.example.com |
+| WebSocket | wss://ws.dev.signage.example.com |
 
 ## License
 
-Private project - not for distribution.
+MIT License - see [LICENSE](LICENSE) for details.

@@ -4,7 +4,7 @@
 
 ## Why
 
-Abigail uses a Dexcom G7 continuous glucose monitor for Type 1 diabetes management. Having her current blood sugar reading displayed on the signage system provides at-a-glance visibility for the whole family without needing to check a phone.
+A family member uses a Dexcom G7 continuous glucose monitor for diabetes management. Having the current blood sugar reading displayed on the signage system provides at-a-glance visibility for the whole family without needing to check a phone.
 
 ## How
 

@@ -141,21 +141,21 @@ Key files:
 ### Relay (`packages/relay`)
 Local CLI that bridges AWS to Pixoo.
 
-**Current Pixoo IP**: `192.168.1.224`
+**Current Pixoo IP**: `<PIXOO_IP>` (find via Divoom app or network scan)
 
 | Environment | WebSocket URL |
 |-------------|---------------|
-| Production | `wss://ws.signage.wulfffamily.com` |
-| Development | `wss://ws.dev.signage.wulfffamily.com` |
+| Production | `wss://ws.signage.example.com` |
+| Development | `wss://ws.dev.signage.example.com` |
 
 ```bash
 cd packages/relay
 
 # Production
-npx tsx src/cli.ts --ws wss://ws.signage.wulfffamily.com
+npx tsx src/cli.ts --ws wss://ws.signage.example.com
 
 # Development
-npx tsx src/cli.ts --ws wss://ws.dev.signage.wulfffamily.com
+npx tsx src/cli.ts --ws wss://ws.dev.signage.example.com
 ```
 
 ### Web (`packages/web`)

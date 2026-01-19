@@ -10,9 +10,9 @@ API Gateway URLs changed on every deploy, requiring manual updates to documentat
 
 Added custom domain configuration to all SST components using Route 53:
 
-- **WebSocket API**: `ws.signage.wulfffamily.com` (prod) / `ws.dev.signage.wulfffamily.com` (dev)
-- **HTTP API**: `api.signage.wulfffamily.com` (prod) / `api.dev.signage.wulfffamily.com` (dev)
-- **Static Site**: `signage.wulfffamily.com` (prod) / `dev.signage.wulfffamily.com` (dev)
+- **WebSocket API**: `ws.signage.example.com` (prod) / `ws.dev.signage.example.com` (dev)
+- **HTTP API**: `api.signage.example.com` (prod) / `api.dev.signage.example.com` (dev)
+- **Static Site**: `signage.example.com` (prod) / `dev.signage.example.com` (dev)
 
 ## Key Design Decisions
 

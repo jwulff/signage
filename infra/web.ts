@@ -9,8 +9,8 @@ export const web = new sst.aws.StaticSite("SignageWeb", {
   },
   domain:
     $app.stage === "prod"
-      ? "signage.wulfffamily.com"
-      : `${$app.stage}.signage.wulfffamily.com`,
+      ? "signage.example.com"
+      : `${$app.stage}.signage.example.com`,
   environment: {
     VITE_WEBSOCKET_URL: api.url,
   },
