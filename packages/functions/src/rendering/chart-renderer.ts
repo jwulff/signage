@@ -105,6 +105,7 @@ export function renderChart(
   // Draw the line chart
   let prevPixelX: number | null = null;
   let prevPixelY: number | null = null;
+  let prevGlucose: number | null = null;
 
   for (const point of visiblePoints) {
     // Calculate pixel position
@@ -122,13 +123,18 @@ export function renderChart(
       setPixel(frame, pixelX, pixelY, color);
 
       // Connect to previous point with a line
-      if (prevPixelX !== null && prevPixelY !== null) {
-        drawLine(frame, prevPixelX, prevPixelY, pixelX, pixelY, color, x, y, width, height);
+      // Use color of the higher glucose value (more cautious - highlights highs/lows)
+      if (prevPixelX !== null && prevPixelY !== null && prevGlucose !== null) {
+        const lineColor = point.glucose > prevGlucose
+          ? color
+          : getGlucoseColor(prevGlucose);
+        drawLine(frame, prevPixelX, prevPixelY, pixelX, pixelY, lineColor, x, y, width, height);
       }
     }
 
     prevPixelX = pixelX;
     prevPixelY = pixelY;
+    prevGlucose = point.glucose;
   }
 }
 
