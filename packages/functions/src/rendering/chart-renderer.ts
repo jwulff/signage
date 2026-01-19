@@ -147,7 +147,36 @@ export function renderChart(
     return minGlucose + normalizedY * glucoseRange;
   };
 
-  // Draw the line chart
+  // Draw time marker vertical lines FIRST (so chart line appears on top)
+  // Each marker has brightness based on sunlight percentage for that hour
+  for (const marker of timeMarkers) {
+    if (marker >= startTime && marker <= now) {
+      const timeOffset = marker - startTime;
+      const markerX = x + Math.round((timeOffset / timeRange) * (width - 1));
+
+      if (markerX >= x && markerX < x + width) {
+        // Get the hour for this marker to calculate sunlight
+        const markerDate = new Date(marker);
+        const hour = markerDate.getHours();
+
+        // Calculate sunlight percentage using cosine curve
+        // Peaks at noon (100%), bottoms at midnight (0%)
+        const sunlight = (1 + Math.cos((hour - 12) * Math.PI / 12)) / 2;
+
+        // Scale brightness: 0% sunlight = very dim, 100% sunlight = moderate brightness
+        // Max brightness capped at 80 to not overpower the chart
+        const brightness = Math.round(15 + sunlight * 65);
+        const markerColor = { r: brightness, g: brightness, b: brightness };
+
+        // Draw vertical line
+        for (let py = y; py < y + height; py++) {
+          setPixel(frame, markerX, py, markerColor);
+        }
+      }
+    }
+  }
+
+  // Draw the line chart ON TOP of markers
   let prevPixelX: number | null = null;
   let prevPixelY: number | null = null;
 
@@ -173,22 +202,6 @@ export function renderChart(
 
     prevPixelX = pixelX;
     prevPixelY = pixelY;
-  }
-
-  // Draw time marker vertical lines (very dim)
-  const markerColor = COLORS.veryDim;
-  for (const marker of timeMarkers) {
-    if (marker >= startTime && marker <= now) {
-      const timeOffset = marker - startTime;
-      const markerX = x + Math.round((timeOffset / timeRange) * (width - 1));
-
-      // Draw vertical line
-      if (markerX >= x && markerX < x + width) {
-        for (let py = y; py < y + height; py++) {
-          setPixel(frame, markerX, py, markerColor);
-        }
-      }
-    }
   }
 }
 
