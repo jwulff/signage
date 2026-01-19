@@ -35,16 +35,59 @@ export interface ChartConfig {
 // Target range for coloring
 const TARGET_LOW = 70;
 const TARGET_HIGH = 180;
+const TARGET_CENTER = 120; // Sweet spot - pure green here
 
 /**
- * Get color for a glucose value
+ * Linear interpolation between two values
+ */
+function lerp(a: number, b: number, t: number): number {
+  return Math.round(a + (b - a) * t);
+}
+
+/**
+ * Interpolate between two colors
+ */
+function lerpColor(
+  c1: { r: number; g: number; b: number },
+  c2: { r: number; g: number; b: number },
+  t: number
+): { r: number; g: number; b: number } {
+  return {
+    r: lerp(c1.r, c2.r, t),
+    g: lerp(c1.g, c2.g, t),
+    b: lerp(c1.b, c2.b, t),
+  };
+}
+
+/**
+ * Get color for a glucose value with gradient in normal range
  */
 function getGlucoseColor(glucose: number): { r: number; g: number; b: number } {
   if (glucose < 55) return COLORS.urgentLow;
-  if (glucose < 70) return COLORS.low;
-  if (glucose <= 180) return COLORS.normal;
-  if (glucose <= 250) return COLORS.high;
-  return COLORS.veryHigh;
+  if (glucose < TARGET_LOW) return COLORS.low;
+  if (glucose > 250) return COLORS.veryHigh;
+  if (glucose > TARGET_HIGH) return COLORS.high;
+
+  // Normal range (70-180) with gradient toward edges
+  if (glucose <= TARGET_CENTER) {
+    // 70-120: blend from orange-tinted to pure green
+    // t=0 at 70 (40% toward orange), t=1 at 120 (pure green)
+    const t = (glucose - TARGET_LOW) / (TARGET_CENTER - TARGET_LOW);
+    return lerpColor(
+      lerpColor(COLORS.low, COLORS.normal, 0.6), // 40% orange, 60% green at edge
+      COLORS.normal,
+      t
+    );
+  } else {
+    // 120-180: blend from pure green to yellow-tinted
+    // t=0 at 120 (pure green), t=1 at 180 (40% toward yellow)
+    const t = (glucose - TARGET_CENTER) / (TARGET_HIGH - TARGET_CENTER);
+    return lerpColor(
+      COLORS.normal,
+      lerpColor(COLORS.normal, COLORS.high, 0.4), // 60% green, 40% yellow at edge
+      t
+    );
+  }
 }
 
 /**
