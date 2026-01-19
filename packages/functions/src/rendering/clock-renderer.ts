@@ -12,7 +12,7 @@ const CLOCK_REGION_START = 0;
 const CLOCK_REGION_END = 31;
 
 // Sunlight band configuration
-const BAND_Y = 18; // Start row for the band
+const BAND_Y = 20; // Start row for the band
 const BAND_HEIGHT = 8; // Height of the sunlight band
 const BAND_MARGIN = 1; // Left/right margin
 
@@ -69,6 +69,20 @@ export function renderClockRegion(
 
   // Row 4: Time (larger, centered)
   drawText(frame, timeStr, centerX(timeStr), 4, COLORS.clockTime, CLOCK_REGION_START, CLOCK_REGION_END);
+
+  // Format date as "MON JAN 19 2026"
+  const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  const dayName = days[localTime.getDay()];
+  const monthName = months[localTime.getMonth()];
+  const dayNum = localTime.getDate();
+  const year = localTime.getFullYear();
+  const dateStr = `${dayName} ${monthName} ${dayNum} ${year}`;
+
+  // Draw date with tiny font, centered below time (dimmer than clock)
+  const dateWidth = dateStr.length * 4 - 1; // Tiny font: 3px char + 1px space
+  const dateX = Math.floor((DISPLAY_WIDTH - dateWidth) / 2);
+  drawTinyText(frame, dateStr, dateX, 13, COLORS.clockAmPm);
 
   // Rows 18-25: Sunlight gradient band with temperature overlay
   renderSunlightBand(frame, currentHour24, weather);
