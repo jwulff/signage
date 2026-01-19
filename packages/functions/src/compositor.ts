@@ -12,7 +12,7 @@ import {
   PostToConnectionCommand,
 } from "@aws-sdk/client-apigatewaymanagementapi";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, ScanCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { ScheduledHandler } from "aws-lambda";
 import { encodeFrameToBase64 } from "@signage/core";
@@ -142,8 +142,8 @@ async function fetchBloodSugarData(): Promise<{
     // Fetch current reading (last 30 min, 2 values for delta)
     const readings = await fetchGlucoseReadings(sessionId, 30, 2);
 
-    // Fetch history (3 hours, ~36 readings)
-    const historyReadings = await fetchGlucoseReadings(sessionId, 180, 50);
+    // Fetch history (24 hours for split chart: 21h compressed + 3h detailed)
+    const historyReadings = await fetchGlucoseReadings(sessionId, 1440, 300);
 
     let current: BloodSugarDisplayData | null = null;
 
@@ -316,6 +316,22 @@ async function updateDisplay(): Promise<{
   );
 
   console.log(`Broadcast complete: ${broadcast.success} sent, ${broadcast.failed} failed`);
+
+  // Cache frame for new connections
+  const frameData = encodeFrameToBase64(frame);
+  await ddb.send(
+    new PutCommand({
+      TableName: Resource.SignageTable.name,
+      Item: {
+        pk: "FRAME_CACHE",
+        sk: "LATEST",
+        frameData,
+        width: DISPLAY_WIDTH,
+        height: DISPLAY_HEIGHT,
+        timestamp: Date.now(),
+      },
+    })
+  );
 
   return {
     success: true,

@@ -21,5 +21,5 @@ api.route("$disconnect", {
 
 api.route("$default", {
   handler: "packages/functions/src/message.handler",
-  link: [table],
+  link: [table, api],
 });
