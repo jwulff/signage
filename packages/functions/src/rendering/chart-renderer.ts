@@ -174,8 +174,8 @@ export function renderChart(
 
         // Gradient from purple (midnight) to yellow (noon)
         // Purple is visible against black background, yellow indicates daytime
-        const purple = { r: 45, g: 20, b: 70 };
-        const yellow = { r: 80, g: 70, b: 15 };
+        const purple = { r: 80, g: 40, b: 130 };
+        const yellow = { r: 100, g: 90, b: 20 };
         const markerColor = {
           r: Math.round(purple.r + (yellow.r - purple.r) * sunlight),
           g: Math.round(purple.g + (yellow.g - purple.g) * sunlight),
