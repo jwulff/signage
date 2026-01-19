@@ -24,7 +24,9 @@ import {
   DISPLAY_HEIGHT,
   type BloodSugarDisplayData,
   type ClockWeatherData,
+  type ReadinessDisplayData,
 } from "./rendering/index.js";
+import type { OuraUsersListItem, OuraUserItem, OuraReadinessItem } from "./oura/types.js";
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
@@ -332,6 +334,123 @@ async function fetchWeatherData(): Promise<ClockWeatherData | null> {
   }
 }
 
+// Stale readiness threshold: 24 hours
+const READINESS_STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Get list of active Oura users
+ */
+async function getOuraUsers(): Promise<string[]> {
+  try {
+    const result = await ddb.send(
+      new ScanCommand({
+        TableName: Resource.SignageTable.name,
+        FilterExpression: "pk = :pk AND sk = :sk",
+        ExpressionAttributeValues: {
+          ":pk": "OURA_USERS",
+          ":sk": "LIST",
+        },
+      })
+    );
+
+    if (result.Items && result.Items.length > 0) {
+      const item = result.Items[0] as OuraUsersListItem;
+      return item.userIds || [];
+    }
+  } catch (error) {
+    console.error("Failed to get Oura users:", error);
+  }
+  return [];
+}
+
+/**
+ * Get user profile
+ */
+async function getOuraUserProfile(userId: string): Promise<OuraUserItem | null> {
+  try {
+    const result = await ddb.send(
+      new ScanCommand({
+        TableName: Resource.SignageTable.name,
+        FilterExpression: "pk = :pk AND sk = :sk",
+        ExpressionAttributeValues: {
+          ":pk": `OURA_USER#${userId}`,
+          ":sk": "PROFILE",
+        },
+      })
+    );
+
+    if (result.Items && result.Items.length > 0) {
+      return result.Items[0] as OuraUserItem;
+    }
+  } catch (error) {
+    console.error(`Failed to get user profile for ${userId}:`, error);
+  }
+  return null;
+}
+
+/**
+ * Get cached readiness for a user
+ */
+async function getCachedReadiness(userId: string, date: string): Promise<OuraReadinessItem | null> {
+  try {
+    const result = await ddb.send(
+      new ScanCommand({
+        TableName: Resource.SignageTable.name,
+        FilterExpression: "pk = :pk AND sk = :sk",
+        ExpressionAttributeValues: {
+          ":pk": `OURA_USER#${userId}`,
+          ":sk": `READINESS#${date}`,
+        },
+      })
+    );
+
+    if (result.Items && result.Items.length > 0) {
+      return result.Items[0] as OuraReadinessItem;
+    }
+  } catch (error) {
+    console.error(`Failed to get cached readiness for ${userId}:`, error);
+  }
+  return null;
+}
+
+/**
+ * Fetch readiness data for all linked Oura users
+ */
+async function fetchReadinessData(): Promise<ReadinessDisplayData[]> {
+  const userIds = await getOuraUsers();
+  if (userIds.length === 0) {
+    return [];
+  }
+
+  // Get today's date in Pacific timezone
+  const now = new Date();
+  const pacificDate = new Date(now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
+  const today = pacificDate.toISOString().split("T")[0];
+
+  const results: ReadinessDisplayData[] = [];
+
+  // Limit to first 2 users for display
+  for (const userId of userIds.slice(0, 2)) {
+    const profile = await getOuraUserProfile(userId);
+    if (!profile) {
+      continue;
+    }
+
+    const readiness = await getCachedReadiness(userId, today);
+
+    const displayData: ReadinessDisplayData = {
+      initial: profile.initial || profile.displayName?.charAt(0).toUpperCase() || "?",
+      score: readiness?.score ?? null,
+      isStale: readiness ? (Date.now() - readiness.fetchedAt > READINESS_STALE_THRESHOLD_MS) : true,
+      needsReauth: profile.needsReauth ?? false,
+    };
+
+    results.push(displayData);
+  }
+
+  return results;
+}
+
 /**
  * Get active WebSocket connections
  */
@@ -434,10 +553,11 @@ async function updateDisplay(): Promise<{
 
   const apiClient = new ApiGatewayManagementApiClient({ endpoint });
 
-  // Fetch blood sugar and weather data in parallel
-  const [bloodSugarResult, weatherData] = await Promise.all([
+  // Fetch blood sugar, weather, and readiness data in parallel
+  const [bloodSugarResult, weatherData, readinessData] = await Promise.all([
     fetchBloodSugarData(),
     fetchWeatherData(),
+    fetchReadinessData(),
   ]);
 
   const { current: bloodSugarData, history } = bloodSugarResult;
@@ -454,12 +574,20 @@ async function updateDisplay(): Promise<{
     console.log("Weather data unavailable");
   }
 
+  if (readinessData.length > 0) {
+    const readinessStr = readinessData.map(r => `${r.initial}:${r.score ?? '--'}`).join(', ');
+    console.log(`Readiness: ${readinessStr}`);
+  } else {
+    console.log("No readiness data (no linked Oura users)");
+  }
+
   // Generate composite frame using shared rendering module
   const frame = generateCompositeFrame({
     bloodSugar: bloodSugarData,
     bloodSugarHistory: history.length > 0 ? { points: history } : undefined,
     timezone: "America/Los_Angeles",
     weather: weatherData ?? undefined,
+    readiness: readinessData.length > 0 ? readinessData : undefined,
   });
 
   // Get current time in Pacific for logging
