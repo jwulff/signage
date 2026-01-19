@@ -186,11 +186,70 @@ async function fetchBloodSugarData(): Promise<{
 const SEATTLE_LAT = 47.6062;
 const SEATTLE_LON = -122.3321;
 
+// Weather cache TTL: 30 minutes
+const WEATHER_CACHE_TTL_MS = 30 * 60 * 1000;
+
+/**
+ * Get cached weather data from DynamoDB
+ */
+async function getCachedWeather(): Promise<ClockWeatherData | null> {
+  try {
+    const result = await ddb.send(
+      new ScanCommand({
+        TableName: Resource.SignageTable.name,
+        FilterExpression: "pk = :pk",
+        ExpressionAttributeValues: { ":pk": "WEATHER_CACHE" },
+      })
+    );
+
+    if (result.Items && result.Items.length > 0) {
+      const cached = result.Items[0];
+      const age = Date.now() - (cached.timestamp as number);
+
+      if (age < WEATHER_CACHE_TTL_MS) {
+        console.log(`Using cached weather data (${Math.round(age / 1000)}s old)`);
+        return cached.data as ClockWeatherData;
+      }
+    }
+  } catch (error) {
+    console.error("Failed to get cached weather:", error);
+  }
+  return null;
+}
+
+/**
+ * Save weather data to DynamoDB cache
+ */
+async function cacheWeather(data: ClockWeatherData): Promise<void> {
+  try {
+    await ddb.send(
+      new PutCommand({
+        TableName: Resource.SignageTable.name,
+        Item: {
+          pk: "WEATHER_CACHE",
+          sk: "LATEST",
+          data,
+          timestamp: Date.now(),
+        },
+      })
+    );
+  } catch (error) {
+    console.error("Failed to cache weather:", error);
+  }
+}
+
 /**
  * Fetch weather data from Open-Meteo API (free, no API key needed)
  * Returns temperatures for -12h, -6h, now, +6h, +12h
+ * Uses DynamoDB cache to handle API flakiness
  */
 async function fetchWeatherData(): Promise<ClockWeatherData | null> {
+  // Try cache first
+  const cached = await getCachedWeather();
+  if (cached) {
+    return cached;
+  }
+
   try {
     // Get 2 days of forecast data and find current hour
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${SEATTLE_LAT}&longitude=${SEATTLE_LON}&hourly=temperature_2m&temperature_unit=fahrenheit&forecast_days=2&timezone=America/Los_Angeles`;
@@ -247,6 +306,9 @@ async function fetchWeatherData(): Promise<ClockWeatherData | null> {
     };
 
     console.log(`Weather temps: -12h=${result.tempMinus12h}, -6h=${result.tempMinus6h}, now=${result.tempNow}, +6h=${result.tempPlus6h}, +12h=${result.tempPlus12h}`);
+
+    // Cache the result
+    await cacheWeather(result);
 
     return result;
   } catch (error) {
