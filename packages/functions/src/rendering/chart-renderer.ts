@@ -102,10 +102,15 @@ export function renderChart(
     }
   }
 
+  // Helper to convert Y pixel position to glucose value
+  const yToGlucose = (py: number): number => {
+    const normalizedY = (y + height - 1 - py) / (height - 1);
+    return minGlucose + normalizedY * glucoseRange;
+  };
+
   // Draw the line chart
   let prevPixelX: number | null = null;
   let prevPixelY: number | null = null;
-  let prevGlucose: number | null = null;
 
   for (const point of visiblePoints) {
     // Calculate pixel position
@@ -116,30 +121,25 @@ export function renderChart(
     const glucoseOffset = clampedGlucose - minGlucose;
     const pixelY = y + height - 1 - Math.round((glucoseOffset / glucoseRange) * (height - 1));
 
-    const color = getGlucoseColor(point.glucose);
-
-    // Draw point
+    // Draw point with color based on its Y position
     if (pixelX >= x && pixelX < x + width && pixelY >= y && pixelY < y + height) {
+      const color = getGlucoseColor(yToGlucose(pixelY));
       setPixel(frame, pixelX, pixelY, color);
 
-      // Connect to previous point with a line
-      // Use color of the higher glucose value (more cautious - highlights highs/lows)
-      if (prevPixelX !== null && prevPixelY !== null && prevGlucose !== null) {
-        const lineColor = point.glucose > prevGlucose
-          ? color
-          : getGlucoseColor(prevGlucose);
-        drawLine(frame, prevPixelX, prevPixelY, pixelX, pixelY, lineColor, x, y, width, height);
+      // Connect to previous point with a line (color determined per-pixel by Y position)
+      if (prevPixelX !== null && prevPixelY !== null) {
+        drawLine(frame, prevPixelX, prevPixelY, pixelX, pixelY, yToGlucose, x, y, width, height);
       }
     }
 
     prevPixelX = pixelX;
     prevPixelY = pixelY;
-    prevGlucose = point.glucose;
   }
 }
 
 /**
  * Draw a line between two points using Bresenham's algorithm
+ * Color is determined per-pixel based on Y position (glucose level)
  */
 function drawLine(
   frame: Frame,
@@ -147,7 +147,7 @@ function drawLine(
   y0: number,
   x1: number,
   y1: number,
-  color: { r: number; g: number; b: number },
+  yToGlucose: (y: number) => number,
   clipX: number,
   clipY: number,
   clipWidth: number,
@@ -159,25 +159,28 @@ function drawLine(
   const sy = y0 < y1 ? 1 : -1;
   let err = dx - dy;
 
-  let x = x0;
-  let y = y0;
+  let currentX = x0;
+  let currentY = y0;
 
   while (true) {
     // Only draw if within clip bounds
-    if (x >= clipX && x < clipX + clipWidth && y >= clipY && y < clipY + clipHeight) {
-      setPixel(frame, x, y, color);
+    if (currentX >= clipX && currentX < clipX + clipWidth && currentY >= clipY && currentY < clipY + clipHeight) {
+      // Color based on Y position (glucose level at this pixel)
+      const glucose = yToGlucose(currentY);
+      const color = getGlucoseColor(glucose);
+      setPixel(frame, currentX, currentY, color);
     }
 
-    if (x === x1 && y === y1) break;
+    if (currentX === x1 && currentY === y1) break;
 
     const e2 = 2 * err;
     if (e2 > -dy) {
       err -= dy;
-      x += sx;
+      currentX += sx;
     }
     if (e2 < dx) {
       err += dx;
-      y += sy;
+      currentY += sy;
     }
   }
 }
