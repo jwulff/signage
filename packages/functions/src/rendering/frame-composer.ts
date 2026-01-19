@@ -4,7 +4,7 @@
 
 import type { Frame } from "@signage/core";
 import { createSolidFrame } from "@signage/core";
-import { DISPLAY_WIDTH, DISPLAY_HEIGHT, drawSeparator } from "./text.js";
+import { DISPLAY_WIDTH, DISPLAY_HEIGHT } from "./text.js";
 import { COLORS } from "./colors.js";
 import { renderClockRegion, type ClockWeatherData } from "./clock-renderer.js";
 import {
@@ -28,9 +28,6 @@ export function generateCompositeFrame(data: CompositorData): Frame {
 
   // Render clock in top region (with optional weather data)
   renderClockRegion(frame, data.timezone, data.weather);
-
-  // Draw separator line at row 32
-  drawSeparator(frame, 32, COLORS.separator);
 
   // Render blood sugar in bottom region (with optional history chart)
   renderBloodSugarRegion(frame, data.bloodSugar, data.bloodSugarHistory, data.timezone);

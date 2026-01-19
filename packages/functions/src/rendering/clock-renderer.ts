@@ -70,6 +70,20 @@ export function renderClockRegion(
   // Row 4: Time (larger, centered)
   drawText(frame, timeStr, centerX(timeStr), 4, COLORS.clockTime, CLOCK_REGION_START, CLOCK_REGION_END);
 
+  // Format date as "MON JAN 19 2026"
+  const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  const dayName = days[localTime.getDay()];
+  const monthName = months[localTime.getMonth()];
+  const dayNum = localTime.getDate();
+  const year = localTime.getFullYear();
+  const dateStr = `${dayName} ${monthName} ${dayNum} ${year}`;
+
+  // Draw date with tiny font, centered below time
+  const dateWidth = dateStr.length * 4 - 1; // Tiny font: 3px char + 1px space
+  const dateX = Math.floor((DISPLAY_WIDTH - dateWidth) / 2);
+  drawTinyText(frame, dateStr, dateX, 13, COLORS.clockTime);
+
   // Rows 18-25: Sunlight gradient band with temperature overlay
   renderSunlightBand(frame, currentHour24, weather);
 }
