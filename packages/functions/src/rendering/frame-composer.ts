@@ -32,7 +32,7 @@ export function generateCompositeFrame(data: CompositorData): Frame {
   drawSeparator(frame, 32, COLORS.separator);
 
   // Render blood sugar in bottom region (with optional history chart)
-  renderBloodSugarRegion(frame, data.bloodSugar, data.bloodSugarHistory);
+  renderBloodSugarRegion(frame, data.bloodSugar, data.bloodSugarHistory, data.timezone);
 
   return frame;
 }
