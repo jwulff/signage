@@ -15,6 +15,19 @@ const OURA_SCOPES = "daily personal";
 // State TTL: 10 minutes
 const STATE_TTL_SECONDS = 10 * 60;
 
+// Allowed hosts for OAuth redirect (defense-in-depth)
+const ALLOWED_HOSTS = [
+  "api.signage.example.com", // Production
+  /^api\.[a-z0-9-]+\.signage\.example\.com$/, // Staging: api.{stage}.signage.example.com
+  /^[a-z0-9]+\.execute-api\.[a-z0-9-]+\.amazonaws\.com$/, // API Gateway default domains
+];
+
+function isAllowedHost(host: string): boolean {
+  return ALLOWED_HOSTS.some((allowed) =>
+    typeof allowed === "string" ? allowed === host : allowed.test(host)
+  );
+}
+
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
 
@@ -66,6 +79,17 @@ export const handler: APIGatewayProxyHandlerV2 = async (event): Promise<APIGatew
     // Build redirect URI from current request
     // Note: Custom domains don't include stage in path
     const host = event.requestContext.domainName;
+
+    // Validate host against allow-list (defense-in-depth)
+    if (!host || !isAllowedHost(host)) {
+      console.error(`Invalid host in OAuth start: ${host}`);
+      return {
+        statusCode: 400,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "Invalid request origin" }),
+      };
+    }
+
     const redirectUri = `https://${host}/oura/auth/callback`;
 
     // Build Oura authorization URL

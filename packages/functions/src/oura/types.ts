@@ -63,15 +63,8 @@ export interface OuraUsersList {
   userIds: string[];
 }
 
-/**
- * Readiness data for display rendering
- */
-export interface ReadinessDisplayData {
-  initial: string;
-  score: number | null; // null if no data available
-  isStale: boolean; // true if data is older than 24 hours
-  needsReauth: boolean;
-}
+// Note: ReadinessDisplayData is defined in rendering/readiness-renderer.ts
+// to avoid circular dependencies and keep rendering types together
 
 /**
  * Oura API response for daily readiness

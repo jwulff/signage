@@ -19,6 +19,19 @@ import { exchangeCodeForTokens, saveTokens, fetchUserInfo } from "./client.js";
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
 
+// Allowed hosts for OAuth redirect (defense-in-depth)
+const ALLOWED_HOSTS = [
+  "api.signage.example.com", // Production
+  /^api\.[a-z0-9-]+\.signage\.example\.com$/, // Staging: api.{stage}.signage.example.com
+  /^[a-z0-9]+\.execute-api\.[a-z0-9-]+\.amazonaws\.com$/, // API Gateway default domains
+];
+
+function isAllowedHost(host: string): boolean {
+  return ALLOWED_HOSTS.some((allowed) =>
+    typeof allowed === "string" ? allowed === host : allowed.test(host)
+  );
+}
+
 interface StoredState {
   pk: string;
   sk: string;
@@ -95,6 +108,28 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
 
     const storedState = stateResult.Item as StoredState;
+
+    // Check if state has expired (DynamoDB TTL is eventual, can take hours)
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (storedState.ttl && storedState.ttl < nowSeconds) {
+      console.error("OAuth state expired");
+      return {
+        statusCode: 400,
+        headers: { "Content-Type": "text/html" },
+        body: `
+          <!DOCTYPE html>
+          <html>
+          <head><title>Link Failed</title></head>
+          <body style="font-family: sans-serif; padding: 40px; text-align: center;">
+            <h1>Link Failed</h1>
+            <p>The link request has expired. Please try again.</p>
+            <a href="/">Start over</a>
+          </body>
+          </html>
+        `,
+      };
+    }
+
     const { displayName, initial } = storedState;
 
     // Delete used state
@@ -111,6 +146,17 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     // Build redirect URI (must match what was used in oauth-start)
     // Note: Custom domains don't include stage in path
     const host = event.requestContext.domainName;
+
+    // Validate host against allow-list (defense-in-depth)
+    if (!host || !isAllowedHost(host)) {
+      console.error(`Invalid host in OAuth callback: ${host}`);
+      return {
+        statusCode: 400,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "Invalid request origin" }),
+      };
+    }
+
     const redirectUri = `https://${host}/oura/auth/callback`;
 
     // Exchange code for tokens

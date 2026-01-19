@@ -4,7 +4,7 @@
  */
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type {
   OuraTokens,
@@ -139,17 +139,21 @@ export async function getValidAccessToken(userId: string): Promise<string | null
 
 /**
  * Mark a user as needing re-authentication
+ * Updates the needsReauth flag on the user's PROFILE item
  */
 async function markUserNeedsReauth(userId: string): Promise<void> {
   try {
     await ddb.send(
-      new PutCommand({
+      new UpdateCommand({
         TableName: Resource.SignageTable.name,
-        Item: {
+        Key: {
           pk: `OURA_USER#${userId}`,
-          sk: "NEEDS_REAUTH",
-          needsReauth: true,
-          timestamp: Date.now(),
+          sk: "PROFILE",
+        },
+        UpdateExpression: "SET needsReauth = :needsReauth, needsReauthAt = :timestamp",
+        ExpressionAttributeValues: {
+          ":needsReauth": true,
+          ":timestamp": Date.now(),
         },
       })
     );

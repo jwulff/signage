@@ -79,7 +79,7 @@ export function Link() {
         </p>
       </div>
 
-      <a href="#" style={styles.backLink}>
+      <a href="/#" style={styles.backLink}>
         ← Back to Display
       </a>
     </div>

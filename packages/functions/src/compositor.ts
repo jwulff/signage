@@ -12,7 +12,13 @@ import {
   PostToConnectionCommand,
 } from "@aws-sdk/client-apigatewaymanagementapi";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, ScanCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  DynamoDBDocumentClient,
+  ScanCommand,
+  GetCommand,
+  BatchGetCommand,
+  PutCommand,
+} from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { ScheduledHandler } from "aws-lambda";
 import { encodeFrameToBase64 } from "@signage/core";
@@ -197,15 +203,17 @@ const WEATHER_CACHE_TTL_MS = 30 * 60 * 1000;
 async function getCachedWeather(): Promise<ClockWeatherData | null> {
   try {
     const result = await ddb.send(
-      new ScanCommand({
+      new GetCommand({
         TableName: Resource.SignageTable.name,
-        FilterExpression: "pk = :pk",
-        ExpressionAttributeValues: { ":pk": "WEATHER_CACHE" },
+        Key: {
+          pk: "WEATHER_CACHE",
+          sk: "LATEST",
+        },
       })
     );
 
-    if (result.Items && result.Items.length > 0) {
-      const cached = result.Items[0];
+    if (result.Item) {
+      const cached = result.Item;
       const age = Date.now() - (cached.timestamp as number);
 
       if (age < WEATHER_CACHE_TTL_MS) {
@@ -343,18 +351,17 @@ const READINESS_STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 async function getOuraUsers(): Promise<string[]> {
   try {
     const result = await ddb.send(
-      new ScanCommand({
+      new GetCommand({
         TableName: Resource.SignageTable.name,
-        FilterExpression: "pk = :pk AND sk = :sk",
-        ExpressionAttributeValues: {
-          ":pk": "OURA_USERS",
-          ":sk": "LIST",
+        Key: {
+          pk: "OURA_USERS",
+          sk: "LIST",
         },
       })
     );
 
-    if (result.Items && result.Items.length > 0) {
-      const item = result.Items[0] as OuraUsersListItem;
+    if (result.Item) {
+      const item = result.Item as OuraUsersListItem;
       return item.userIds || [];
     }
   } catch (error) {
@@ -364,57 +371,8 @@ async function getOuraUsers(): Promise<string[]> {
 }
 
 /**
- * Get user profile
- */
-async function getOuraUserProfile(userId: string): Promise<OuraUserItem | null> {
-  try {
-    const result = await ddb.send(
-      new ScanCommand({
-        TableName: Resource.SignageTable.name,
-        FilterExpression: "pk = :pk AND sk = :sk",
-        ExpressionAttributeValues: {
-          ":pk": `OURA_USER#${userId}`,
-          ":sk": "PROFILE",
-        },
-      })
-    );
-
-    if (result.Items && result.Items.length > 0) {
-      return result.Items[0] as OuraUserItem;
-    }
-  } catch (error) {
-    console.error(`Failed to get user profile for ${userId}:`, error);
-  }
-  return null;
-}
-
-/**
- * Get cached readiness for a user
- */
-async function getCachedReadiness(userId: string, date: string): Promise<OuraReadinessItem | null> {
-  try {
-    const result = await ddb.send(
-      new ScanCommand({
-        TableName: Resource.SignageTable.name,
-        FilterExpression: "pk = :pk AND sk = :sk",
-        ExpressionAttributeValues: {
-          ":pk": `OURA_USER#${userId}`,
-          ":sk": `READINESS#${date}`,
-        },
-      })
-    );
-
-    if (result.Items && result.Items.length > 0) {
-      return result.Items[0] as OuraReadinessItem;
-    }
-  } catch (error) {
-    console.error(`Failed to get cached readiness for ${userId}:`, error);
-  }
-  return null;
-}
-
-/**
  * Fetch readiness data for all linked Oura users
+ * Uses BatchGetCommand to fetch all profiles and readiness data efficiently
  */
 async function fetchReadinessData(): Promise<ReadinessDisplayData[]> {
   const userIds = await getOuraUsers();
@@ -427,28 +385,60 @@ async function fetchReadinessData(): Promise<ReadinessDisplayData[]> {
   const pacificDate = new Date(now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
   const today = pacificDate.toISOString().split("T")[0];
 
-  const results: ReadinessDisplayData[] = [];
-
   // Limit to first 2 users for display
-  for (const userId of userIds.slice(0, 2)) {
-    const profile = await getOuraUserProfile(userId);
-    if (!profile) {
-      continue;
+  const usersToFetch = userIds.slice(0, 2);
+
+  // Build keys for batch get: profiles and readiness for each user
+  const keys = usersToFetch.flatMap((userId) => [
+    { pk: `OURA_USER#${userId}`, sk: "PROFILE" },
+    { pk: `OURA_USER#${userId}`, sk: `READINESS#${today}` },
+  ]);
+
+  try {
+    const result = await ddb.send(
+      new BatchGetCommand({
+        RequestItems: {
+          [Resource.SignageTable.name]: {
+            Keys: keys,
+          },
+        },
+      })
+    );
+
+    const items = result.Responses?.[Resource.SignageTable.name] || [];
+
+    // Index items by pk+sk for easy lookup
+    const itemMap = new Map<string, Record<string, unknown>>();
+    for (const item of items) {
+      const key = `${item.pk}#${item.sk}`;
+      itemMap.set(key, item);
     }
 
-    const readiness = await getCachedReadiness(userId, today);
+    const results: ReadinessDisplayData[] = [];
 
-    const displayData: ReadinessDisplayData = {
-      initial: profile.initial || profile.displayName?.charAt(0).toUpperCase() || "?",
-      score: readiness?.score ?? null,
-      isStale: readiness ? (Date.now() - readiness.fetchedAt > READINESS_STALE_THRESHOLD_MS) : true,
-      needsReauth: profile.needsReauth ?? false,
-    };
+    for (const userId of usersToFetch) {
+      const profile = itemMap.get(`OURA_USER#${userId}#PROFILE`) as OuraUserItem | undefined;
+      if (!profile) {
+        continue;
+      }
 
-    results.push(displayData);
+      const readiness = itemMap.get(`OURA_USER#${userId}#READINESS#${today}`) as OuraReadinessItem | undefined;
+
+      const displayData: ReadinessDisplayData = {
+        initial: profile.initial || profile.displayName?.charAt(0).toUpperCase() || "?",
+        score: readiness?.score ?? null,
+        isStale: readiness ? (Date.now() - readiness.fetchedAt > READINESS_STALE_THRESHOLD_MS) : true,
+        needsReauth: profile.needsReauth ?? false,
+      };
+
+      results.push(displayData);
+    }
+
+    return results;
+  } catch (error) {
+    console.error("Failed to fetch readiness data:", error);
+    return [];
   }
-
-  return results;
 }
 
 /**
