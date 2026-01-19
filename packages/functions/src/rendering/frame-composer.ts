@@ -2,16 +2,16 @@
  * Frame composer - combines all widgets into a single frame
  *
  * Layout (64x64):
- * ┌───────────────────┬───────────────────┐
- * │ J  82             │                   │  rows 0-31
- * │ S  75             │    10:45          │
- * │ (readiness)       │    (clock)        │
- * ├───────────────────┴───────────────────┤
+ * ┌───────────────────────────────────────┐
+ * │           10:45                       │  row 2
+ * │        SUN JAN 19 2026                │  row 11
+ * │      [weather/sunlight band]          │  rows 18-25
+ * │         J 82    S 75                  │  row 27 (readiness)
+ * ├───────────────────────────────────────┤
  * │                                       │  rows 32-63
- * │           GLUCOSE (unchanged)         │
+ * │           GLUCOSE                     │
  * │                                       │
  * └───────────────────────────────────────┘
- *      cols 0-31            cols 32-63
  */
 
 import type { Frame } from "@signage/core";
@@ -43,25 +43,12 @@ export interface CompositorData {
 export function generateCompositeFrame(data: CompositorData): Frame {
   const frame = createSolidFrame(DISPLAY_WIDTH, DISPLAY_HEIGHT, COLORS.bg);
 
-  // Check if we have readiness data to display
-  const hasReadiness = data.readiness && data.readiness.length > 0;
+  // Render clock (full width) - includes time, date, and weather band
+  renderClockRegion(frame, data.timezone, data.weather);
 
-  if (hasReadiness) {
-    // New layout with readiness scores
-
-    // Render readiness in top-left region (cols 0-31, rows 0-31)
-    renderReadinessRegion(frame, data.readiness!);
-
-    // Render clock in top-right region (cols 32-63, rows 0-31)
-    renderClockRegion(frame, data.timezone, data.weather, {
-      startX: 32,
-      endX: 63,
-      startY: 0,
-      endY: 31,
-    });
-  } else {
-    // Original layout without readiness - clock takes full top region
-    renderClockRegion(frame, data.timezone, data.weather);
+  // Render readiness scores horizontally below weather band (if available)
+  if (data.readiness && data.readiness.length > 0) {
+    renderReadinessRegion(frame, data.readiness);
   }
 
   // Render blood sugar in bottom region (with optional history chart)

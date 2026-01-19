@@ -22,8 +22,8 @@ export interface ClockRegionBounds {
   endY: number;
 }
 
-// Sunlight band configuration
-const BAND_Y = 20; // Start row for the band
+// Sunlight band configuration (moved up 2px to make room for readiness row)
+const BAND_Y = 18; // Start row for the band
 const BAND_HEIGHT = 8; // Height of the sunlight band
 const BAND_MARGIN = 1; // Left/right margin
 
@@ -110,8 +110,9 @@ export function renderClockRegion(
   }
 
   // Full-width region - include sunlight band
+  // Time, date, and weather moved up 2px to make room for readiness row
   const timeX = centerXInBounds(timeStr, startX, endX);
-  drawText(frame, timeStr, timeX, startY + 4, COLORS.clockTime, startY, endY);
+  drawText(frame, timeStr, timeX, startY + 2, COLORS.clockTime, startY, endY);
 
   // Format date as "MON JAN 19 2026"
   const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -125,7 +126,7 @@ export function renderClockRegion(
   // Draw date with tiny font, centered below time (dimmer than clock)
   const dateWidth = dateStr.length * 4 - 1; // Tiny font: 3px char + 1px space
   const dateX = startX + Math.floor((endX - startX + 1 - dateWidth) / 2);
-  drawTinyText(frame, dateStr, dateX, startY + 13, COLORS.clockAmPm);
+  drawTinyText(frame, dateStr, dateX, startY + 11, COLORS.clockAmPm);
 
   // Rows 18-25: Sunlight gradient band with temperature overlay
   renderSunlightBand(frame, currentHour24, weather, startX, endX);
