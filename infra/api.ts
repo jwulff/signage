@@ -4,8 +4,8 @@ import { table } from "./storage";
 export const api = new sst.aws.ApiGatewayWebSocket("SignageApi", {
   domain:
     $app.stage === "prod"
-      ? "ws.signage.example.com"
-      : `ws.${$app.stage}.signage.example.com`,
+      ? "ws.signage.wulfffamily.com"
+      : `ws.${$app.stage}.signage.wulfffamily.com`,
 });
 
 // Connection handlers
