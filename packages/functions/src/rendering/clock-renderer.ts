@@ -4,15 +4,26 @@
 
 import type { Frame } from "@signage/core";
 import { setPixel } from "@signage/core";
-import { drawText, drawTinyText, centerX, DISPLAY_WIDTH } from "./text.js";
+import { drawText, drawTinyText, DISPLAY_WIDTH } from "./text.js";
 import { COLORS } from "./colors.js";
+import { CHAR_WIDTH } from "../font.js";
 
-// Clock region boundaries
-const CLOCK_REGION_START = 0;
-const CLOCK_REGION_END = 31;
+// Clock region boundaries (default full width)
+const CLOCK_REGION_START_Y = 0;
+const CLOCK_REGION_END_Y = 31;
 
-// Sunlight band configuration
-const BAND_Y = 20; // Start row for the band
+/**
+ * Region bounds for clock rendering
+ */
+export interface ClockRegionBounds {
+  startX: number;
+  endX: number;
+  startY: number;
+  endY: number;
+}
+
+// Sunlight band configuration (moved up 2px to make room for readiness row)
+const BAND_Y = 18; // Start row for the band
 const BAND_HEIGHT = 8; // Height of the sunlight band
 const BAND_MARGIN = 1; // Left/right margin
 
@@ -52,12 +63,23 @@ function getSunlightPercent(hour: number): number {
 }
 
 /**
+ * Calculate center X position within a bounded region
+ */
+function centerXInBounds(text: string, startX: number, endX: number): number {
+  const regionWidth = endX - startX + 1;
+  const textWidth = text.length * (CHAR_WIDTH + 1) - 1;
+  return startX + Math.floor((regionWidth - textWidth) / 2);
+}
+
+/**
  * Render clock widget to top region of frame
+ * Supports optional bounds for rendering in a constrained region (e.g., right half)
  */
 export function renderClockRegion(
   frame: Frame,
   timezone = "America/Los_Angeles",
-  weather?: ClockWeatherData
+  weather?: ClockWeatherData,
+  bounds?: ClockRegionBounds
 ): void {
   const now = new Date();
   const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
@@ -67,8 +89,30 @@ export function renderClockRegion(
   const minutes = String(localTime.getMinutes()).padStart(2, "0");
   const timeStr = `${hours}:${minutes}`;
 
-  // Row 4: Time (larger, centered)
-  drawText(frame, timeStr, centerX(timeStr), 4, COLORS.clockTime, CLOCK_REGION_START, CLOCK_REGION_END);
+  // Default bounds (full width top region)
+  const startX = bounds?.startX ?? 0;
+  const endX = bounds?.endX ?? DISPLAY_WIDTH - 1;
+  const startY = bounds?.startY ?? CLOCK_REGION_START_Y;
+  const endY = bounds?.endY ?? CLOCK_REGION_END_Y;
+  const regionWidth = endX - startX + 1;
+
+  // Narrow region (32px or less) - simplified clock without sunlight band
+  if (regionWidth <= 32) {
+    // Center time horizontally within the region
+    const timeX = centerXInBounds(timeStr, startX, endX);
+
+    // Vertically center within the region
+    const regionHeight = endY - startY + 1;
+    const timeY = startY + Math.floor((regionHeight - 10) / 2); // 10px approx text height
+
+    drawText(frame, timeStr, timeX, timeY, COLORS.clockTime, startY, endY);
+    return;
+  }
+
+  // Full-width region - include sunlight band
+  // Time, date, and weather moved up 2px to make room for readiness row
+  const timeX = centerXInBounds(timeStr, startX, endX);
+  drawText(frame, timeStr, timeX, startY + 2, COLORS.clockTime, startY, endY);
 
   // Format date as "MON JAN 19 2026"
   const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -81,11 +125,11 @@ export function renderClockRegion(
 
   // Draw date with tiny font, centered below time (dimmer than clock)
   const dateWidth = dateStr.length * 4 - 1; // Tiny font: 3px char + 1px space
-  const dateX = Math.floor((DISPLAY_WIDTH - dateWidth) / 2);
-  drawTinyText(frame, dateStr, dateX, 13, COLORS.clockAmPm);
+  const dateX = startX + Math.floor((endX - startX + 1 - dateWidth) / 2);
+  drawTinyText(frame, dateStr, dateX, startY + 11, COLORS.clockAmPm);
 
   // Rows 18-25: Sunlight gradient band with temperature overlay
-  renderSunlightBand(frame, currentHour24, weather);
+  renderSunlightBand(frame, currentHour24, weather, startX, endX);
 }
 
 /**
@@ -113,10 +157,13 @@ function getConditionAtOffset(
 function renderSunlightBand(
   frame: Frame,
   currentHour24: number,
-  weather?: ClockWeatherData
+  weather?: ClockWeatherData,
+  regionStartX = 0,
+  regionEndX = DISPLAY_WIDTH - 1
 ): void {
-  const bandWidth = DISPLAY_WIDTH - BAND_MARGIN * 2;
-  const bandX = BAND_MARGIN;
+  const regionWidth = regionEndX - regionStartX + 1;
+  const bandWidth = regionWidth - BAND_MARGIN * 2;
+  const bandX = regionStartX + BAND_MARGIN;
   const precipRowY = BAND_Y + BAND_HEIGHT - 1; // Bottom row for precipitation
 
   // Draw sunlight gradient with condition tinting

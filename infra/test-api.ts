@@ -1,5 +1,6 @@
 import { api } from "./api";
 import { table } from "./storage";
+import { ouraClientId, ouraClientSecret } from "./secrets";
 
 // HTTP API for test endpoints
 export const testApi = new sst.aws.ApiGatewayV2("SignageTestApi", {
@@ -53,5 +54,19 @@ testApi.route("GET /clock", {
   environment: {
     WEBSOCKET_URL: api.url,
   },
+  timeout: "30 seconds",
+});
+
+// Oura OAuth - Start authorization flow
+testApi.route("GET /oura/auth/start", {
+  handler: "packages/functions/src/oura/oauth-start.handler",
+  link: [table, ouraClientId, ouraClientSecret],
+  timeout: "10 seconds",
+});
+
+// Oura OAuth - Handle callback
+testApi.route("GET /oura/auth/callback", {
+  handler: "packages/functions/src/oura/oauth-callback.handler",
+  link: [table, ouraClientId, ouraClientSecret],
   timeout: "30 seconds",
 });
