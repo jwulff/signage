@@ -240,7 +240,7 @@ async function cacheWeather(data: ClockWeatherData): Promise<void> {
 
 /**
  * Fetch weather data from Open-Meteo API (free, no API key needed)
- * Returns temperatures for -12h, -6h, now, +6h, +12h
+ * Returns temperatures, cloud cover, and precipitation for display
  * Uses DynamoDB cache to handle API flakiness
  */
 async function fetchWeatherData(): Promise<ClockWeatherData | null> {
@@ -251,8 +251,8 @@ async function fetchWeatherData(): Promise<ClockWeatherData | null> {
   }
 
   try {
-    // Get 2 days of forecast data and find current hour
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${SEATTLE_LAT}&longitude=${SEATTLE_LON}&hourly=temperature_2m&temperature_unit=fahrenheit&forecast_days=2&timezone=America/Los_Angeles`;
+    // Get 2 days of forecast data including conditions
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${SEATTLE_LAT}&longitude=${SEATTLE_LON}&hourly=temperature_2m,cloudcover,precipitation,snowfall&temperature_unit=fahrenheit&forecast_days=2&timezone=America/Los_Angeles`;
 
     const response = await fetch(url);
     if (!response.ok) {
@@ -263,6 +263,9 @@ async function fetchWeatherData(): Promise<ClockWeatherData | null> {
       hourly: {
         time: string[];
         temperature_2m: number[];
+        cloudcover: number[];
+        precipitation: number[];
+        snowfall: number[];
       };
     }
 
@@ -274,6 +277,9 @@ async function fetchWeatherData(): Promise<ClockWeatherData | null> {
     }
 
     const temps = data.hourly.temperature_2m;
+    const clouds = data.hourly.cloudcover || [];
+    const precip = data.hourly.precipitation || [];
+    const snow = data.hourly.snowfall || [];
 
     // Get current Pacific hour (0-23) - API data starts at midnight today
     const now = new Date();
@@ -286,10 +292,9 @@ async function fetchWeatherData(): Promise<ClockWeatherData | null> {
     );
 
     // The API returns 48 hours starting from midnight today
-    // So current hour index = pacificHour
     const nowIndex = pacificHour;
 
-    console.log(`Weather: Pacific hour=${pacificHour}, temps array length=${temps.length}`);
+    console.log(`Weather: Pacific hour=${pacificHour}, data length=${temps.length}`);
 
     // Get temperatures at offsets, with bounds checking
     const getTemp = (offset: number): number | undefined => {
@@ -297,15 +302,25 @@ async function fetchWeatherData(): Promise<ClockWeatherData | null> {
       return idx >= 0 && idx < temps.length ? temps[idx] : undefined;
     };
 
-    const result = {
+    // Build hourly conditions array
+    const hourlyConditions = temps.map((temp, i) => ({
+      temp,
+      cloudCover: clouds[i],
+      precipitation: precip[i] || 0,
+      isSnow: (snow[i] || 0) > 0,
+    }));
+
+    const result: ClockWeatherData = {
       tempMinus12h: getTemp(-12),
       tempMinus6h: getTemp(-6),
       tempNow: getTemp(0),
       tempPlus6h: getTemp(6),
       tempPlus12h: getTemp(12),
+      hourlyConditions,
+      currentHourIndex: nowIndex,
     };
 
-    console.log(`Weather temps: -12h=${result.tempMinus12h}, -6h=${result.tempMinus6h}, now=${result.tempNow}, +6h=${result.tempPlus6h}, +12h=${result.tempPlus12h}`);
+    console.log(`Weather: now=${result.tempNow}°F, clouds=${clouds[nowIndex]}%, precip=${precip[nowIndex]}mm`);
 
     // Cache the result
     await cacheWeather(result);
