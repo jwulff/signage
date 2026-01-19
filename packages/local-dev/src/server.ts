@@ -38,6 +38,9 @@ let bloodSugarData: BloodSugarDisplayData | null = null;
 let bloodSugarHistory: ChartPoint[] = [];
 let useMockData = true;
 
+// Frame cache - stores last broadcast frame for immediate send to new connections
+let cachedFrameData: string | null = null;
+
 // Credentials loaded from .env.local
 let config: LocalConfig = {};
 
@@ -69,18 +72,18 @@ function generateMockBloodSugar(): BloodSugarDisplayData {
 }
 
 /**
- * Generate mock history data (3 hours of readings every 5 minutes)
+ * Generate mock history data (24 hours of readings every 5 minutes)
  */
 function generateMockHistory(): ChartPoint[] {
   const points: ChartPoint[] = [];
   const now = Date.now();
-  const threeHoursAgo = now - 3 * 60 * 60 * 1000;
+  const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
 
   // Generate a point every 5 minutes
-  for (let t = threeHoursAgo; t <= now; t += 5 * 60 * 1000) {
+  for (let t = twentyFourHoursAgo; t <= now; t += 5 * 60 * 1000) {
     // Create a smooth wave pattern with some noise
-    const timeOffset = (t - threeHoursAgo) / (3 * 60 * 60 * 1000);
-    const baseValue = 120 + Math.sin(timeOffset * Math.PI * 4) * 50;
+    const timeOffset = (t - twentyFourHoursAgo) / (24 * 60 * 60 * 1000);
+    const baseValue = 120 + Math.sin(timeOffset * Math.PI * 8) * 50;
     const noise = (Math.random() - 0.5) * 20;
     const glucose = Math.round(Math.max(50, Math.min(300, baseValue + noise)));
 
@@ -191,7 +194,7 @@ async function fetchRealBloodSugar(): Promise<BloodSugarDisplayData | null> {
 }
 
 /**
- * Fetch 3 hours of blood sugar history from Dexcom
+ * Fetch 24 hours of blood sugar history from Dexcom
  */
 async function fetchRealHistory(): Promise<ChartPoint[]> {
   const username = config.dexcomUsername;
@@ -242,9 +245,9 @@ async function fetchRealHistory(): Promise<ChartPoint[]> {
 
     const sessionId = (await sessionResponse.json()) as string;
 
-    // Fetch 3 hours of readings (180 minutes, ~36 readings)
+    // Fetch 24 hours of readings (1440 minutes, ~288 readings)
     const response = await fetch(
-      `${DEXCOM_BASE_URL}/Publisher/ReadPublisherLatestGlucoseValues?sessionId=${sessionId}&minutes=180&maxCount=50`,
+      `${DEXCOM_BASE_URL}/Publisher/ReadPublisherLatestGlucoseValues?sessionId=${sessionId}&minutes=1440&maxCount=300`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -307,8 +310,6 @@ async function updateBloodSugar(): Promise<void> {
  * (Local WebSocket instead of API Gateway)
  */
 function broadcastFrame(): void {
-  if (clients.size === 0) return;
-
   // Use the SAME frame generation as production
   const frame = generateCompositeFrame({
     bloodSugar: bloodSugarData,
@@ -317,6 +318,11 @@ function broadcastFrame(): void {
   });
 
   const frameData = encodeFrameToBase64(frame);
+
+  // Cache frame for new connections (even if no clients connected)
+  cachedFrameData = frameData;
+
+  if (clients.size === 0) return;
 
   const message = JSON.stringify({
     type: "frame",
@@ -363,20 +369,16 @@ async function startServer(): Promise<void> {
     console.log(`Client connected (total: ${clients.size + 1})`);
     clients.add(ws);
 
-    // Send initial frame immediately
-    const frame = generateCompositeFrame({
-      bloodSugar: bloodSugarData,
-      bloodSugarHistory: { points: bloodSugarHistory },
-      timezone: "America/Los_Angeles",
-    });
-    const frameData = encodeFrameToBase64(frame);
-    ws.send(
-      JSON.stringify({
-        type: "frame",
-        payload: { frame: { width: DISPLAY_WIDTH, height: DISPLAY_HEIGHT, data: frameData } },
-        timestamp: Date.now(),
-      })
-    );
+    // Send cached frame immediately (no compositing delay)
+    if (cachedFrameData) {
+      ws.send(
+        JSON.stringify({
+          type: "frame",
+          payload: { frame: { width: DISPLAY_WIDTH, height: DISPLAY_HEIGHT, data: cachedFrameData } },
+          timestamp: Date.now(),
+        })
+      );
+    }
 
     ws.on("close", () => {
       clients.delete(ws);
@@ -403,8 +405,9 @@ async function startServer(): Promise<void> {
   console.log(`(Run 'pnpm dev:web' in another terminal if not already running)\n`);
   console.log(`To reconfigure credentials, delete .env.local and restart`);
 
-  // Initial blood sugar fetch
-  updateBloodSugar();
+  // Initial blood sugar fetch and frame generation
+  await updateBloodSugar();
+  broadcastFrame(); // Generate initial cached frame
 
   // Update frame every second (for clock)
   setInterval(broadcastFrame, UPDATE_INTERVAL_MS);

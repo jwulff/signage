@@ -8,7 +8,7 @@ import {
   PostToConnectionCommand,
 } from "@aws-sdk/client-apigatewaymanagementapi";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, ScanCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { APIGatewayProxyWebsocketHandlerV2 } from "aws-lambda";
 
@@ -23,7 +23,7 @@ interface WsMessage {
 
 export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
   const connectionId = event.requestContext.connectionId;
-  const { domainName, stage } = event.requestContext;
+  const { domainName } = event.requestContext;
   const body = event.body;
 
   console.log(`Message from ${connectionId}: ${body}`);
@@ -39,12 +39,48 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
     return { statusCode: 400, body: "Invalid JSON" };
   }
 
+  const apiClient = new ApiGatewayManagementApiClient({
+    endpoint: `https://${domainName}`,
+  });
+
+  // Handle client registration - send cached frame immediately
+  if (message.type === "connect") {
+    try {
+      const cachedFrame = await ddb.send(
+        new GetCommand({
+          TableName: Resource.SignageTable.name,
+          Key: { pk: "FRAME_CACHE", sk: "LATEST" },
+        })
+      );
+
+      if (cachedFrame.Item) {
+        await apiClient.send(
+          new PostToConnectionCommand({
+            ConnectionId: connectionId,
+            Data: JSON.stringify({
+              type: "frame",
+              payload: {
+                frame: {
+                  width: cachedFrame.Item.width,
+                  height: cachedFrame.Item.height,
+                  data: cachedFrame.Item.frameData,
+                },
+              },
+              timestamp: Date.now(),
+            }),
+          })
+        );
+        console.log(`Sent cached frame to ${connectionId}`);
+      }
+    } catch (error) {
+      console.log(`Could not send cached frame: ${error}`);
+    }
+
+    return { statusCode: 200, body: "Registered" };
+  }
+
   // Handle ping/pong
   if (message.type === "ping") {
-    const apiClient = new ApiGatewayManagementApiClient({
-      endpoint: `https://${domainName}/${stage}`,
-    });
-
     await apiClient.send(
       new PostToConnectionCommand({
         ConnectionId: connectionId,
@@ -61,9 +97,6 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
 
   // Handle broadcast (for testing)
   if (message.type === "broadcast") {
-    const apiClient = new ApiGatewayManagementApiClient({
-      endpoint: `https://${domainName}/${stage}`,
-    });
 
     // Get all connections
     const result = await ddb.send(

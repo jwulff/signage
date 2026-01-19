@@ -19,7 +19,12 @@ const CHART_X = 1;
 const CHART_Y = 42; // After text (8px) + 1px margin
 const CHART_WIDTH = DISPLAY_WIDTH - 2; // Full width minus margins
 const CHART_HEIGHT = 21; // Rows 42-62, maximize vertical space
-const CHART_HOURS = 3; // Timeframe shown in chart
+
+// Split chart: left half = 21h compressed, right half = 3h detailed
+const CHART_LEFT_WIDTH = Math.floor(CHART_WIDTH / 2);
+const CHART_RIGHT_WIDTH = CHART_WIDTH - CHART_LEFT_WIDTH;
+const CHART_LEFT_HOURS = 21;
+const CHART_RIGHT_HOURS = 3;
 
 // Glucose thresholds (mg/dL)
 const THRESHOLDS = {
@@ -262,20 +267,30 @@ export function renderBloodSugarRegion(
   const deltaTimeStr = useFullSpacing ? `${deltaStr} ${timeStr}` : `${deltaStr} ${timeStr}`;
   drawText(frame, deltaTimeStr, textX, TEXT_ROW, secondaryColor, BG_REGION_START, BG_REGION_END);
 
-  // Bottom: Full-width sparkline chart
+  // Bottom: Split sparkline chart (21h compressed | 3h detailed)
   if (history && history.points.length > 0) {
+    const legendY = CHART_Y + CHART_HEIGHT - 5; // 5px tiny font, at bottom
+
+    // Left half: 21 hour compressed history
     renderChart(frame, history.points, {
       x: CHART_X,
       y: CHART_Y,
-      width: CHART_WIDTH,
+      width: CHART_LEFT_WIDTH,
       height: CHART_HEIGHT,
-      hours: CHART_HOURS,
+      hours: CHART_LEFT_HOURS,
     });
+    drawTinyText(frame, `${CHART_LEFT_HOURS}h`, CHART_X, legendY, COLORS.veryDim);
 
-    // Tiny legend at bottom left, overlaying chart (very dim)
-    const legend = `${CHART_HOURS}h`;
-    const legendY = CHART_Y + CHART_HEIGHT - 5; // 5px tiny font, at bottom
-    drawTinyText(frame, legend, CHART_X, legendY, COLORS.veryDim);
+    // Right half: 3 hour detailed history
+    const rightX = CHART_X + CHART_LEFT_WIDTH;
+    renderChart(frame, history.points, {
+      x: rightX,
+      y: CHART_Y,
+      width: CHART_RIGHT_WIDTH,
+      height: CHART_HEIGHT,
+      hours: CHART_RIGHT_HOURS,
+    });
+    drawTinyText(frame, `${CHART_RIGHT_HOURS}h`, rightX, legendY, COLORS.veryDim);
   }
 }
 

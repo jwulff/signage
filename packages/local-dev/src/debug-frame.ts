@@ -18,11 +18,11 @@ const sampleBloodSugar: BloodSugarDisplayData = {
   isStale: false,
 };
 
-// Sample history (3 hours of data)
+// Sample history (24 hours of data, ~288 readings at 5 min intervals)
 const now = Date.now();
-const sampleHistory = Array.from({ length: 36 }, (_, i) => ({
-  timestamp: now - (36 - i) * 5 * 60 * 1000,
-  glucose: 150 + Math.sin(i / 5) * 30 + Math.random() * 10,
+const sampleHistory = Array.from({ length: 288 }, (_, i) => ({
+  timestamp: now - (288 - i) * 5 * 60 * 1000,
+  glucose: 150 + Math.sin(i / 20) * 50 + Math.random() * 10,
 }));
 
 // Generate frame
