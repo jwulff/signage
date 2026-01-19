@@ -135,15 +135,8 @@ export function renderChart(
   const maxGlucose = Math.min(400, dataMax + padding + extraPadding);
   const glucoseRange = maxGlucose - minGlucose;
 
-  // Draw target range background (very dim green) - adaptive to visible range
-  const targetLowY = y + height - 1 - Math.round(((Math.max(TARGET_LOW, minGlucose) - minGlucose) / glucoseRange) * (height - 1));
-  const targetHighY = y + height - 1 - Math.round(((Math.min(TARGET_HIGH, maxGlucose) - minGlucose) / glucoseRange) * (height - 1));
-
-  for (let py = Math.max(y, targetHighY); py <= Math.min(y + height - 1, targetLowY); py++) {
-    for (let px = x; px < x + width; px++) {
-      setPixel(frame, px, py, { r: 0, g: 15, b: 0 });
-    }
-  }
+  // Target range background removed - the line color gradient provides
+  // sufficient visual indication of range status
 
   // Helper to convert Y pixel position to glucose value
   const yToGlucose = (py: number): number => {
