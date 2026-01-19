@@ -1,5 +1,7 @@
 # Signage
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Personal digital signage system for Pixoo64 and other displays.
 
 ## Overview
@@ -200,9 +202,10 @@ node dist/cli.js \
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20+
 - pnpm 9+
 - AWS account with credentials configured
+- [SST v3](https://sst.dev/) installed globally (`npm i -g sst`)
 
 ### Setup
 
@@ -248,4 +251,4 @@ pnpm deploy:prod
 
 ## License
 
-Private project - not for distribution.
+MIT License - see [LICENSE](LICENSE) for details.

@@ -141,7 +141,7 @@ Key files:
 ### Relay (`packages/relay`)
 Local CLI that bridges AWS to Pixoo.
 
-**Current Pixoo IP**: `192.168.1.224`
+**Current Pixoo IP**: `<PIXOO_IP>` (find via Divoom app or network scan)
 
 | Environment | WebSocket URL |
 |-------------|---------------|

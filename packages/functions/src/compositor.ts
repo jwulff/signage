@@ -102,9 +102,9 @@ async function getSessionId(username: string, password: string): Promise<string>
 /**
  * Fetch glucose readings from Dexcom
  */
-async function fetchGlucoseReadings(sessionId: string): Promise<DexcomReading[]> {
+async function fetchGlucoseReadings(sessionId: string, minutes = 30, maxCount = 2): Promise<DexcomReading[]> {
   const response = await fetch(
-    `${DEXCOM_BASE_URL}/Publisher/ReadPublisherLatestGlucoseValues?sessionId=${sessionId}&minutes=30&maxCount=2`,
+    `${DEXCOM_BASE_URL}/Publisher/ReadPublisherLatestGlucoseValues?sessionId=${sessionId}&minutes=${minutes}&maxCount=${maxCount}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -119,39 +119,65 @@ async function fetchGlucoseReadings(sessionId: string): Promise<DexcomReading[]>
 }
 
 /**
- * Fetch blood sugar data from Dexcom
+ * Chart point for history
  */
-async function fetchBloodSugarData(): Promise<BloodSugarDisplayData | null> {
+interface ChartPoint {
+  timestamp: number;
+  glucose: number;
+}
+
+/**
+ * Fetch blood sugar data and history from Dexcom
+ */
+async function fetchBloodSugarData(): Promise<{
+  current: BloodSugarDisplayData | null;
+  history: ChartPoint[];
+}> {
   try {
     const sessionId = await getSessionId(
       Resource.DexcomUsername.value,
       Resource.DexcomPassword.value
     );
 
-    const readings = await fetchGlucoseReadings(sessionId);
+    // Fetch current reading (last 30 min, 2 values for delta)
+    const readings = await fetchGlucoseReadings(sessionId, 30, 2);
 
-    if (!readings || readings.length === 0) {
-      return null;
+    // Fetch history (3 hours, ~36 readings)
+    const historyReadings = await fetchGlucoseReadings(sessionId, 180, 50);
+
+    let current: BloodSugarDisplayData | null = null;
+
+    if (readings && readings.length > 0) {
+      const latest = readings[0];
+      const previous = readings[1];
+
+      const glucose = latest.Value;
+      const timestamp = parseDexcomTimestamp(latest.WT);
+      const delta = previous ? glucose - previous.Value : 0;
+
+      current = {
+        glucose,
+        trend: latest.Trend,
+        delta,
+        timestamp,
+        rangeStatus: classifyRange(glucose),
+        isStale: isStale(timestamp),
+      };
     }
 
-    const latest = readings[0];
-    const previous = readings[1];
+    // Convert history readings to chart points
+    const history: ChartPoint[] = historyReadings
+      .map((r) => ({
+        timestamp: parseDexcomTimestamp(r.WT),
+        glucose: r.Value,
+      }))
+      .filter((p) => p.timestamp > 0)
+      .reverse(); // Oldest first
 
-    const glucose = latest.Value;
-    const timestamp = parseDexcomTimestamp(latest.WT);
-    const delta = previous ? glucose - previous.Value : 0;
-
-    return {
-      glucose,
-      trend: latest.Trend,
-      delta,
-      timestamp,
-      rangeStatus: classifyRange(glucose),
-      isStale: isStale(timestamp),
-    };
+    return { current, history };
   } catch (error) {
     console.error("Failed to fetch blood sugar data:", error);
-    return null;
+    return { current: null, history: [] };
   }
 }
 
@@ -257,11 +283,11 @@ async function updateDisplay(): Promise<{
 
   const apiClient = new ApiGatewayManagementApiClient({ endpoint });
 
-  // Fetch blood sugar data (clock uses current time, no fetch needed)
-  const bloodSugarData = await fetchBloodSugarData();
+  // Fetch blood sugar data and history (clock uses current time, no fetch needed)
+  const { current: bloodSugarData, history } = await fetchBloodSugarData();
 
   if (bloodSugarData) {
-    console.log(`Blood sugar: ${bloodSugarData.glucose} mg/dL, Trend: ${bloodSugarData.trend}`);
+    console.log(`Blood sugar: ${bloodSugarData.glucose} mg/dL, Trend: ${bloodSugarData.trend}, History: ${history.length} points`);
   } else {
     console.log("Blood sugar data unavailable");
   }
@@ -269,6 +295,7 @@ async function updateDisplay(): Promise<{
   // Generate composite frame using shared rendering module
   const frame = generateCompositeFrame({
     bloodSugar: bloodSugarData,
+    bloodSugarHistory: history.length > 0 ? { points: history } : undefined,
     timezone: "America/Los_Angeles",
   });
 
