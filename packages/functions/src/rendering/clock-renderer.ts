@@ -124,8 +124,8 @@ export function renderClockRegion(
 
   // Draw date with tiny font, centered below time (dimmer than clock)
   const dateWidth = dateStr.length * 4 - 1; // Tiny font: 3px char + 1px space
-  const dateX = Math.floor((DISPLAY_WIDTH - dateWidth) / 2);
-  drawTinyText(frame, dateStr, dateX, 13, COLORS.clockAmPm);
+  const dateX = startX + Math.floor((endX - startX + 1 - dateWidth) / 2);
+  drawTinyText(frame, dateStr, dateX, startY + 13, COLORS.clockAmPm);
 
   // Rows 18-25: Sunlight gradient band with temperature overlay
   renderSunlightBand(frame, currentHour24, weather, startX, endX);
