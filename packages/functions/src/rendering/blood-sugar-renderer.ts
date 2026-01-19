@@ -330,6 +330,7 @@ export function renderBloodSugarRegion(
       height: CHART_HEIGHT,
       hours: CHART_LEFT_HOURS,
       timeMarkers,
+      timezone,
     });
     drawTinyText(frame, `${CHART_LEFT_HOURS}h`, CHART_X, legendY, COLORS.veryDim);
 
@@ -342,6 +343,7 @@ export function renderBloodSugarRegion(
       height: CHART_HEIGHT,
       hours: CHART_RIGHT_HOURS,
       timeMarkers,
+      timezone,
     });
     drawTinyText(frame, `${CHART_RIGHT_HOURS}h`, rightX, legendY, COLORS.veryDim);
   }
