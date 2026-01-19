@@ -32,3 +32,6 @@ coverage/
 .open-next/
 sst-env.d.ts
 **/sst-env.d.ts
+
+# ESLint
+.eslintcache

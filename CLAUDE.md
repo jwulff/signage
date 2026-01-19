@@ -92,6 +92,9 @@ git -C ~/Development/signage/main worktree list
 - **MUST** create a changes file for each PR
 - **MUST** wait for Copilot review before merging
 - **MUST** use GitHub API for merges (not `gh pr merge`)
+- **MUST** include test attestation in commit messages
+- **MUST** run `pnpm lint` before committing
+- **MUST** commit after EVERY user interaction (no batching)
 
 ### MUST NOT (Forbidden)
 
@@ -100,12 +103,76 @@ git -C ~/Development/signage/main worktree list
 - **MUST NOT** force push to main
 - **MUST NOT** bypass branch protection
 - **MUST NOT** merge without passing CI
+- **MUST NOT** use `--admin` flag on `gh pr merge`
+- **MUST NOT** merge without Copilot review completion
+- **MUST NOT** commit `.env`, `.env.local`, or credential files
 
 ### SHOULD (Recommended)
 
 - SHOULD commit after each logical unit of work
 - SHOULD push frequently for backup
 - SHOULD keep PRs focused and small
+- SHOULD use conventional commit prefixes (feat:, fix:, chore:, docs:)
+
+---
+
+## Anti-Patterns to Avoid
+
+These patterns cause problems. Avoid them:
+
+1. **Working in main/** - Never make feature changes in the main directory. Use worktrees.
+
+2. **Skipping tests** - Never implement without tests first. TDD is mandatory.
+
+3. **Large PRs** - Keep changes focused. Split large features into smaller PRs.
+
+4. **Skipping changes files** - Every PR needs a changes file explaining why.
+
+5. **Using `gh pr merge`** - This command tries to checkout main, breaking worktrees. Use the API instead.
+
+6. **Merging without review** - Always wait for Copilot review, even for small changes.
+
+7. **Committing secrets** - Never commit `.env`, credentials, or API keys.
+
+8. **Force pushing to main** - This breaks other worktrees and is forbidden.
+
+9. **Ignoring lint errors** - Fix all lint errors before committing.
+
+10. **Skipping test attestation** - Include `[tests-passed: X tests in Ys]` in commits.
+
+---
+
+## Hook Enforcement
+
+Git hooks automatically enforce workflow rules:
+
+### post-checkout Hook
+**Purpose**: Prevents accidental branch switching in main/
+
+**Behavior**:
+- Detects checkout of non-main branches in the main worktree
+- Automatically reverts to main branch
+- Shows guidance on creating worktrees instead
+
+**Why**: The main/ directory must stay on main branch. Feature work happens in worktrees.
+
+### pre-push Hook
+**Purpose**: Ensures tests pass and attestation exists before push
+
+**Behavior**:
+1. Checks commit messages for `[tests-passed: X tests in Ys]`
+2. Prompts interactively if attestation missing (default: abort)
+3. Runs full test suite before allowing push
+4. Fails push if tests fail
+
+**Why**: Catches issues locally before expensive CI runs. Documents test results in git history.
+
+### Hook Installation
+Hooks are configured via `core.hooksPath=.githooks` in git config.
+New clones should run:
+```bash
+git config core.hooksPath .githooks
+```
 
 ---
 
@@ -324,11 +391,51 @@ Use GitHub API to avoid checkout conflicts in worktrees:
 # Get PR number
 gh pr list
 
-# Merge via API
+# Merge via API (squash merge)
 gh api repos/jwulff/signage/pulls/{number}/merge -X PUT -f merge_method=squash
 ```
 
-**DO NOT** use `gh pr merge` (it tries to checkout main).
+**DO NOT** use `gh pr merge` - it tries to checkout main, which breaks worktrees.
+
+**DO NOT** use `--admin` flag - it bypasses required reviews.
+
+### PR Review Workflow
+
+Before merging, ensure:
+
+1. **CI passes** - All tests and lint checks green
+   ```bash
+   gh pr checks <number> --watch
+   ```
+
+2. **Copilot review complete** - Wait for automated review
+   ```bash
+   gh pr view <number> --json reviews
+   ```
+
+3. **All threads resolved** - Address any review comments
+   ```bash
+   gh api repos/jwulff/signage/pulls/{number}/comments
+   ```
+
+4. **Changes file exists** - Every PR needs a changes file
+
+### PR Monitoring
+
+When a PR is open, monitor it for review comments:
+
+```bash
+# Watch CI status
+gh pr checks <number> --watch
+
+# Check for new comments
+gh pr view <number> --comments
+
+# View inline code review comments
+gh api repos/jwulff/signage/pulls/{number}/comments
+```
+
+Address all feedback before merging.
 
 ---
 
@@ -407,26 +514,73 @@ Content-Type: application/json
 
 ```bash
 pnpm test           # Run tests in all packages
+pnpm lint           # Run linting across all packages
+pnpm format:check   # Check formatting
+pnpm format         # Auto-fix formatting
 ```
 
 ### Test Attestation
 
-Commit messages should include test attestation:
+Commit messages MUST include test attestation. The pre-push hook enforces this.
 
 ```
 [tests-passed: X tests in Ys]
 ```
 
-Example:
+### Commit Message Format
+
+Follow this format for all commits:
+
+```
+<type>: <brief description>
+
+<optional body explaining what and why>
+
+[tests-passed: X tests in Ys]
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
+
+**Types:**
+- `feat:` - New features
+- `fix:` - Bug fixes
+- `docs:` - Documentation changes
+- `chore:` - Maintenance tasks
+- `refactor:` - Code refactoring
+- `test:` - Test additions/changes
+
+**Full Example:**
 ```
 feat: add bitmap encoder
 
 Implements RGB to base64 encoding for Pixoo frames.
 
+- Added encodeBitmap() function in pixoo.ts
+- Added unit tests for 64x64 frame encoding
+- Handles edge cases for partial frames
+
 [tests-passed: 12 tests in 0.8s]
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
+
+### Test-Driven Development
+
+Follow TDD for all changes:
+
+1. **Write failing test** - Define expected behavior
+2. **Run test, see it fail** - Confirm test is valid
+3. **Implement minimum code** - Make the test pass
+4. **Run test, see it pass** - Verify implementation
+5. **Refactor** - Clean up while tests stay green
+6. **Repeat** - Next test case
+
+**Bug Fix Workflow:**
+1. Write a test that reproduces the bug
+2. See the test fail (confirms bug exists)
+3. Fix the bug
+4. See the test pass (confirms fix works)
+5. Commit with test attestation
 
 ---
 

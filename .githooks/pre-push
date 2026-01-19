@@ -1,20 +1,88 @@
 #!/bin/bash
 #
 # Pre-push hook for signage repository
-# Ensures tests pass before pushing
+# Ensures tests pass AND test attestation is present before pushing
+#
+# Test attestation format: [tests-passed: X tests in Ys]
+# This encourages running tests locally and documenting results in commit messages.
 
 set -e
-
-echo "Running pre-push checks..."
 
 # Get the current branch
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-# Skip checks for main branch (should be handled by CI)
+# Skip checks for main branch (CI handles this)
 if [ "$BRANCH" = "main" ]; then
     echo "Skipping pre-push checks for main branch (CI handles this)"
     exit 0
 fi
+
+# Read stdin for push info (required for pre-push hooks)
+while read local_ref local_sha remote_ref remote_sha; do
+    # Skip if deleting a branch
+    if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+        continue
+    fi
+
+    # Determine the range of commits being pushed
+    if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+        # New branch - check all commits from merge-base with main
+        MERGE_BASE=$(git merge-base main "$local_sha" 2>/dev/null || echo "")
+        if [ -n "$MERGE_BASE" ]; then
+            RANGE="$MERGE_BASE..$local_sha"
+        else
+            RANGE="$local_sha"
+        fi
+    else
+        # Existing branch - check commits since last push
+        RANGE="$remote_sha..$local_sha"
+    fi
+
+    # Get commit messages for the range
+    COMMIT_MESSAGES=$(git log --format=%B "$RANGE" 2>/dev/null || git log --format=%B -1 "$local_sha")
+
+    # Check for test attestation
+    if echo "$COMMIT_MESSAGES" | grep -q '\[tests-passed:'; then
+        echo "Test attestation found in commit messages."
+    else
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "WARNING: No test attestation found in commit messages"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "Expected format in commit message:"
+        echo "  [tests-passed: X tests in Ys]"
+        echo ""
+        echo "Example:"
+        echo "  feat: add bitmap encoder"
+        echo ""
+        echo "  Implements RGB to base64 encoding for Pixoo frames."
+        echo ""
+        echo "  [tests-passed: 12 tests in 0.8s]"
+        echo ""
+        echo "RECOMMENDED: Run 'pnpm test' and add attestation to commit:"
+        echo "  git commit --amend"
+        echo ""
+
+        # Interactive prompt (only works in terminal)
+        if [ -t 0 ]; then
+            read -p "Push anyway without attestation? [y/N] " -n 1 -r </dev/tty
+            echo ""
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                echo "Push aborted. Run tests and amend your commit with attestation."
+                exit 1
+            fi
+            echo "Proceeding without attestation (CI will still run tests)..."
+        else
+            echo "Non-interactive mode: Push aborted. Add test attestation to commit."
+            exit 1
+        fi
+    fi
+done
+
+# Run tests before push
+echo ""
+echo "Running pre-push tests..."
 
 # Check if pnpm is available
 if ! command -v pnpm &> /dev/null; then
@@ -23,12 +91,15 @@ if ! command -v pnpm &> /dev/null; then
 fi
 
 # Run tests
-echo "Running tests..."
 if pnpm test; then
-    echo "Tests passed!"
+    echo ""
+    echo "Tests passed! Push proceeding."
 else
-    echo "Tests failed! Please fix before pushing."
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "ERROR: Tests failed"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "Fix failing tests before pushing."
     exit 1
 fi
-
-echo "Pre-push checks complete."

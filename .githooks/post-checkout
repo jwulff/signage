@@ -1,0 +1,48 @@
+#!/bin/bash
+#
+# Post-checkout hook for signage repository
+# Prevents branch switching in the main worktree - enforces worktree-based development
+#
+# This hook only runs in the main worktree (where .git is a directory).
+# Worktrees have .git as a file pointing to the main repo, so they're excluded.
+
+# Only run for branch checkouts (flag=1), not file checkouts (flag=0)
+# Git passes: $1=previous HEAD, $2=new HEAD, $3=checkout type flag
+if [ "$3" != "1" ]; then
+    exit 0
+fi
+
+# Only enforce in main worktree (where .git is a directory, not a symlink/file)
+if [ ! -d ".git" ]; then
+    exit 0
+fi
+
+# Get current branch
+BRANCH=$(git branch --show-current)
+
+# Allow if on main branch or detached HEAD (empty branch name)
+if [ -z "$BRANCH" ] || [ "$BRANCH" = "main" ]; then
+    exit 0
+fi
+
+# Violation detected - auto-revert and show guidance
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "ERROR: Branch checkout blocked in main worktree"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "You checked out '$BRANCH' in the main/ worktree."
+echo "The main/ directory must stay on the 'main' branch."
+echo ""
+echo "Creating a worktree instead:"
+echo ""
+echo "  git checkout main"
+echo "  git worktree add ../${BRANCH//\//-} $BRANCH"
+echo "  cd ../${BRANCH//\//-}"
+echo ""
+echo "Auto-reverting to main branch..."
+echo ""
+
+git checkout main
+
+exit 1
