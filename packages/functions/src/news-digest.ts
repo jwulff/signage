@@ -163,7 +163,7 @@ Keep each headline under 40 characters. Be concise. Only output the numbered lis
 
   for (const line of lines) {
     // Match lines starting with a number followed by . or )
-    const match = line.match(/^\d+[\.\)]\s*(.+)/);
+    const match = line.match(/^\d+[.)]\s*(.+)/);
     if (match && match[1]) {
       const headline = match[1].trim();
       if (headline.length > 0) {
