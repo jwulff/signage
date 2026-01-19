@@ -109,9 +109,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     );
 
     // Build redirect URI (must match what was used in oauth-start)
+    // Note: Custom domains don't include stage in path
     const host = event.requestContext.domainName;
-    const stage = event.requestContext.stage;
-    const redirectUri = `https://${host}/${stage}/oura/auth/callback`;
+    const redirectUri = `https://${host}/oura/auth/callback`;
 
     // Exchange code for tokens
     const tokens = await exchangeCodeForTokens(code, redirectUri);

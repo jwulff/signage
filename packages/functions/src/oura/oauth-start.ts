@@ -64,9 +64,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event): Promise<APIGatew
     );
 
     // Build redirect URI from current request
+    // Note: Custom domains don't include stage in path
     const host = event.requestContext.domainName;
-    const stage = event.requestContext.stage;
-    const redirectUri = `https://${host}/${stage}/oura/auth/callback`;
+    const redirectUri = `https://${host}/oura/auth/callback`;
 
     // Build Oura authorization URL
     // @ts-expect-error - OuraClientId is defined in SST secrets, types generated at deploy time
