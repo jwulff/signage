@@ -214,34 +214,23 @@ async function fetchWeatherData(): Promise<ClockWeatherData | null> {
       return null;
     }
 
-    const times = data.hourly.time;
     const temps = data.hourly.temperature_2m;
 
-    // Find the current hour in Pacific time (API returns Pacific times)
+    // Get current Pacific hour (0-23) - API data starts at midnight today
     const now = new Date();
-    const pacificTime = new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Los_Angeles",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      hour12: false,
-    }).formatToParts(now);
+    const pacificHour = parseInt(
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/Los_Angeles",
+        hour: "2-digit",
+        hour12: false,
+      }).format(now)
+    );
 
-    const year = pacificTime.find((p) => p.type === "year")?.value;
-    const month = pacificTime.find((p) => p.type === "month")?.value;
-    const day = pacificTime.find((p) => p.type === "day")?.value;
-    const hour = pacificTime.find((p) => p.type === "hour")?.value;
-    const currentHourStr = `${year}-${month}-${day}T${hour}:00`;
+    // The API returns 48 hours starting from midnight today
+    // So current hour index = pacificHour
+    const nowIndex = pacificHour;
 
-    // Find index for current hour
-    let nowIndex = times.findIndex((t) => t === currentHourStr);
-    if (nowIndex === -1) {
-      // Fallback: find closest hour
-      nowIndex = times.findIndex((t) => t >= currentHourStr);
-      if (nowIndex === -1) nowIndex = times.length - 12; // Near end
-    }
-    console.log(`Weather: looking for ${currentHourStr}, found index ${nowIndex}`);
+    console.log(`Weather: Pacific hour=${pacificHour}, temps array length=${temps.length}`);
 
     // Get temperatures at offsets, with bounds checking
     const getTemp = (offset: number): number | undefined => {
@@ -249,13 +238,17 @@ async function fetchWeatherData(): Promise<ClockWeatherData | null> {
       return idx >= 0 && idx < temps.length ? temps[idx] : undefined;
     };
 
-    return {
+    const result = {
       tempMinus12h: getTemp(-12),
       tempMinus6h: getTemp(-6),
       tempNow: getTemp(0),
       tempPlus6h: getTemp(6),
       tempPlus12h: getTemp(12),
     };
+
+    console.log(`Weather temps: -12h=${result.tempMinus12h}, -6h=${result.tempMinus6h}, now=${result.tempNow}, +6h=${result.tempPlus6h}, +12h=${result.tempPlus12h}`);
+
+    return result;
   } catch (error) {
     console.error("Failed to fetch weather data:", error);
     return null;
