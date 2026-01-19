@@ -172,10 +172,15 @@ export function renderChart(
         // Peaks at noon (100%), bottoms at midnight (0%)
         const sunlight = (1 + Math.cos((hour - 12) * Math.PI / 12)) / 2;
 
-        // Scale brightness: 0% sunlight = very dim, 100% sunlight = moderate brightness
-        // Max brightness capped at 80 to not overpower the chart
-        const brightness = Math.round(15 + sunlight * 65);
-        const markerColor = { r: brightness, g: brightness, b: brightness };
+        // Gradient from purple (midnight) to yellow (noon)
+        // Purple is visible against black background, yellow indicates daytime
+        const purple = { r: 45, g: 20, b: 70 };
+        const yellow = { r: 80, g: 70, b: 15 };
+        const markerColor = {
+          r: Math.round(purple.r + (yellow.r - purple.r) * sunlight),
+          g: Math.round(purple.g + (yellow.g - purple.g) * sunlight),
+          b: Math.round(purple.b + (yellow.b - purple.b) * sunlight),
+        };
 
         // Draw vertical line
         for (let py = y; py < y + height; py++) {
