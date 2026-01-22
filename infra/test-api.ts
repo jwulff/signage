@@ -3,11 +3,16 @@ import { table } from "./storage";
 import { ouraClientId, ouraClientSecret } from "./secrets";
 
 // HTTP API for test endpoints
+// Domain is configured via SIGNAGE_DOMAIN environment variable
+const baseDomain = process.env.SIGNAGE_DOMAIN;
+
 export const testApi = new sst.aws.ApiGatewayV2("SignageTestApi", {
-  domain:
-    $app.stage === "prod"
-      ? "api.signage.example.com"
-      : `api.${$app.stage}.signage.example.com`,
+  ...(baseDomain && {
+    domain:
+      $app.stage === "prod"
+        ? `api.signage.${baseDomain}`
+        : `api.${$app.stage}.signage.${baseDomain}`,
+  }),
   cors: {
     allowOrigins: ["*"],
     allowMethods: ["GET", "POST"],

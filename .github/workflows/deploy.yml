@@ -59,6 +59,8 @@ jobs:
 
       - name: Deploy with SST
         run: pnpm sst deploy --stage ${{ github.event.inputs.stage || 'dev' }}
+        env:
+          SIGNAGE_DOMAIN: ${{ secrets.SIGNAGE_DOMAIN }}
 
       - name: Output URLs
         run: |

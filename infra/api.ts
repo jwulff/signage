@@ -1,11 +1,17 @@
 import { table } from "./storage";
 
 // WebSocket API for terminal connections
+// Domain is configured via SIGNAGE_DOMAIN environment variable (e.g., "yourdomain.com")
+// If not set, SST will use default AWS URLs
+const baseDomain = process.env.SIGNAGE_DOMAIN;
+
 export const api = new sst.aws.ApiGatewayWebSocket("SignageApi", {
-  domain:
-    $app.stage === "prod"
-      ? "ws.signage.example.com"
-      : `ws.${$app.stage}.signage.example.com`,
+  ...(baseDomain && {
+    domain:
+      $app.stage === "prod"
+        ? `ws.signage.${baseDomain}`
+        : `ws.${$app.stage}.signage.${baseDomain}`,
+  }),
 });
 
 // Connection handlers

@@ -163,7 +163,7 @@ aws sts get-caller-identity
 
 ### Step 3: Domain Configuration
 
-SST creates custom domains for your APIs. You have two options:
+SST can create custom domains for your APIs. Domain configuration is controlled via the `SIGNAGE_DOMAIN` environment variable.
 
 #### Option A: Use Your Own Domain (Recommended)
 
@@ -173,46 +173,29 @@ SST creates custom domains for your APIs. You have two options:
    aws route53 create-hosted-zone --name yourdomain.com --caller-reference $(date +%s)
    ```
 3. **Update your domain's nameservers** to point to Route 53 (if using external registrar)
-4. **Edit the infrastructure files** to use your domain:
+4. **Set the domain when deploying**:
 
    ```bash
-   # Update all three files:
-   # - infra/api.ts (WebSocket)
-   # - infra/test-api.ts (HTTP API)
-   # - infra/web.ts (Web UI)
+   # For manual deployments
+   SIGNAGE_DOMAIN=yourdomain.com pnpm deploy
+
+   # For GitHub Actions, add SIGNAGE_DOMAIN as a repository secret (see Step 4)
    ```
 
-   Replace `example.com` with your domain in each file:
+   This will create these subdomains:
+   - `signage.yourdomain.com` - Web emulator
+   - `api.signage.yourdomain.com` - HTTP API
+   - `ws.signage.yourdomain.com` - WebSocket API
 
-   ```typescript
-   // infra/api.ts
-   domain:
-     $app.stage === "prod"
-       ? "ws.signage.yourdomain.com"
-       : `ws.${$app.stage}.signage.yourdomain.com`,
-   ```
-
-   ```typescript
-   // infra/test-api.ts
-   domain:
-     $app.stage === "prod"
-       ? "api.signage.yourdomain.com"
-       : `api.${$app.stage}.signage.yourdomain.com`,
-   ```
-
-   ```typescript
-   // infra/web.ts
-   domain:
-     $app.stage === "prod"
-       ? "signage.yourdomain.com"
-       : `${$app.stage}.signage.yourdomain.com`,
-   ```
+   For non-prod stages, the stage name is prefixed (e.g., `dev.signage.yourdomain.com`).
 
 #### Option B: Use AWS Default Domains
 
-If you don't have a domain, remove the `domain:` configuration from each infra file. SST will provide default AWS URLs like:
+If you don't set `SIGNAGE_DOMAIN`, SST will use default AWS URLs:
 - `https://abc123.execute-api.us-east-1.amazonaws.com`
 - `https://d1234567890.cloudfront.net`
+
+This is useful for testing or if you don't have a custom domain.
 
 ### Step 4: GitHub Secrets
 
@@ -221,10 +204,13 @@ For automated CI/CD deployments, add these secrets to your GitHub repository:
 1. Go to your repo → **Settings** → **Secrets and variables** → **Actions**
 2. Add these secrets:
 
-| Secret Name | Value |
-|-------------|-------|
-| `AWS_ACCESS_KEY_ID` | Your IAM user's access key ID |
-| `AWS_SECRET_ACCESS_KEY` | Your IAM user's secret access key |
+| Secret Name | Value | Required |
+|-------------|-------|----------|
+| `AWS_ACCESS_KEY_ID` | Your IAM user's access key ID | Yes |
+| `AWS_SECRET_ACCESS_KEY` | Your IAM user's secret access key | Yes |
+| `SIGNAGE_DOMAIN` | Your domain (e.g., `yourdomain.com`) | No |
+
+**Note:** If `SIGNAGE_DOMAIN` is not set, SST will use default AWS URLs instead of custom domains.
 
 ### Step 5: Deploy
 
