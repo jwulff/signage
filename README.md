@@ -273,21 +273,40 @@ If you use a Dexcom CGM:
 
 #### Oura Ring (Readiness Widget) - Optional
 
-If you have an Oura Ring:
+Displays your daily Oura readiness score with color-coded status:
+- **Green** (85-100): Optimal
+- **Yellow-green** (70-84): Good
+- **Yellow** (60-69): Fair
+- **Orange** (50-59): Low
+- **Red** (<50): Poor
+
+Supports multiple users - each shows as initial + score (e.g., "J 82  S 75").
+
+**Setup:**
 
 1. **Create an OAuth app** at [cloud.ouraring.com](https://cloud.ouraring.com/oauth/applications)
-2. **Set redirect URIs**:
+2. **Set redirect URIs** in your Oura app:
    - Development: `https://api.dev.signage.yourdomain.com/oura/auth/callback`
    - Production: `https://api.signage.yourdomain.com/oura/auth/callback`
 3. **Set SST secrets**:
    ```bash
    pnpm sst secret set OuraClientId your_client_id
    pnpm sst secret set OuraClientSecret your_client_secret
+
+   # For prod stage
+   pnpm sst secret set OuraClientId your_client_id --stage prod
+   pnpm sst secret set OuraClientSecret your_client_secret --stage prod
    ```
-4. **Authorize your account** by visiting:
+4. **Authorize each user** by visiting (the `name` parameter is required):
    ```
-   https://api.signage.yourdomain.com/oura/auth/start
+   https://api.signage.yourdomain.com/oura/auth/start?name=John
    ```
+   The first letter of the name becomes the initial shown on the display.
+
+**How it works:**
+- Readiness scores are fetched daily at 6 AM Pacific
+- Scores are cached and displayed until the next fetch
+- If no data is available, shows "--" in gray
 
 ### Step 7: Connect Your Display
 
