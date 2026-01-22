@@ -4,6 +4,40 @@ Personal digital signage system for Pixoo64 and other displays.
 
 ---
 
+## Public Repository Warning
+
+**THIS IS A PUBLIC REPOSITORY.** All code, commits, issues, PRs, and comments are visible to everyone on the internet.
+
+### Security Model
+
+- **GitHub Actions secrets are secure** - AWS credentials and other secrets are stored in GitHub's encrypted secrets and are never exposed in logs
+- **SST secrets are secure** - Runtime secrets (API keys, credentials) are managed via `sst secret set` and stored encrypted in AWS
+- **The codebase itself is public** - Anyone can read all code, configuration, and history
+
+### NEVER Commit
+
+- API keys, tokens, or credentials
+- Private IP addresses or internal hostnames
+- Personal domain names (use `example.com` in docs)
+- AWS account IDs
+- Personal names or identifying information
+- `.env` files (already gitignored)
+
+### Before Every Commit, Verify
+
+1. No secrets in code or config files
+2. No personal domains (use `example.com`)
+3. No private IPs (use `192.168.1.x` or `10.0.0.x` as generic examples only)
+4. No identifying information in comments or docs
+
+### If You Accidentally Commit Secrets
+
+1. **Rotate the secret immediately** - Consider it compromised
+2. Remove from git history using `git filter-branch` or BFG Repo Cleaner
+3. Force push (requires admin, coordinate carefully)
+
+---
+
 ## Deployment Region
 
 **IMPORTANT**: All AWS resources deploy to **us-east-1** only.
@@ -106,6 +140,8 @@ git -C ~/Development/signage/main worktree list
 - **MUST NOT** use `--admin` flag on `gh pr merge`
 - **MUST NOT** merge without Copilot review completion
 - **MUST NOT** commit `.env`, `.env.local`, or credential files
+- **MUST NOT** commit secrets, API keys, or tokens (THIS IS A PUBLIC REPO)
+- **MUST NOT** commit personal domains, IPs, or identifying information
 
 ### SHOULD (Recommended)
 
@@ -132,9 +168,11 @@ These patterns cause problems. Avoid them:
 
 6. **Merging without review** - Always wait for Copilot review, even for small changes.
 
-7. **Committing secrets** - Never commit `.env`, credentials, or API keys.
+7. **Committing secrets** - Never commit `.env`, credentials, or API keys. This is a PUBLIC repo - secrets will be exposed to the entire internet.
 
-8. **Force pushing to main** - This breaks other worktrees and is forbidden.
+8. **Committing personal info** - Never commit personal domains, private IPs, names, or identifying information. Use `example.com` for domains and generic IPs like `192.168.1.x`.
+
+9. **Force pushing to main** - This breaks other worktrees and is forbidden.
 
 9. **Ignoring lint errors** - Fix all lint errors before committing.
 
