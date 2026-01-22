@@ -114,6 +114,8 @@ const TINY_FONT: Record<string, number[]> = {
   "m": [0b000, 0b000, 0b111, 0b111, 0b101],
   // Symbols
   " ": [0b000, 0b000, 0b000, 0b000, 0b000],
+  "/": [0b001, 0b001, 0b010, 0b100, 0b100],
+  "-": [0b000, 0b000, 0b111, 0b000, 0b000],
 };
 
 const TINY_CHAR_WIDTH = 3;
