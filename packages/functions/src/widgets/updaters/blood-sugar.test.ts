@@ -370,8 +370,9 @@ describe("bloodSugarUpdater.fetchHistory", () => {
     mockDexcomHistoryResponses([]);
 
     // Request 6 hours of data
-    const sixHoursAgo = Date.now() - 6 * 60 * 60 * 1000;
-    await bloodSugarUpdater.fetchHistory!(sixHoursAgo, Date.now());
+    const now = Date.now();
+    const sixHoursAgo = now - 6 * 60 * 60 * 1000;
+    await bloodSugarUpdater.fetchHistory!(sixHoursAgo, now);
 
     // Should have called the glucose endpoint with appropriate params
     const glucoseCall = fetchMock.mock.calls[2];
