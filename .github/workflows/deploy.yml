@@ -4,24 +4,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      stage:
-        description: 'Deployment stage'
-        required: true
-        default: 'dev'
-        type: choice
-        options:
-          - dev
-          - prod
 
 jobs:
   deploy:
-    name: Deploy to ${{ github.event.inputs.stage || 'dev' }}
+    name: Deploy to prod
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, '[skip-deploy]')"
 
     environment:
-      name: ${{ github.event.inputs.stage || 'dev' }}
+      name: prod
 
     steps:
       - name: Checkout
@@ -59,19 +50,18 @@ jobs:
 
       - name: Set placeholder secrets if not configured
         run: |
-          STAGE="${{ github.event.inputs.stage || 'dev' }}"
           # SST requires secrets to be set, even if not used. Set placeholders if not configured.
-          pnpm sst secret list --stage "$STAGE" 2>/dev/null | grep -q DexcomUsername || \
-            pnpm sst secret set DexcomUsername "not-configured" --stage "$STAGE"
-          pnpm sst secret list --stage "$STAGE" 2>/dev/null | grep -q DexcomPassword || \
-            pnpm sst secret set DexcomPassword "not-configured" --stage "$STAGE"
-          pnpm sst secret list --stage "$STAGE" 2>/dev/null | grep -q OuraClientId || \
-            pnpm sst secret set OuraClientId "not-configured" --stage "$STAGE"
-          pnpm sst secret list --stage "$STAGE" 2>/dev/null | grep -q OuraClientSecret || \
-            pnpm sst secret set OuraClientSecret "not-configured" --stage "$STAGE"
+          pnpm sst secret list --stage prod 2>/dev/null | grep -q DexcomUsername || \
+            pnpm sst secret set DexcomUsername "not-configured" --stage prod
+          pnpm sst secret list --stage prod 2>/dev/null | grep -q DexcomPassword || \
+            pnpm sst secret set DexcomPassword "not-configured" --stage prod
+          pnpm sst secret list --stage prod 2>/dev/null | grep -q OuraClientId || \
+            pnpm sst secret set OuraClientId "not-configured" --stage prod
+          pnpm sst secret list --stage prod 2>/dev/null | grep -q OuraClientSecret || \
+            pnpm sst secret set OuraClientSecret "not-configured" --stage prod
 
       - name: Deploy with SST
-        run: pnpm sst deploy --stage ${{ github.event.inputs.stage || 'dev' }}
+        run: pnpm sst deploy --stage prod
         env:
           SIGNAGE_DOMAIN: ${{ secrets.SIGNAGE_DOMAIN }}
 
