@@ -1,13 +1,13 @@
 /**
- * Oura Readiness Fetch Handler
- * Daily cron job that fetches readiness scores for all linked users
+ * Oura Data Fetch Handler
+ * Daily cron job that fetches readiness and sleep scores for all linked users
  */
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { ScheduledHandler } from "aws-lambda";
-import { fetchAndCacheReadiness, getValidAccessToken } from "./client.js";
+import { fetchAndCacheOuraData, getValidAccessToken } from "./client.js";
 import type { OuraUsersListItem, OuraUserItem } from "./types.js";
 
 const ddbClient = new DynamoDBClient({});
@@ -76,10 +76,10 @@ async function markNeedsReauth(userId: string): Promise<void> {
 }
 
 /**
- * Scheduled handler - fetches readiness for all users
+ * Scheduled handler - fetches readiness and sleep for all users
  */
 export const scheduled: ScheduledHandler = async () => {
-  console.log("Starting Oura readiness fetch");
+  console.log("Starting Oura data fetch");
 
   const userIds = await getActiveUsers();
   console.log(`Found ${userIds.length} active users`);
@@ -91,6 +91,7 @@ export const scheduled: ScheduledHandler = async () => {
 
   const results = {
     success: 0,
+    partialData: 0,
     noData: 0,
     failed: 0,
     needsReauth: 0,
@@ -111,18 +112,21 @@ export const scheduled: ScheduledHandler = async () => {
         continue;
       }
 
-      // Fetch and cache readiness
-      const readiness = await fetchAndCacheReadiness(userId);
+      // Fetch and cache readiness and sleep
+      const { readiness, sleep } = await fetchAndCacheOuraData(userId);
 
-      if (readiness) {
-        console.log(`Fetched readiness for ${name}: ${readiness.score}`);
+      if (readiness && sleep) {
+        console.log(`Fetched data for ${name}: readiness=${readiness.score}, sleep=${sleep.score}`);
         results.success++;
+      } else if (readiness || sleep) {
+        console.log(`Partial data for ${name}: readiness=${readiness?.score ?? "none"}, sleep=${sleep?.score ?? "none"}`);
+        results.partialData++;
       } else {
-        console.log(`No readiness data for ${name}`);
+        console.log(`No data for ${name}`);
         results.noData++;
       }
     } catch (error) {
-      console.error(`Failed to fetch readiness for user ${userId}:`, error);
+      console.error(`Failed to fetch data for user ${userId}:`, error);
       results.failed++;
     }
 
@@ -130,5 +134,5 @@ export const scheduled: ScheduledHandler = async () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
-  console.log("Oura readiness fetch complete:", results);
+  console.log("Oura data fetch complete:", results);
 };

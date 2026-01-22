@@ -271,16 +271,16 @@ If you use a Dexcom CGM:
    pnpm sst secret set DexcomPassword your_password --stage prod
    ```
 
-#### Oura Ring (Readiness Widget) - Optional
+#### Oura Ring (Readiness + Sleep Widget) - Optional
 
-Displays your daily Oura readiness score with color-coded status:
+Displays your daily Oura readiness and sleep scores with color-coded status:
 - **Green** (85-100): Optimal
 - **Yellow-green** (70-84): Good
 - **Yellow** (60-69): Fair
 - **Orange** (50-59): Low
 - **Red** (<50): Poor
 
-Supports multiple users - each shows as initial + score (e.g., "J 82  S 75").
+Format: `J 75/82` (readiness/sleep). Supports multiple users.
 
 **Setup:**
 
@@ -304,7 +304,7 @@ Supports multiple users - each shows as initial + score (e.g., "J 82  S 75").
    The first letter of the name becomes the initial shown on the display.
 
 **How it works:**
-- Readiness scores are fetched daily at 7 AM Pacific
+- Readiness and sleep scores are fetched daily at 8 AM Pacific
 - Scores are cached and displayed until the next fetch
 - If no data is available, shows "--" in gray
 

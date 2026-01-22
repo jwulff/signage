@@ -55,6 +55,31 @@ export interface OuraReadiness {
 }
 
 /**
+ * Sleep contributors from Oura API
+ */
+export interface SleepContributors {
+  deepSleep?: number;
+  efficiency?: number;
+  latency?: number;
+  remSleep?: number;
+  restfulness?: number;
+  timing?: number;
+  totalSleep?: number;
+}
+
+/**
+ * Cached sleep score stored in DynamoDB
+ * pk: OURA_USER#{userId}
+ * sk: SLEEP#{date} (date format: YYYY-MM-DD)
+ */
+export interface OuraSleep {
+  date: string; // YYYY-MM-DD
+  score: number; // 0-100
+  contributors: SleepContributors;
+  fetchedAt: number; // Unix timestamp
+}
+
+/**
  * Active users list stored in DynamoDB
  * pk: OURA_USERS
  * sk: LIST
@@ -69,6 +94,7 @@ export interface OuraUsersList {
 export interface ReadinessDisplayData {
   initial: string;
   score: number | null; // null if no data available
+  sleepScore: number | null; // null if no data available
   isStale: boolean; // true if data is older than 24 hours
   needsReauth: boolean;
 }
@@ -90,6 +116,26 @@ export interface OuraReadinessApiResponse {
       recovery_index: number;
       resting_heart_rate: number;
       sleep_balance: number;
+    };
+  }>;
+}
+
+/**
+ * Oura API response for daily sleep
+ */
+export interface OuraSleepApiResponse {
+  data: Array<{
+    id: string;
+    day: string;
+    score: number;
+    contributors: {
+      deep_sleep: number;
+      efficiency: number;
+      latency: number;
+      rem_sleep: number;
+      restfulness: number;
+      timing: number;
+      total_sleep: number;
     };
   }>;
 }
@@ -144,6 +190,16 @@ export interface OuraReadinessItem {
   date: string;
   score: number;
   contributors: ReadinessContributors;
+  fetchedAt: number;
+  ttl?: number; // DynamoDB TTL
+}
+
+export interface OuraSleepItem {
+  pk: string;
+  sk: string;
+  date: string;
+  score: number;
+  contributors: SleepContributors;
   fetchedAt: number;
   ttl?: number; // DynamoDB TTL
 }

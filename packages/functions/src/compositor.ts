@@ -26,7 +26,7 @@ import {
   type ClockWeatherData,
   type ReadinessDisplayData,
 } from "./rendering/index.js";
-import type { OuraUsersListItem, OuraUserItem, OuraReadinessItem } from "./oura/types.js";
+import type { OuraUsersListItem, OuraUserItem, OuraReadinessItem, OuraSleepItem } from "./oura/types.js";
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
@@ -414,7 +414,32 @@ async function getCachedReadiness(userId: string, date: string): Promise<OuraRea
 }
 
 /**
- * Fetch readiness data for all linked Oura users
+ * Get cached sleep for a user
+ */
+async function getCachedSleep(userId: string, date: string): Promise<OuraSleepItem | null> {
+  try {
+    const result = await ddb.send(
+      new ScanCommand({
+        TableName: Resource.SignageTable.name,
+        FilterExpression: "pk = :pk AND sk = :sk",
+        ExpressionAttributeValues: {
+          ":pk": `OURA_USER#${userId}`,
+          ":sk": `SLEEP#${date}`,
+        },
+      })
+    );
+
+    if (result.Items && result.Items.length > 0) {
+      return result.Items[0] as OuraSleepItem;
+    }
+  } catch (error) {
+    console.error(`Failed to get cached sleep for ${userId}:`, error);
+  }
+  return null;
+}
+
+/**
+ * Fetch readiness and sleep data for all linked Oura users
  */
 async function fetchReadinessData(): Promise<ReadinessDisplayData[]> {
   const userIds = await getOuraUsers();
@@ -436,12 +461,22 @@ async function fetchReadinessData(): Promise<ReadinessDisplayData[]> {
       continue;
     }
 
-    const readiness = await getCachedReadiness(userId, today);
+    // Fetch both readiness and sleep in parallel
+    const [readiness, sleep] = await Promise.all([
+      getCachedReadiness(userId, today),
+      getCachedSleep(userId, today),
+    ]);
+
+    // Data is stale if both are missing or if the most recent one is stale
+    const readinessStale = readiness ? (Date.now() - readiness.fetchedAt > READINESS_STALE_THRESHOLD_MS) : true;
+    const sleepStale = sleep ? (Date.now() - sleep.fetchedAt > READINESS_STALE_THRESHOLD_MS) : true;
+    const isStale = readinessStale && sleepStale;
 
     const displayData: ReadinessDisplayData = {
       initial: profile.initial || profile.displayName?.charAt(0).toUpperCase() || "?",
       score: readiness?.score ?? null,
-      isStale: readiness ? (Date.now() - readiness.fetchedAt > READINESS_STALE_THRESHOLD_MS) : true,
+      sleepScore: sleep?.score ?? null,
+      isStale,
       needsReauth: profile.needsReauth ?? false,
     };
 
@@ -575,10 +610,10 @@ async function updateDisplay(): Promise<{
   }
 
   if (readinessData.length > 0) {
-    const readinessStr = readinessData.map(r => `${r.initial}:${r.score ?? '--'}`).join(', ');
-    console.log(`Readiness: ${readinessStr}`);
+    const ouraStr = readinessData.map(r => `${r.initial}:${r.score ?? '--'}/${r.sleepScore ?? '--'}`).join(', ');
+    console.log(`Oura (readiness/sleep): ${ouraStr}`);
   } else {
-    console.log("No readiness data (no linked Oura users)");
+    console.log("No Oura data (no linked users)");
   }
 
   // Generate composite frame using shared rendering module

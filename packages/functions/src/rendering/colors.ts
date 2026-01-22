@@ -49,3 +49,15 @@ export function getReadinessColor(score: number | null): RGB {
   if (score >= 50) return COLORS.readinessLow;
   return COLORS.readinessPoor;
 }
+
+/**
+ * Get color for a sleep score (uses same ranges as readiness)
+ */
+export function getSleepColor(score: number | null): RGB {
+  if (score === null) return COLORS.readinessStale;
+  if (score >= 85) return COLORS.readinessOptimal;
+  if (score >= 70) return COLORS.readinessGood;
+  if (score >= 60) return COLORS.readinessFair;
+  if (score >= 50) return COLORS.readinessLow;
+  return COLORS.readinessPoor;
+}
