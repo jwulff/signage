@@ -57,24 +57,23 @@ jobs:
           sudo rm -rf /home/runner/.pulumi || true
           echo "System Pulumi removed"
 
-      - name: Deploy with SST
-        # SST/Pulumi has a bug where RangeError occurs in error formatter even on successful deploys
-        # We verify success by checking the health endpoint in the next step
-        run: pnpm sst deploy --stage ${{ github.event.inputs.stage || 'dev' }} || true
-        env:
-          SIGNAGE_DOMAIN: ${{ secrets.SIGNAGE_DOMAIN }}
-
-      - name: Verify deployment
-        if: ${{ secrets.SIGNAGE_DOMAIN }}
+      - name: Set placeholder secrets if not configured
         run: |
           STAGE="${{ github.event.inputs.stage || 'dev' }}"
-          if [ "$STAGE" = "prod" ]; then
-            URL="https://api.signage.${{ secrets.SIGNAGE_DOMAIN }}/health"
-          else
-            URL="https://api.${STAGE}.signage.${{ secrets.SIGNAGE_DOMAIN }}/health"
-          fi
-          echo "Checking $URL"
-          curl -sf "$URL" || (echo "Deployment verification failed" && exit 1)
+          # SST requires secrets to be set, even if not used. Set placeholders if not configured.
+          pnpm sst secret list --stage "$STAGE" 2>/dev/null | grep -q DexcomUsername || \
+            pnpm sst secret set DexcomUsername "not-configured" --stage "$STAGE"
+          pnpm sst secret list --stage "$STAGE" 2>/dev/null | grep -q DexcomPassword || \
+            pnpm sst secret set DexcomPassword "not-configured" --stage "$STAGE"
+          pnpm sst secret list --stage "$STAGE" 2>/dev/null | grep -q OuraClientId || \
+            pnpm sst secret set OuraClientId "not-configured" --stage "$STAGE"
+          pnpm sst secret list --stage "$STAGE" 2>/dev/null | grep -q OuraClientSecret || \
+            pnpm sst secret set OuraClientSecret "not-configured" --stage "$STAGE"
+
+      - name: Deploy with SST
+        run: pnpm sst deploy --stage ${{ github.event.inputs.stage || 'dev' }}
+        env:
+          SIGNAGE_DOMAIN: ${{ secrets.SIGNAGE_DOMAIN }}
 
       - name: Output URLs
         run: |
