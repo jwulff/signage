@@ -5,6 +5,13 @@
 
 Personal digital signage system for Pixoo64 and other LED matrix displays. Displays real-time data like blood sugar (Dexcom CGM), time, weather, and sleep readiness (Oura Ring).
 
+<p align="center">
+  <img src="docs/images/pixoo-photo.jpg" alt="Pixoo64 display showing blood sugar data" width="300">
+  <img src="docs/images/display-screenshot.png" alt="Display screenshot" width="300">
+</p>
+
+**Read the full story:** [Building a Personal Digital Signage System](https://johnwulff.com/2026/01/18/pixoo-signage/)
+
 ```
 ┌─────────────┐     ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
 │   Lambda    │────▶│  WebSocket  │────▶│    Relay     │────▶│   Pixoo64   │
