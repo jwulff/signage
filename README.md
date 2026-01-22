@@ -304,7 +304,7 @@ Supports multiple users - each shows as initial + score (e.g., "J 82  S 75").
    The first letter of the name becomes the initial shown on the display.
 
 **How it works:**
-- Readiness scores are fetched daily at 6 AM Pacific
+- Readiness scores are fetched daily at 7 AM Pacific
 - Scores are cached and displayed until the next fetch
 - If no data is available, shows "--" in gray
 
