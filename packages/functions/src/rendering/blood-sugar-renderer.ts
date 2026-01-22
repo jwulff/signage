@@ -98,11 +98,11 @@ const TREND_ARROWS: Record<string, number[]> = {
   // → Flat/steady with outlined head
   flat: [
     0b0000000,
+    0b0000100,
     0b0000010,
-    0b0000001,
     0b1111111,
-    0b0000001,
     0b0000010,
+    0b0000100,
     0b0000000,
     0b0000000,
   ],
