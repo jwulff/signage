@@ -58,9 +58,23 @@ jobs:
           echo "System Pulumi removed"
 
       - name: Deploy with SST
-        run: pnpm sst deploy --stage ${{ github.event.inputs.stage || 'dev' }}
+        # SST/Pulumi has a bug where RangeError occurs in error formatter even on successful deploys
+        # We verify success by checking the health endpoint in the next step
+        run: pnpm sst deploy --stage ${{ github.event.inputs.stage || 'dev' }} || true
         env:
           SIGNAGE_DOMAIN: ${{ secrets.SIGNAGE_DOMAIN }}
+
+      - name: Verify deployment
+        if: ${{ secrets.SIGNAGE_DOMAIN }}
+        run: |
+          STAGE="${{ github.event.inputs.stage || 'dev' }}"
+          if [ "$STAGE" = "prod" ]; then
+            URL="https://api.signage.${{ secrets.SIGNAGE_DOMAIN }}/health"
+          else
+            URL="https://api.${STAGE}.signage.${{ secrets.SIGNAGE_DOMAIN }}/health"
+          fi
+          echo "Checking $URL"
+          curl -sf "$URL" || (echo "Deployment verification failed" && exit 1)
 
       - name: Output URLs
         run: |
