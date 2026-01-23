@@ -12,16 +12,16 @@ import (
 func TestChartPointSort(t *testing.T) {
 	now := time.Now()
 	points := []ChartPoint{
-		{Timestamp: now.Add(-1 * time.Hour), Glucose: 100},
-		{Timestamp: now.Add(-3 * time.Hour), Glucose: 90},
-		{Timestamp: now.Add(-2 * time.Hour), Glucose: 95},
+		{Timestamp: now.Add(-1 * time.Hour).UnixMilli(), Value: 100},
+		{Timestamp: now.Add(-3 * time.Hour).UnixMilli(), Value: 90},
+		{Timestamp: now.Add(-2 * time.Hour).UnixMilli(), Value: 95},
 	}
 
 	SortChartPoints(points)
 
-	assert.Equal(t, 90, points[0].Glucose)
-	assert.Equal(t, 95, points[1].Glucose)
-	assert.Equal(t, 100, points[2].Glucose)
+	assert.Equal(t, 90, points[0].Value)
+	assert.Equal(t, 95, points[1].Value)
+	assert.Equal(t, 100, points[2].Value)
 }
 
 func TestNewChartConfig(t *testing.T) {
@@ -50,7 +50,7 @@ func TestRenderChartSinglePoint(t *testing.T) {
 
 	now := time.Now()
 	points := []ChartPoint{
-		{Timestamp: now.Add(-30 * time.Minute), Glucose: 120},
+		{Timestamp: now.Add(-30 * time.Minute).UnixMilli(), Value: 120},
 	}
 
 	// Should not panic with single point
@@ -76,11 +76,11 @@ func TestRenderChartMultiplePoints(t *testing.T) {
 
 	now := time.Now()
 	points := []ChartPoint{
-		{Timestamp: now.Add(-2*time.Hour - 30*time.Minute), Glucose: 100},
-		{Timestamp: now.Add(-2 * time.Hour), Glucose: 110},
-		{Timestamp: now.Add(-1*time.Hour - 30*time.Minute), Glucose: 130},
-		{Timestamp: now.Add(-1 * time.Hour), Glucose: 120},
-		{Timestamp: now.Add(-30 * time.Minute), Glucose: 115},
+		{Timestamp: now.Add(-2*time.Hour - 30*time.Minute).UnixMilli(), Value: 100},
+		{Timestamp: now.Add(-2 * time.Hour).UnixMilli(), Value: 110},
+		{Timestamp: now.Add(-1*time.Hour - 30*time.Minute).UnixMilli(), Value: 130},
+		{Timestamp: now.Add(-1 * time.Hour).UnixMilli(), Value: 120},
+		{Timestamp: now.Add(-30 * time.Minute).UnixMilli(), Value: 115},
 	}
 
 	RenderChart(frame, points, cfg)
@@ -107,8 +107,8 @@ func TestRenderChartOutsideTimeRange(t *testing.T) {
 	now := time.Now()
 	// Points outside the default 3-hour range
 	points := []ChartPoint{
-		{Timestamp: now.Add(-5 * time.Hour), Glucose: 100},
-		{Timestamp: now.Add(-4 * time.Hour), Glucose: 110},
+		{Timestamp: now.Add(-5 * time.Hour).UnixMilli(), Value: 100},
+		{Timestamp: now.Add(-4 * time.Hour).UnixMilli(), Value: 110},
 	}
 
 	RenderChart(frame, points, cfg)
@@ -143,9 +143,10 @@ func TestGlucoseRangeColor(t *testing.T) {
 }
 
 func TestChartDataRange(t *testing.T) {
+	now := time.Now()
 	points := []ChartPoint{
-		{Timestamp: time.Now(), Glucose: 80},
-		{Timestamp: time.Now(), Glucose: 160},
+		{Timestamp: now.UnixMilli(), Value: 80},
+		{Timestamp: now.UnixMilli(), Value: 160},
 	}
 
 	minG, maxG := calculateDataRange(points, 15)
@@ -156,9 +157,10 @@ func TestChartDataRange(t *testing.T) {
 
 func TestChartDataRangeMinimum(t *testing.T) {
 	// Very narrow range should be expanded
+	now := time.Now()
 	points := []ChartPoint{
-		{Timestamp: time.Now(), Glucose: 100},
-		{Timestamp: time.Now(), Glucose: 102},
+		{Timestamp: now.UnixMilli(), Value: 100},
+		{Timestamp: now.UnixMilli(), Value: 102},
 	}
 
 	minG, maxG := calculateDataRange(points, 15)
@@ -167,23 +169,23 @@ func TestChartDataRangeMinimum(t *testing.T) {
 	assert.GreaterOrEqual(t, dataRange, 30, "Range should be at least 30 mg/dL")
 }
 
-func TestTimeToX(t *testing.T) {
+func TestTimestampToX(t *testing.T) {
 	now := time.Now()
-	startTime := now.Add(-3 * time.Hour)
-	endTime := now
+	startMs := now.Add(-3 * time.Hour).UnixMilli()
+	endMs := now.UnixMilli()
 	cfg := NewChartConfig(0, 0, 64, 16)
 
 	// Point at start should be at x=0
-	x := timeToX(startTime, startTime, endTime, cfg)
+	x := timestampToX(startMs, startMs, endMs, cfg)
 	assert.Equal(t, 0, x)
 
 	// Point at end should be at x=63
-	x = timeToX(endTime, startTime, endTime, cfg)
+	x = timestampToX(endMs, startMs, endMs, cfg)
 	assert.Equal(t, 63, x)
 
 	// Point in middle should be near x=32
-	midTime := now.Add(-90 * time.Minute)
-	x = timeToX(midTime, startTime, endTime, cfg)
+	midMs := now.Add(-90 * time.Minute).UnixMilli()
+	x = timestampToX(midMs, startMs, endMs, cfg)
 	assert.True(t, x > 25 && x < 40, "Mid point should be near center")
 }
 
@@ -208,8 +210,8 @@ func TestRenderChartWithTimeMarkers(t *testing.T) {
 	}
 
 	points := []ChartPoint{
-		{Timestamp: now.Add(-2 * time.Hour), Glucose: 100},
-		{Timestamp: now, Glucose: 120},
+		{Timestamp: now.Add(-2 * time.Hour).UnixMilli(), Value: 100},
+		{Timestamp: now.UnixMilli(), Value: 120},
 	}
 
 	// Should not panic
@@ -219,12 +221,12 @@ func TestRenderChartWithTimeMarkers(t *testing.T) {
 func TestChartPointCreation(t *testing.T) {
 	now := time.Now()
 	point := ChartPoint{
-		Timestamp: now,
-		Glucose:   125,
+		Timestamp: now.UnixMilli(),
+		Value:     125,
 	}
 
-	assert.Equal(t, now, point.Timestamp)
-	assert.Equal(t, 125, point.Glucose)
+	assert.Equal(t, now.UnixMilli(), point.Timestamp)
+	assert.Equal(t, 125, point.Value)
 }
 
 func TestChartConfigDefaults(t *testing.T) {
@@ -253,8 +255,8 @@ func TestRenderChartIntegration(t *testing.T) {
 	for i := 0; i < 36; i++ {
 		glucose := 100 + (i%6)*10 // Oscillates 100-150
 		points = append(points, ChartPoint{
-			Timestamp: now.Add(time.Duration(-i*5) * time.Minute),
-			Glucose:   glucose,
+			Timestamp: now.Add(time.Duration(-i*5) * time.Minute).UnixMilli(),
+			Value:     glucose,
 		})
 	}
 
@@ -274,4 +276,31 @@ func TestRenderChartIntegration(t *testing.T) {
 
 	// With 36 points over 64 pixels width, should have substantial coverage
 	assert.Greater(t, nonBlackPixels, 30, "Chart should have significant coverage")
+}
+
+func TestDrawChartSimple(t *testing.T) {
+	frame := domain.NewFrame(64, 64)
+	now := time.Now()
+
+	points := []ChartPoint{
+		{Timestamp: now.Add(-2 * time.Hour).UnixMilli(), Value: 100},
+		{Timestamp: now.Add(-1 * time.Hour).UnixMilli(), Value: 120},
+		{Timestamp: now.UnixMilli(), Value: 110},
+	}
+
+	// Test the simple DrawChart wrapper
+	DrawChart(frame, points, 0, 48, 64, 16, 3, 0)
+
+	// Should have some pixels drawn
+	hasPixel := false
+	for y := 48; y < 64; y++ {
+		for x := 0; x < 64; x++ {
+			p := frame.GetPixel(x, y)
+			if p != nil && (p.R > 0 || p.G > 0 || p.B > 0) {
+				hasPixel = true
+				break
+			}
+		}
+	}
+	assert.True(t, hasPixel, "DrawChart should render pixels")
 }

@@ -42,6 +42,17 @@ var (
 	ColorDaylight    = domain.NewRGB(100, 150, 200)
 	ColorNight       = domain.NewRGB(30, 30, 60)
 	ColorTemperature = domain.NewRGB(255, 128, 0)
+
+	// Blood sugar display colors (aliases for blood sugar renderer)
+	ColorUrgentLow = ColorGlucoseUrgentLow
+	ColorLow       = ColorGlucoseLow
+	ColorNormal    = ColorGlucoseNormal
+	ColorHigh      = ColorGlucoseHigh
+	ColorVeryHigh  = ColorGlucoseUrgentHigh
+	ColorStale     = ColorGray // Stale readings shown in gray
+
+	// Misc
+	ColorVeryDim = domain.NewRGB(40, 40, 40)
 )
 
 // GetGlucoseColor returns the appropriate color for a glucose value.

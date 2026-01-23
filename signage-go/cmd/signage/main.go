@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jwulff/signage-go/internal/bloodsugar"
+	"github.com/jwulff/signage-go/internal/dexcom"
 	"github.com/jwulff/signage-go/internal/domain"
 	"github.com/jwulff/signage-go/internal/pixoo"
 	"github.com/jwulff/signage-go/internal/render"
@@ -53,8 +55,14 @@ func showUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("  signage scan        - Scan for Pixoo devices on local network")
 	fmt.Println("  signage send <IP>   - Send a single frame to Pixoo")
-	fmt.Println("  signage watch <IP>  - Continuous clock mode (updates every minute)")
+	fmt.Println("  signage watch <IP>  - Continuous mode (updates every minute)")
 	fmt.Println("  signage preview     - Show ASCII preview of current frame")
+	fmt.Println()
+	fmt.Println("Environment variables:")
+	fmt.Println("  DEXCOM_USERNAME     - Dexcom Share username (optional)")
+	fmt.Println("  DEXCOM_PASSWORD     - Dexcom Share password (optional)")
+	fmt.Println()
+	fmt.Println("When Dexcom credentials are set, blood sugar data will be displayed.")
 }
 
 func scanForDevices() {
@@ -121,7 +129,7 @@ func sendToDevice(ip string) {
 }
 
 func watchMode(ip string) {
-	fmt.Printf("Starting clock mode on Pixoo at %s\n", ip)
+	fmt.Printf("Starting watch mode on Pixoo at %s\n", ip)
 	fmt.Println("Press Ctrl+C to stop")
 	fmt.Println()
 
@@ -136,23 +144,34 @@ func watchMode(ip string) {
 	}
 	cancel()
 
+	// Check for Dexcom credentials
+	dexcomUsername := os.Getenv("DEXCOM_USERNAME")
+	dexcomPassword := os.Getenv("DEXCOM_PASSWORD")
+	var dexcomClient *dexcom.Client
+	if dexcomUsername != "" && dexcomPassword != "" {
+		dexcomClient = dexcom.NewClient(dexcomUsername, dexcomPassword)
+		fmt.Println("Dexcom credentials found - blood sugar enabled")
+	} else {
+		fmt.Println("No Dexcom credentials - clock only mode")
+	}
+
 	// Handle Ctrl+C gracefully
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	// Send initial frame immediately
-	sendClockFrame(client)
+	sendFrame(client, dexcomClient)
 
 	// Create ticker that fires at the start of each minute
 	ticker := createMinuteTicker()
 	defer ticker.Stop()
 
-	fmt.Println("Clock running. Updates every minute.")
+	fmt.Println("Running. Updates every minute.")
 
 	for {
 		select {
 		case <-ticker.C:
-			sendClockFrame(client)
+			sendFrame(client, dexcomClient)
 		case <-sigChan:
 			fmt.Println("\nStopping...")
 			return
@@ -160,19 +179,88 @@ func watchMode(ip string) {
 	}
 }
 
-func sendClockFrame(client *pixoo.Client) {
+func sendFrame(pixooClient *pixoo.Client, dexcomClient *dexcom.Client) {
 	now := time.Now()
-	frame := render.ComposeClockOnlyFrame(now)
+	var frame *domain.Frame
+
+	if dexcomClient != nil {
+		// Fetch blood sugar data
+		bgData, history := fetchBloodSugar(dexcomClient)
+
+		data := render.ComposerData{
+			Time:              now,
+			BloodSugar:        bgData,
+			BloodSugarHistory: history,
+		}
+		frame = render.ComposeFrame(data)
+	} else {
+		// Clock only
+		frame = render.ComposeClockOnlyFrame(now)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := client.SendFrame(ctx, frame)
+	err := pixooClient.SendFrame(ctx, frame)
 	if err != nil {
 		fmt.Printf("[%s] Error: %v\n", now.Format("15:04:05"), err)
 	} else {
 		fmt.Printf("[%s] Frame sent\n", now.Format("15:04:05"))
 	}
+}
+
+func fetchBloodSugar(client *dexcom.Client) (*bloodsugar.Data, []bloodsugar.HistoryPoint) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Fetch latest 2 readings for delta calculation
+	readings, err := client.FetchReadings(ctx, 2, 30)
+	if err != nil {
+		fmt.Printf("  Warning: Could not fetch blood sugar: %v\n", err)
+		return nil, nil
+	}
+
+	if len(readings) == 0 {
+		fmt.Println("  Warning: No blood sugar readings available")
+		return nil, nil
+	}
+
+	latest := readings[0]
+	timestamp := dexcom.ParseTimestamp(latest.WT)
+
+	// Calculate delta
+	delta := 0
+	if len(readings) > 1 {
+		delta = latest.Value - readings[1].Value
+	}
+
+	data := &bloodsugar.Data{
+		Glucose:     latest.Value,
+		GlucoseMmol: bloodsugar.MgdlToMmol(latest.Value),
+		Trend:       latest.Trend,
+		TrendArrow:  bloodsugar.MapTrendArrow(latest.Trend),
+		Delta:       delta,
+		Timestamp:   timestamp,
+		IsStale:     bloodsugar.IsStaleReading(timestamp),
+		RangeStatus: bloodsugar.ClassifyRange(latest.Value),
+	}
+
+	// Fetch history for chart (24 hours)
+	historyReadings, err := client.FetchReadings(ctx, 288, 1440) // ~5 min intervals for 24h
+	if err != nil {
+		fmt.Printf("  Warning: Could not fetch history: %v\n", err)
+		return data, nil
+	}
+
+	history := make([]bloodsugar.HistoryPoint, len(historyReadings))
+	for i, r := range historyReadings {
+		history[i] = bloodsugar.HistoryPoint{
+			Timestamp: dexcom.ParseTimestamp(r.WT),
+			Value:     r.Value,
+		}
+	}
+
+	return data, history
 }
 
 // createMinuteTicker creates a ticker that fires at the start of each minute.

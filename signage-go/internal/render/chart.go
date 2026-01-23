@@ -25,8 +25,8 @@ const (
 
 // ChartPoint represents a single point on the chart.
 type ChartPoint struct {
-	Timestamp time.Time
-	Glucose   int
+	Timestamp int64 // Unix milliseconds
+	Value     int   // Glucose in mg/dL
 }
 
 // ChartConfig configures the chart rendering.
@@ -71,8 +71,22 @@ func (c *ChartConfig) ApplyDefaults() {
 // SortChartPoints sorts points by timestamp ascending.
 func SortChartPoints(points []ChartPoint) {
 	sort.Slice(points, func(i, j int) bool {
-		return points[i].Timestamp.Before(points[j].Timestamp)
+		return points[i].Timestamp < points[j].Timestamp
 	})
+}
+
+// DrawChart is a simple wrapper for rendering a chart with default settings.
+// hours is the time range to display, offsetHours shifts the end time back.
+func DrawChart(frame *domain.Frame, points []ChartPoint, x, y, width, height, hours, offsetHours int) {
+	cfg := ChartConfig{
+		X:           x,
+		Y:           y,
+		Width:       width,
+		Height:      height,
+		Duration:    time.Duration(hours) * time.Hour,
+		OffsetHours: offsetHours,
+	}
+	RenderChart(frame, points, cfg)
 }
 
 // RenderChart renders a sparkline chart of blood sugar history.
@@ -87,10 +101,13 @@ func RenderChart(frame *domain.Frame, points []ChartPoint, cfg ChartConfig) {
 	endTime := now.Add(-time.Duration(cfg.OffsetHours) * time.Hour)
 	startTime := endTime.Add(-cfg.Duration)
 
+	startMs := startTime.UnixMilli()
+	endMs := endTime.UnixMilli()
+
 	// Filter points to time range
 	var visiblePoints []ChartPoint
 	for _, p := range points {
-		if !p.Timestamp.Before(startTime) && !p.Timestamp.After(endTime) {
+		if p.Timestamp >= startMs && p.Timestamp <= endMs {
 			visiblePoints = append(visiblePoints, p)
 		}
 	}
@@ -108,8 +125,9 @@ func RenderChart(frame *domain.Frame, points []ChartPoint, cfg ChartConfig) {
 
 	// Draw time markers first (so chart line appears on top)
 	for _, marker := range cfg.TimeMarkers {
-		if !marker.Before(startTime) && !marker.After(endTime) {
-			markerX := timeToX(marker, startTime, endTime, cfg)
+		markerMs := marker.UnixMilli()
+		if markerMs >= startMs && markerMs <= endMs {
+			markerX := timestampToX(markerMs, startMs, endMs, cfg)
 			if markerX >= cfg.X && markerX < cfg.X+cfg.Width {
 				color := getMarkerColor(marker, cfg.Timezone)
 				for py := cfg.Y; py < cfg.Y+cfg.Height; py++ {
@@ -124,8 +142,8 @@ func RenderChart(frame *domain.Frame, points []ChartPoint, cfg ChartConfig) {
 	hasPrev := false
 
 	for _, point := range visiblePoints {
-		px := timeToX(point.Timestamp, startTime, endTime, cfg)
-		py := glucoseToY(point.Glucose, minGlucose, maxGlucose, cfg)
+		px := timestampToX(point.Timestamp, startMs, endMs, cfg)
+		py := glucoseToY(point.Value, minGlucose, maxGlucose, cfg)
 
 		// Clamp to chart bounds
 		if px < cfg.X || px >= cfg.X+cfg.Width {
@@ -156,14 +174,14 @@ func calculateDataRange(points []ChartPoint, padding int) (int, int) {
 		return 70, 180
 	}
 
-	dataMin := points[0].Glucose
-	dataMax := points[0].Glucose
+	dataMin := points[0].Value
+	dataMax := points[0].Value
 	for _, p := range points[1:] {
-		if p.Glucose < dataMin {
-			dataMin = p.Glucose
+		if p.Value < dataMin {
+			dataMin = p.Value
 		}
-		if p.Glucose > dataMax {
-			dataMax = p.Glucose
+		if p.Value > dataMax {
+			dataMax = p.Value
 		}
 	}
 
@@ -189,13 +207,13 @@ func calculateDataRange(points []ChartPoint, padding int) (int, int) {
 	return minGlucose, maxGlucose
 }
 
-// timeToX converts a timestamp to X pixel position.
-func timeToX(t, startTime, endTime time.Time, cfg ChartConfig) int {
-	timeRange := endTime.Sub(startTime)
+// timestampToX converts a Unix millisecond timestamp to X pixel position.
+func timestampToX(ts, startMs, endMs int64, cfg ChartConfig) int {
+	timeRange := endMs - startMs
 	if timeRange == 0 {
 		return cfg.X
 	}
-	offset := t.Sub(startTime)
+	offset := ts - startMs
 	return cfg.X + int(math.Round(float64(offset)/float64(timeRange)*float64(cfg.Width-1)))
 }
 
