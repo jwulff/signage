@@ -30,9 +30,10 @@ export const reconcileCron = new sst.aws.Cron("ConnectionReconcile", {
   },
 });
 
-// Fetch Oura readiness and sleep scores daily at 8 AM Pacific (3 PM UTC)
+// Fetch Oura readiness and sleep scores hourly from 7 AM - 12 PM Pacific
+// Runs every hour (14:00-20:00 UTC) and skips users who already have today's data
 export const ouraReadinessCron = new sst.aws.Cron("OuraReadinessFetch", {
-  schedule: "cron(0 15 * * ? *)",
+  schedule: "cron(0 14-20 * * ? *)",
   function: {
     handler: "packages/functions/src/oura/fetch-readiness.scheduled",
     link: [table, ouraClientId, ouraClientSecret],

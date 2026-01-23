@@ -1,13 +1,14 @@
 /**
  * Oura Data Fetch Handler
- * Daily cron job that fetches readiness and sleep scores for all linked users
+ * Hourly cron job (7 AM - 12 PM Pacific) that fetches readiness and sleep scores.
+ * Skips users who already have complete data for today, allowing retries until data is available.
  */
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { ScheduledHandler } from "aws-lambda";
-import { fetchAndCacheOuraData, getValidAccessToken } from "./client.js";
+import { fetchAndCacheOuraData, getValidAccessToken, getCachedReadiness, getCachedSleep } from "./client.js";
 import type { OuraUsersListItem, OuraUserItem } from "./types.js";
 
 const ddbClient = new DynamoDBClient({});
@@ -76,10 +77,32 @@ async function markNeedsReauth(userId: string): Promise<void> {
 }
 
 /**
+ * Get today's date in Pacific timezone (YYYY-MM-DD format)
+ */
+function getTodayPacific(): string {
+  const now = new Date();
+  const pacificDate = new Date(now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
+  return pacificDate.toISOString().split("T")[0];
+}
+
+/**
+ * Check if a user already has both readiness and sleep data for today
+ */
+async function hasCompleteDataForToday(userId: string, today: string): Promise<boolean> {
+  const [readiness, sleep] = await Promise.all([
+    getCachedReadiness(userId, today),
+    getCachedSleep(userId, today),
+  ]);
+  return readiness !== null && sleep !== null;
+}
+
+/**
  * Scheduled handler - fetches readiness and sleep for all users
+ * Runs hourly and skips users who already have complete data for today
  */
 export const scheduled: ScheduledHandler = async () => {
-  console.log("Starting Oura data fetch");
+  const today = getTodayPacific();
+  console.log(`Starting Oura data fetch for ${today}`);
 
   const userIds = await getActiveUsers();
   console.log(`Found ${userIds.length} active users`);
@@ -95,6 +118,7 @@ export const scheduled: ScheduledHandler = async () => {
     noData: 0,
     failed: 0,
     needsReauth: 0,
+    skipped: 0,
   };
 
   for (const userId of userIds) {
@@ -102,6 +126,13 @@ export const scheduled: ScheduledHandler = async () => {
       // Get user profile for logging
       const profile = await getUserProfile(userId);
       const name = profile?.displayName || "Unknown";
+
+      // Check if we already have complete data for today (skip if so)
+      if (await hasCompleteDataForToday(userId, today)) {
+        console.log(`Skipping ${name} - already has complete data for ${today}`);
+        results.skipped++;
+        continue;
+      }
 
       // Check if user has valid token
       const token = await getValidAccessToken(userId);
