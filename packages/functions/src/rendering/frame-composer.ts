@@ -28,6 +28,7 @@ import {
   renderReadinessRegion,
   type ReadinessDisplayData,
 } from "./readiness-renderer.js";
+import type { TreatmentDisplayData } from "../glooko/types.js";
 
 export interface CompositorData {
   bloodSugar: BloodSugarDisplayData | null;
@@ -35,6 +36,7 @@ export interface CompositorData {
   timezone?: string;
   weather?: ClockWeatherData;
   readiness?: ReadinessDisplayData[];
+  treatments?: TreatmentDisplayData | null;
 }
 
 /**
@@ -71,8 +73,8 @@ export function generateCompositeFrame(data: CompositorData): Frame {
     }
   }
 
-  // Render blood sugar in bottom region (with optional history chart)
-  if (!safeRender("bloodSugar", () => renderBloodSugarRegion(frame, data.bloodSugar, data.bloodSugarHistory, data.timezone))) {
+  // Render blood sugar in bottom region (with optional history chart and treatments)
+  if (!safeRender("bloodSugar", () => renderBloodSugarRegion(frame, data.bloodSugar, data.bloodSugarHistory, data.timezone, data.treatments))) {
     errors.push("bloodSugar");
   }
 

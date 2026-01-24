@@ -18,6 +18,8 @@
     "@aws-sdk/client-dynamodb": "^3.700.0",
     "@aws-sdk/lib-dynamodb": "^3.700.0",
     "@signage/core": "workspace:*",
+    "@sparticuz/chromium": "^131.0.0",
+    "puppeteer-core": "^23.0.0",
     "sst": "^3.5.0"
   },
   "devDependencies": {
