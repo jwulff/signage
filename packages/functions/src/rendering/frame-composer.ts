@@ -38,21 +38,47 @@ export interface CompositorData {
 }
 
 /**
+ * Safely render a widget, catching and logging any errors.
+ * Returns true if rendering succeeded, false if it failed.
+ */
+function safeRender(widgetName: string, renderFn: () => void): boolean {
+  try {
+    renderFn();
+    return true;
+  } catch (error) {
+    console.error(`[${widgetName}] Render failed:`, error);
+    return false;
+  }
+}
+
+/**
  * Generate the composite frame with all widgets
+ * Uses graceful degradation - if one widget fails, others continue rendering
  */
 export function generateCompositeFrame(data: CompositorData): Frame {
   const frame = createSolidFrame(DISPLAY_WIDTH, DISPLAY_HEIGHT, COLORS.bg);
+  const errors: string[] = [];
 
   // Render clock (full width) - includes time, date, and weather band
-  renderClockRegion(frame, data.timezone, data.weather);
+  if (!safeRender("clock", () => renderClockRegion(frame, data.timezone, data.weather))) {
+    errors.push("clock");
+  }
 
   // Render readiness scores horizontally below weather band (if available)
   if (data.readiness && data.readiness.length > 0) {
-    renderReadinessRegion(frame, data.readiness);
+    if (!safeRender("readiness", () => renderReadinessRegion(frame, data.readiness!))) {
+      errors.push("readiness");
+    }
   }
 
   // Render blood sugar in bottom region (with optional history chart)
-  renderBloodSugarRegion(frame, data.bloodSugar, data.bloodSugarHistory, data.timezone);
+  if (!safeRender("bloodSugar", () => renderBloodSugarRegion(frame, data.bloodSugar, data.bloodSugarHistory, data.timezone))) {
+    errors.push("bloodSugar");
+  }
+
+  if (errors.length > 0) {
+    console.warn(`Frame rendered with ${errors.length} widget error(s): ${errors.join(", ")}`);
+  }
 
   return frame;
 }
