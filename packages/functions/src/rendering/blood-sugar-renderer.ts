@@ -211,19 +211,7 @@ export function calculateTIR(points: ChartPoint[]): number | null {
     (p) => p.glucose >= THRESHOLDS.LOW && p.glucose <= THRESHOLDS.HIGH
   ).length;
 
-  const tir = Math.round((inRange / recentPoints.length) * 100);
-
-  // Debug logging
-  const sortedPoints = [...recentPoints].sort((a, b) => a.timestamp - b.timestamp);
-  const oldest = new Date(sortedPoints[0].timestamp);
-  const newest = new Date(sortedPoints[sortedPoints.length - 1].timestamp);
-  const hoursSpan = (newest.getTime() - oldest.getTime()) / (1000 * 60 * 60);
-  console.warn(
-    `TIR: ${inRange}/${recentPoints.length} readings in range (${tir}%), ` +
-    `span: ${hoursSpan.toFixed(1)}h, oldest: ${oldest.toISOString()}, newest: ${newest.toISOString()}`
-  );
-
-  return tir;
+  return Math.round((inRange / recentPoints.length) * 100);
 }
 
 /**
