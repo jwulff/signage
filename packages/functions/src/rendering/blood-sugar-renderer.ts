@@ -4,7 +4,7 @@
 
 import type { Frame, RGB } from "@signage/core";
 import { setPixel } from "@signage/core";
-import { drawText, drawTinyText, measureText, DISPLAY_WIDTH } from "./text.js";
+import { drawText, drawTinyText, measureText, measureTinyText, DISPLAY_WIDTH } from "./text.js";
 import { COLORS, type RangeStatus } from "./colors.js";
 import { renderChart, type ChartPoint } from "./chart-renderer.js";
 
@@ -192,6 +192,29 @@ export interface BloodSugarHistory {
 }
 
 /**
+ * Calculate Time in Range (TIR) percentage over the last 24 hours
+ * TIR is the percentage of glucose readings within target range (70-180 mg/dL)
+ */
+export function calculateTIR(points: ChartPoint[]): number | null {
+  const now = Date.now();
+  const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
+
+  // Filter to last 24 hours
+  const recentPoints = points.filter((p) => p.timestamp >= twentyFourHoursAgo);
+
+  if (recentPoints.length === 0) {
+    return null;
+  }
+
+  // Count points in range (70-180 mg/dL)
+  const inRange = recentPoints.filter(
+    (p) => p.glucose >= THRESHOLDS.LOW && p.glucose <= THRESHOLDS.HIGH
+  ).length;
+
+  return Math.round((inRange / recentPoints.length) * 100);
+}
+
+/**
  * Calculate time markers for midnight, 6am, noon, 6pm in the last 24 hours
  */
 function calculateTimeMarkers(timezone?: string): number[] {
@@ -347,6 +370,14 @@ export function renderBloodSugarRegion(
       timezone,
     });
     drawTinyText(frame, `${CHART_RIGHT_HOURS}h`, rightX, legendY, COLORS.veryDim);
+
+    // TIR percentage in bottom right corner
+    const tir = calculateTIR(history.points);
+    if (tir !== null) {
+      const tirStr = `${tir}%`;
+      const tirX = CHART_X + CHART_WIDTH - measureTinyText(tirStr);
+      drawTinyText(frame, tirStr, tirX, legendY, COLORS.veryDim);
+    }
   }
 }
 
