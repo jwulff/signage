@@ -9,6 +9,12 @@ import type {
   WidgetHistoryConfig,
   TimeSeriesPoint,
 } from "../types";
+import {
+  getSessionId,
+  fetchGlucoseReadings,
+  parseDexcomTimestamp,
+  type DexcomReading,
+} from "../../dexcom/client.js";
 
 export interface BloodSugarData {
   /** Glucose value in mg/dL */
@@ -27,19 +33,6 @@ export interface BloodSugarData {
   isStale: boolean;
   /** Range classification for display coloring */
   rangeStatus: "urgentLow" | "low" | "normal" | "high" | "veryHigh";
-}
-
-/** Dexcom Share API endpoints (US region) */
-const DEXCOM_BASE_URL = "https://share2.dexcom.com/ShareWebServices/Services";
-const DEXCOM_APP_ID = "d89443d2-327c-4a6f-89e5-496bbb0317db";
-
-/** Dexcom API response types */
-interface DexcomReading {
-  WT: string; // Timestamp like "Date(1234567890000)"
-  ST: string; // System time
-  DT: string; // Display time
-  Value: number; // Glucose in mg/dL
-  Trend: string; // Trend direction
 }
 
 /** Stale threshold: 10 minutes in milliseconds */
@@ -89,95 +82,6 @@ export function mapTrendArrow(trend: string): string {
  */
 export function isStale(timestamp: number, now: number = Date.now()): boolean {
   return now - timestamp >= STALE_THRESHOLD_MS;
-}
-
-/**
- * Authenticate with Dexcom Share and get a session ID.
- */
-async function getSessionId(username: string, password: string): Promise<string> {
-  console.log(`Authenticating with username: ${username.slice(0, 3)}***, password starts with: ${password.slice(0, 2)}*** (len=${password.length})`);
-
-  // Step 1: Get account ID
-  const authResponse = await fetch(
-    `${DEXCOM_BASE_URL}/General/AuthenticatePublisherAccount`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        accountName: username,
-        password: password,
-        applicationId: DEXCOM_APP_ID,
-      }),
-    }
-  );
-
-  if (!authResponse.ok) {
-    const errorText = await authResponse.text();
-    console.error(`Dexcom auth error response: ${errorText}`);
-    throw new Error(`Dexcom auth failed: ${authResponse.status}`);
-  }
-
-  const accountId = await authResponse.json();
-
-  // Step 2: Get session ID
-  const sessionResponse = await fetch(
-    `${DEXCOM_BASE_URL}/General/LoginPublisherAccountById`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        accountId: accountId,
-        password: password,
-        applicationId: DEXCOM_APP_ID,
-      }),
-    }
-  );
-
-  if (!sessionResponse.ok) {
-    throw new Error(`Dexcom login failed: ${sessionResponse.status}`);
-  }
-
-  return sessionResponse.json() as Promise<string>;
-}
-
-/**
- * Fetch glucose readings from Dexcom Share.
- */
-async function fetchGlucoseReadings(
-  sessionId: string,
-  maxCount: number = 2,
-  minutes: number = 30
-): Promise<DexcomReading[]> {
-  const response = await fetch(
-    `${DEXCOM_BASE_URL}/Publisher/ReadPublisherLatestGlucoseValues?sessionId=${sessionId}&minutes=${minutes}&maxCount=${maxCount}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`Dexcom fetch failed: ${response.status}`);
-  }
-
-  return response.json() as Promise<DexcomReading[]>;
-}
-
-/**
- * Parse Dexcom timestamp format "Date(1234567890000)" to milliseconds.
- */
-function parseDexcomTimestamp(wt: string): number {
-  const match = wt.match(/Date\((\d+)\)/);
-  return match ? parseInt(match[1], 10) : 0;
 }
 
 /**
@@ -231,13 +135,13 @@ export const bloodSugarUpdater: WidgetUpdaterWithHistory = {
   historyConfig: HISTORY_CONFIG,
 
   async update(): Promise<BloodSugarData> {
-    const sessionId = await getSessionId(
-      Resource.DexcomUsername.value,
-      Resource.DexcomPassword.value
-    );
+    const sessionId = await getSessionId({
+      username: Resource.DexcomUsername.value,
+      password: Resource.DexcomPassword.value,
+    });
 
     // Fetch latest 2 readings for delta calculation
-    const readings = await fetchGlucoseReadings(sessionId, 2, 30);
+    const readings = await fetchGlucoseReadings(sessionId, 30, 2);
 
     if (!readings || readings.length === 0) {
       throw new Error("No glucose readings available");
@@ -265,10 +169,10 @@ export const bloodSugarUpdater: WidgetUpdaterWithHistory = {
   },
 
   async fetchHistory(since: number, until: number): Promise<TimeSeriesPoint[]> {
-    const sessionId = await getSessionId(
-      Resource.DexcomUsername.value,
-      Resource.DexcomPassword.value
-    );
+    const sessionId = await getSessionId({
+      username: Resource.DexcomUsername.value,
+      password: Resource.DexcomPassword.value,
+    });
 
     // Calculate minutes from since to until
     const minutes = Math.ceil((until - since) / 60000);
@@ -282,7 +186,7 @@ export const bloodSugarUpdater: WidgetUpdaterWithHistory = {
       `Fetching blood sugar history: ${clampedMinutes} minutes, maxCount=${maxCount}`
     );
 
-    const readings = await fetchGlucoseReadings(sessionId, maxCount, clampedMinutes);
+    const readings = await fetchGlucoseReadings(sessionId, clampedMinutes, maxCount);
 
     if (!readings || readings.length === 0) {
       return [];

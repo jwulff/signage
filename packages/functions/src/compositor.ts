@@ -27,98 +27,23 @@ import {
   type ReadinessDisplayData,
 } from "./rendering/index.js";
 import type { OuraUsersListItem, OuraUserItem, OuraReadinessItem, OuraSleepItem } from "./oura/types.js";
+import {
+  getSessionId,
+  fetchGlucoseReadings,
+  parseDexcomTimestamp,
+} from "./dexcom/client.js";
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
 
-// Dexcom API constants
-const DEXCOM_BASE_URL = "https://share2.dexcom.com/ShareWebServices/Services";
-const DEXCOM_APP_ID = "d89443d2-327c-4a6f-89e5-496bbb0317db";
-
 // Stale threshold: 10 minutes
 const STALE_THRESHOLD_MS = 10 * 60 * 1000;
-
-interface DexcomReading {
-  WT: string;
-  Value: number;
-  Trend: string;
-}
-
-/**
- * Parse Dexcom timestamp format "Date(1234567890000)" to milliseconds
- */
-function parseDexcomTimestamp(wt: string): number {
-  const match = wt.match(/Date\((\d+)\)/);
-  return match ? parseInt(match[1], 10) : 0;
-}
 
 /**
  * Check if timestamp is stale (>10 minutes old)
  */
 function isStale(timestamp: number): boolean {
   return Date.now() - timestamp >= STALE_THRESHOLD_MS;
-}
-
-/**
- * Authenticate with Dexcom and get session ID
- */
-async function getSessionId(username: string, password: string): Promise<string> {
-  const authResponse = await fetch(
-    `${DEXCOM_BASE_URL}/General/AuthenticatePublisherAccount`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        accountName: username,
-        password: password,
-        applicationId: DEXCOM_APP_ID,
-      }),
-    }
-  );
-
-  if (!authResponse.ok) {
-    throw new Error(`Dexcom auth failed: ${authResponse.status}`);
-  }
-
-  const accountId = await authResponse.json() as string;
-
-  const sessionResponse = await fetch(
-    `${DEXCOM_BASE_URL}/General/LoginPublisherAccountById`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        accountId,
-        password,
-        applicationId: DEXCOM_APP_ID,
-      }),
-    }
-  );
-
-  if (!sessionResponse.ok) {
-    throw new Error(`Dexcom login failed: ${sessionResponse.status}`);
-  }
-
-  return sessionResponse.json() as Promise<string>;
-}
-
-/**
- * Fetch glucose readings from Dexcom
- */
-async function fetchGlucoseReadings(sessionId: string, minutes = 30, maxCount = 2): Promise<DexcomReading[]> {
-  const response = await fetch(
-    `${DEXCOM_BASE_URL}/Publisher/ReadPublisherLatestGlucoseValues?sessionId=${sessionId}&minutes=${minutes}&maxCount=${maxCount}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`Dexcom fetch failed: ${response.status}`);
-  }
-
-  return response.json() as Promise<DexcomReading[]>;
 }
 
 /**
@@ -137,10 +62,10 @@ async function fetchBloodSugarData(): Promise<{
   history: ChartPoint[];
 }> {
   try {
-    const sessionId = await getSessionId(
-      Resource.DexcomUsername.value,
-      Resource.DexcomPassword.value
-    );
+    const sessionId = await getSessionId({
+      username: Resource.DexcomUsername.value,
+      password: Resource.DexcomPassword.value,
+    });
 
     // Fetch current reading (last 30 min, 2 values for delta)
     const readings = await fetchGlucoseReadings(sessionId, 30, 2);
