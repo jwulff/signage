@@ -50,6 +50,10 @@ export async function getSessionId(
 ): Promise<string> {
   const { username, password } = credentials;
 
+  console.log(
+    `Authenticating with username: ${username.slice(0, 3)}***, password starts with: ${password.slice(0, 2)}*** (len=${password.length})`
+  );
+
   // Step 1: Get account ID
   const authResponse = await fetch(
     `${DEXCOM_BASE_URL}/General/AuthenticatePublisherAccount`,
@@ -68,6 +72,10 @@ export async function getSessionId(
   );
 
   if (!authResponse.ok) {
+    const errorText = await authResponse.text().catch(() => "");
+    if (errorText) {
+      console.error("Dexcom auth error response: " + errorText);
+    }
     throw new Error(`Dexcom auth failed: ${authResponse.status}`);
   }
 

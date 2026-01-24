@@ -118,6 +118,7 @@ describe("getSessionId", () => {
     fetchMock.mockResolvedValueOnce({
       ok: false,
       status: 401,
+      text: () => Promise.resolve("Invalid credentials"),
     });
 
     await expect(getSessionId(credentials)).rejects.toThrow(
