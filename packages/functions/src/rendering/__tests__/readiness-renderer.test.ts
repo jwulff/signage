@@ -230,7 +230,6 @@ describe("renderReadinessRegion", () => {
     }
 
     // Content should be roughly centered
-    const contentWidth = rightmost - leftmost;
     const leftMargin = leftmost;
     const rightMargin = 63 - rightmost;
     // Margins should be within 5 pixels of each other (roughly centered)
