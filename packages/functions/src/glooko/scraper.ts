@@ -223,7 +223,7 @@ export async function loginToGlooko(
 
   // Also try clicking by evaluating in page context
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await page.evaluate((() => {
+  await page.evaluate(() => {
     // This runs in browser context where DOM types exist
     const buttons = Array.from(document.querySelectorAll("button")) as any[];
     const allowAll = buttons.find(
@@ -234,7 +234,7 @@ export async function loginToGlooko(
     if (allowAll) {
       allowAll.click();
     }
-  }) as () => void);
+  });
   await new Promise(r => setTimeout(r, 500));
 
   // Try multiple selectors for email input (Glooko may have different forms)
@@ -669,7 +669,7 @@ export async function exportCsv(page: Page, days: number = 1): Promise<Extracted
       }
     }
 
-    if (!csvFiles!) {
+    if (!csvFiles) {
       if (DEBUG_SCREENSHOTS) {
         await page.screenshot({ path: "/tmp/glooko-export-failed.png", fullPage: true });
         console.log("Debug screenshot saved to /tmp/glooko-export-failed.png");
