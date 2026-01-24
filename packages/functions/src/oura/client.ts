@@ -15,6 +15,9 @@ import type {
   OuraSleepApiResponse,
   OuraTokenRefreshResponse,
   OuraUserInfoResponse,
+  OuraUser,
+  OuraUserItem,
+  OuraUsersListItem,
   ReadinessContributors,
   SleepContributors,
 } from "./types.js";
@@ -30,6 +33,57 @@ const READINESS_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
+
+/**
+ * Get list of active Oura users
+ */
+export async function getOuraUsers(): Promise<string[]> {
+  try {
+    const result = await ddb.send(
+      new GetCommand({
+        TableName: Resource.SignageTable.name,
+        Key: { pk: "OURA_USERS", sk: "LIST" },
+      })
+    );
+
+    if (result.Item) {
+      const item = result.Item as OuraUsersListItem;
+      return item.userIds || [];
+    }
+  } catch (error) {
+    console.error("Failed to get Oura users:", error);
+  }
+  return [];
+}
+
+/**
+ * Get user profile from DynamoDB
+ */
+export async function getOuraUserProfile(userId: string): Promise<OuraUser | null> {
+  try {
+    const result = await ddb.send(
+      new GetCommand({
+        TableName: Resource.SignageTable.name,
+        Key: { pk: `OURA_USER#${userId}`, sk: "PROFILE" },
+      })
+    );
+
+    if (result.Item) {
+      const item = result.Item as OuraUserItem;
+      return {
+        userId: item.userId,
+        displayName: item.displayName,
+        initial: item.initial,
+        ouraUserId: item.ouraUserId,
+        createdAt: item.createdAt,
+        needsReauth: item.needsReauth,
+      };
+    }
+  } catch (error) {
+    console.error(`Failed to get user profile for ${userId}:`, error);
+  }
+  return null;
+}
 
 /**
  * Get tokens from DynamoDB for a user

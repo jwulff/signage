@@ -26,7 +26,12 @@ import {
   type ClockWeatherData,
   type ReadinessDisplayData,
 } from "./rendering/index.js";
-import type { OuraUsersListItem, OuraUserItem, OuraReadinessItem, OuraSleepItem } from "./oura/types.js";
+import {
+  getOuraUsers,
+  getOuraUserProfile,
+  getCachedReadiness,
+  getCachedSleep,
+} from "./oura/client.js";
 import {
   getSessionId,
   fetchGlucoseReadings,
@@ -259,91 +264,6 @@ async function fetchWeatherData(): Promise<ClockWeatherData | null> {
 
 // Stale readiness threshold: 24 hours
 const READINESS_STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
-
-/**
- * Get list of active Oura users
- */
-async function getOuraUsers(): Promise<string[]> {
-  try {
-    const result = await ddb.send(
-      new GetCommand({
-        TableName: Resource.SignageTable.name,
-        Key: { pk: "OURA_USERS", sk: "LIST" },
-      })
-    );
-
-    if (result.Item) {
-      const item = result.Item as OuraUsersListItem;
-      return item.userIds || [];
-    }
-  } catch (error) {
-    console.error("Failed to get Oura users:", error);
-  }
-  return [];
-}
-
-/**
- * Get user profile
- */
-async function getOuraUserProfile(userId: string): Promise<OuraUserItem | null> {
-  try {
-    const result = await ddb.send(
-      new GetCommand({
-        TableName: Resource.SignageTable.name,
-        Key: { pk: `OURA_USER#${userId}`, sk: "PROFILE" },
-      })
-    );
-
-    if (result.Item) {
-      return result.Item as OuraUserItem;
-    }
-  } catch (error) {
-    console.error(`Failed to get user profile for ${userId}:`, error);
-  }
-  return null;
-}
-
-/**
- * Get cached readiness for a user
- */
-async function getCachedReadiness(userId: string, date: string): Promise<OuraReadinessItem | null> {
-  try {
-    const result = await ddb.send(
-      new GetCommand({
-        TableName: Resource.SignageTable.name,
-        Key: { pk: `OURA_USER#${userId}`, sk: `READINESS#${date}` },
-      })
-    );
-
-    if (result.Item) {
-      return result.Item as OuraReadinessItem;
-    }
-  } catch (error) {
-    console.error(`Failed to get cached readiness for ${userId}:`, error);
-  }
-  return null;
-}
-
-/**
- * Get cached sleep for a user
- */
-async function getCachedSleep(userId: string, date: string): Promise<OuraSleepItem | null> {
-  try {
-    const result = await ddb.send(
-      new GetCommand({
-        TableName: Resource.SignageTable.name,
-        Key: { pk: `OURA_USER#${userId}`, sk: `SLEEP#${date}` },
-      })
-    );
-
-    if (result.Item) {
-      return result.Item as OuraSleepItem;
-    }
-  } catch (error) {
-    console.error(`Failed to get cached sleep for ${userId}:`, error);
-  }
-  return null;
-}
 
 /**
  * Fetch readiness and sleep data for all linked Oura users
