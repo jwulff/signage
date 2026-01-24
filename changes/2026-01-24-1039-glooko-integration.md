@@ -24,9 +24,17 @@ The display should show insulin and carbohydrate treatment data alongside blood 
 
 - **Lambda memory**: 1024MB for Puppeteer (Chromium requires significant memory), 120s timeout for login + export flow.
 
+## Local Testing Results
+
+Tested with real Glooko account (2026-01-24):
+- **Login**: Successfully authenticates via cookie consent banner handling
+- **Export**: Modal-based CSV export triggers ZIP download
+- **Data**: 285 treatments parsed (178 insulin, 107 carbs) from 2-week export
+- **4-hour totals**: 7.0u insulin, 40g carbs (matches manual verification)
+
 ## What's Next
 
-- Test with actual Glooko account once secrets are configured
+- Deploy to AWS and configure secrets via `sst secret set`
 - Monitor for Glooko UI changes that could break selectors
 - Consider adding retry logic for transient scraping failures
 - Potentially add pump basal rate data if available in CSV export
