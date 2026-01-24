@@ -1171,8 +1171,18 @@ interface GlookoResource {
   SignageTable: { name: string };
 }
 
+// Default user ID for single-user system
+const DEFAULT_USER_ID = "primary";
+
 /**
  * Lambda handler for scheduled scraping
+ *
+ * This handler:
+ * 1. Scrapes Glooko for CSV export data
+ * 2. Parses all CSV files into strongly-typed records
+ * 3. Stores records idempotently in DynamoDB (no duplicates)
+ * 4. Stores import metadata for tracking
+ * 5. Maintains legacy treatment summary for compositor compatibility
  */
 export async function handler(): Promise<{ statusCode: number; body: string }> {
   // Get credentials from SST secrets
@@ -1190,57 +1200,143 @@ export async function handler(): Promise<{ statusCode: number; body: string }> {
     };
   }
 
-  const result = await scrapeGlooko({ email, password, exportDays: 1 });
+  const tableName = resource.SignageTable.name;
+
+  // Run the scraper to get CSV files
+  const result = await scrapeGlooko({ email, password, exportDays: 14 });
 
   if (result.success) {
-    // Store treatments in DynamoDB
-    const { DynamoDBClient } = await import("@aws-sdk/client-dynamodb");
-    const { PutCommand, DynamoDBDocumentClient } = await import(
-      "@aws-sdk/lib-dynamodb"
-    );
+    // Import the new storage and parser modules
+    const { parseGlookoExport } = await import("./csv-parser.js");
+    const { GlookoStorage } = await import("./storage.js");
+    const { randomUUID } = await import("crypto");
 
-    const client = new DynamoDBClient({});
-    const docClient = DynamoDBDocumentClient.from(client);
+    // Create storage instance
+    const storage = new GlookoStorage(tableName, DEFAULT_USER_ID);
 
-    const tableName = resource.SignageTable.name;
+    // We need to re-export and parse the CSV files
+    // The legacy scrapeGlooko returns treatments, but we need the raw CSV files
+    // For now, we'll use the treatments for legacy compatibility
+    // and store them using the new storage layer
 
-    // Store the treatments
-    await docClient.send(
-      new PutCommand({
-        TableName: tableName,
-        Item: {
-          pk: "GLOOKO#TREATMENTS",
-          sk: "DATA",
-          treatments: result.treatments,
-          lastFetchedAt: result.scrapedAt,
-          ttl: Math.floor(Date.now() / 1000) + 24 * 60 * 60, // 24 hour TTL
-        },
-      })
-    );
+    // Parse the raw CSV files into strongly-typed records
+    // Note: We need to access the CSV files before they're converted to treatments
+    // This requires modifying scrapeGlooko or calling exportCsv directly
 
-    // Update scraper state
-    await docClient.send(
-      new PutCommand({
-        TableName: tableName,
-        Item: {
-          pk: "GLOOKO#SCRAPER",
-          sk: "STATE",
-          lastRunAt: result.scrapedAt,
-          lastSuccessAt: result.scrapedAt,
-          consecutiveFailures: 0,
-        },
-      })
-    );
+    // For now, let's create a new scraping path that returns raw CSVs
+    // We'll run a separate browser session since scrapeGlooko closes the browser
+    let browser: Browser | null = null;
+    try {
+      browser = await launchBrowser();
+      const page = await browser.newPage();
 
-    console.log(`Stored ${result.treatments.length} treatments`);
+      await page.setUserAgent(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      );
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        success: true,
-        treatmentCount: result.treatments.length,
-      }),
-    };
+      await loginToGlooko(page, email, password);
+      const csvFiles = await exportCsv(page, 14); // 14 days for good historical data
+
+      // Parse all CSV files into strongly-typed records
+      const parseResult = parseGlookoExport(csvFiles);
+
+      console.log(`Parsed ${parseResult.records.length} records:`);
+      for (const [type, count] of Object.entries(parseResult.counts)) {
+        console.log(`  - ${type}: ${count}`);
+      }
+
+      if (parseResult.errors.length > 0) {
+        console.warn(`Parse errors: ${parseResult.errors.join(", ")}`);
+      }
+
+      // Store all records idempotently
+      const storeResult = await storage.storeRecords(parseResult.records);
+
+      console.log(`Storage results:`);
+      console.log(`  - Written: ${storeResult.written}`);
+      console.log(`  - Duplicates: ${storeResult.duplicates}`);
+      if (storeResult.errors.length > 0) {
+        console.warn(`  - Errors: ${storeResult.errors.join(", ")}`);
+      }
+
+      // Store import metadata
+      const importId = randomUUID();
+      const dataStartDate = parseResult.records.length > 0
+        ? new Date(Math.min(...parseResult.records.map(r => r.timestamp)))
+            .toISOString()
+            .split("T")[0]
+        : new Date().toISOString().split("T")[0];
+      const dataEndDate = parseResult.records.length > 0
+        ? new Date(Math.max(...parseResult.records.map(r => r.timestamp)))
+            .toISOString()
+            .split("T")[0]
+        : new Date().toISOString().split("T")[0];
+
+      await storage.storeImportMetadata({
+        importId,
+        startedAt: result.scrapedAt,
+        completedAt: Date.now(),
+        dataStartDate,
+        dataEndDate,
+        recordCounts: parseResult.counts,
+        totalRecords: parseResult.records.length,
+        errors: parseResult.errors.length > 0 ? parseResult.errors : undefined,
+      });
+
+      // Also store legacy treatment summary for compositor compatibility
+      const { DynamoDBClient } = await import("@aws-sdk/client-dynamodb");
+      const { PutCommand, DynamoDBDocumentClient } = await import(
+        "@aws-sdk/lib-dynamodb"
+      );
+
+      const client = new DynamoDBClient({});
+      const docClient = DynamoDBDocumentClient.from(client);
+
+      await docClient.send(
+        new PutCommand({
+          TableName: tableName,
+          Item: {
+            pk: "GLOOKO#TREATMENTS",
+            sk: "DATA",
+            treatments: result.treatments,
+            lastFetchedAt: result.scrapedAt,
+            ttl: Math.floor(Date.now() / 1000) + 24 * 60 * 60, // 24 hour TTL
+          },
+        })
+      );
+
+      // Update scraper state
+      await docClient.send(
+        new PutCommand({
+          TableName: tableName,
+          Item: {
+            pk: "GLOOKO#SCRAPER",
+            sk: "STATE",
+            lastRunAt: result.scrapedAt,
+            lastSuccessAt: result.scrapedAt,
+            consecutiveFailures: 0,
+          },
+        })
+      );
+
+      console.log(`Import complete: ${storeResult.written} new records, ${storeResult.duplicates} duplicates`);
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          success: true,
+          importId,
+          recordsParsed: parseResult.records.length,
+          recordsWritten: storeResult.written,
+          recordsDuplicate: storeResult.duplicates,
+          counts: parseResult.counts,
+        }),
+      };
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
+    }
   } else {
     // Update scraper state with failure
     const { DynamoDBClient } = await import("@aws-sdk/client-dynamodb");
@@ -1250,8 +1346,6 @@ export async function handler(): Promise<{ statusCode: number; body: string }> {
 
     const client = new DynamoDBClient({});
     const docClient = DynamoDBDocumentClient.from(client);
-
-    const tableName = resource.SignageTable.name;
 
     await docClient.send(
       new UpdateCommand({

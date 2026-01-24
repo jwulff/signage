@@ -32,9 +32,61 @@ Tested with real Glooko account (2026-01-24):
 - **Data**: 285 treatments parsed (178 insulin, 107 carbs) from 2-week export
 - **4-hour totals**: 7.0u insulin, 40g carbs (matches manual verification)
 
+## Robust Historical Database
+
+The integration now stores all Glooko data granularly in DynamoDB with idempotent writes, building a comprehensive historical diabetes database.
+
+### Data Model (`data-model.ts`)
+
+12 strongly-typed record types covering all Glooko CSV exports:
+- **CGM readings** - Continuous glucose monitor data (every 5 min)
+- **BG readings** - Manual finger stick blood glucose
+- **Bolus records** - Insulin doses with carbs, BG input, carb ratios
+- **Basal records** - Background insulin delivery rates
+- **Daily insulin summary** - Daily totals for bolus/basal/total
+- **Alarms** - Device alerts and events
+- **Carbs** - Standalone carbohydrate entries
+- **Food** - Detailed food log with macros
+- **Exercise** - Activity log with intensity/duration
+- **Medication** - Non-insulin medications
+- **Manual insulin** - Pen/syringe injections
+- **Notes** - Free-form text entries
+
+### DynamoDB Key Design (`storage.ts`)
+
+Single-table design with composite keys for efficient queries:
+```
+PK: USER#{userId}#{recordType}    (partition by user + data type)
+SK: {timestamp}#{contentHash}     (sort by time, hash for dedup)
+```
+
+Features:
+- **Idempotent writes**: Conditional PutItem prevents duplicate records
+- **Content-based hashing**: Same data = same key = no duplicates
+- **Time-range queries**: Efficient retrieval by type and time window
+- **GSI for cross-type queries**: Query all record types for a user
+
+### CSV Parser (`csv-parser.ts`)
+
+Comprehensive parser handling:
+- Glooko's metadata header row (Medical Record Number, Name, Date Range)
+- Multiple date formats (ISO, US, Glooko custom)
+- 12 file type parsers with flexible column mapping
+- Error collection without aborting on parse failures
+
+### Lambda Handler Updates
+
+The handler now:
+1. Exports 14 days of data (for historical depth)
+2. Parses all CSV types into strongly-typed records
+3. Stores records idempotently (new records written, duplicates skipped)
+4. Logs import metadata with record counts
+5. Maintains legacy treatment summary for compositor compatibility
+
 ## What's Next
 
 - Deploy to AWS and configure secrets via `sst secret set`
 - Monitor for Glooko UI changes that could break selectors
 - Consider adding retry logic for transient scraping failures
-- Potentially add pump basal rate data if available in CSV export
+- Update compositor to use `GlookoStorage.getTreatmentSummary()` instead of legacy format
+- Add CGM data to display (if Dexcom isn't primary source)
