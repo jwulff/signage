@@ -636,7 +636,7 @@ export async function exportCsv(page: Page, days: number = 1): Promise<Extracted
   }
 
   // Wait for CSV files with extended timeout
-  let csvFiles: ExtractedCsv[];
+  let csvFiles: ExtractedCsv[] | undefined;
   try {
     csvFiles = await Promise.race([
       csvFilesPromise,

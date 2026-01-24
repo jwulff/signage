@@ -12,7 +12,7 @@ import {
   PostToConnectionCommand,
 } from "@aws-sdk/client-apigatewaymanagementapi";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, QueryCommand, ScanCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { ScheduledHandler } from "aws-lambda";
 import { encodeFrameToBase64 } from "@signage/core";
@@ -37,7 +37,6 @@ import {
   fetchGlucoseReadings,
   parseDexcomTimestamp,
 } from "./dexcom/client.js";
-import type { OuraUsersListItem, OuraUserItem, OuraReadinessItem, OuraSleepItem } from "./oura/types.js";
 import type { TreatmentDisplayData, GlookoTreatmentsItem } from "./glooko/types.js";
 import { calculateTreatmentTotals } from "./rendering/treatment-renderer.js";
 
