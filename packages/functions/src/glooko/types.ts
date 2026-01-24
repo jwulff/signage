@@ -54,11 +54,21 @@ export interface GlookoScraperConfig {
 }
 
 /**
+ * Extracted CSV file from Glooko export
+ */
+export interface ExtractedCsv {
+  fileName: string;
+  content: string;
+}
+
+/**
  * Scraper result
  */
 export interface GlookoScraperResult {
   success: boolean;
   treatments: GlookoTreatment[];
+  /** Raw CSV files from export (for new parsing pipeline) */
+  csvFiles?: ExtractedCsv[];
   error?: string;
   /** Timestamp when scrape completed */
   scrapedAt: number;

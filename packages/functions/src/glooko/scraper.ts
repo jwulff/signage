@@ -17,7 +17,12 @@ import type {
   GlookoTreatment,
   GlookoScraperConfig,
   GlookoScraperResult,
+  ExtractedCsv,
 } from "./types.js";
+
+// Debug flags - opt-in only to prevent PHI exposure
+const DEBUG_SCREENSHOTS = process.env.DEBUG_SCREENSHOTS === "true";
+const DEBUG_PERSIST_CSV = process.env.DEBUG_PERSIST_CSV === "true";
 
 // Glooko URLs
 const GLOOKO_LOGIN_URL = "https://my.glooko.com/users/sign_in";
@@ -40,13 +45,7 @@ const LOGIN_TIMEOUT = 30000;
 const EXPORT_TIMEOUT = 60000;
 const NAVIGATION_TIMEOUT = 30000;
 
-/**
- * Represents a CSV file extracted from the ZIP
- */
-interface ExtractedCsv {
-  fileName: string;
-  content: string;
-}
+// ExtractedCsv is imported from types.ts
 
 /**
  * Extract CSV files from a ZIP file buffer
@@ -192,9 +191,8 @@ export async function loginToGlooko(
     timeout: NAVIGATION_TIMEOUT,
   });
 
-  // Debug: save screenshot on local runs
-  const isLocal = !process.env.AWS_LAMBDA_FUNCTION_NAME;
-  if (isLocal) {
+  // Debug: save screenshot only when explicitly enabled (contains PHI)
+  if (DEBUG_SCREENSHOTS) {
     await page.screenshot({ path: "/tmp/glooko-login.png", fullPage: true });
     console.log("Screenshot saved to /tmp/glooko-login.png");
   }
@@ -258,9 +256,14 @@ export async function loginToGlooko(
   }
 
   if (!emailInput) {
-    // Dump page content for debugging
-    const html = await page.content();
-    console.error("Page HTML (first 2000 chars):", html.substring(0, 2000));
+    // Log structural info for debugging (no PHI)
+    const pageInfo = {
+      title: await page.title(),
+      url: page.url(),
+      hasAnyInput: !!(await page.$("input")),
+      hasForm: !!(await page.$("form")),
+    };
+    console.error("Login page state - email input not found:", JSON.stringify(pageInfo));
     throw new Error("Could not find email input on login page");
   }
 
@@ -339,8 +342,8 @@ export async function loginToGlooko(
       submitButton = element;
       console.log("Found submit button by text content search");
     } else {
-      // Take screenshot for debugging
-      if (isLocal) {
+      // Take screenshot for debugging only when explicitly enabled (contains PHI)
+      if (DEBUG_SCREENSHOTS) {
         await page.screenshot({ path: "/tmp/glooko-no-button.png", fullPage: true });
         console.log("Debug screenshot saved to /tmp/glooko-no-button.png");
       }
@@ -370,7 +373,7 @@ export async function loginToGlooko(
   // Small delay for any final redirects
   await new Promise(r => setTimeout(r, 2000));
 
-  if (isLocal) {
+  if (DEBUG_SCREENSHOTS) {
     await page.screenshot({ path: "/tmp/glooko-after-login.png", fullPage: true });
     console.log("Post-login screenshot saved to /tmp/glooko-after-login.png");
   }
@@ -402,7 +405,7 @@ export async function loginToGlooko(
   console.log(`Current URL after login: ${currentUrl}`);
 
   if (currentUrl.includes("sign_in") || currentUrl.includes("login")) {
-    if (isLocal) {
+    if (DEBUG_SCREENSHOTS) {
       await page.screenshot({ path: "/tmp/glooko-login-failed.png", fullPage: true });
     }
     throw new Error("Glooko login failed: Still on login page after submission");
@@ -419,7 +422,6 @@ export async function loginToGlooko(
  * @returns Array of extracted CSV files
  */
 export async function exportCsv(page: Page, days: number = 1): Promise<ExtractedCsv[]> {
-  const isLocal = !process.env.AWS_LAMBDA_FUNCTION_NAME;
 
   // The export button is on the dashboard after login
   // Determine the base URL from current location (handles us.my.glooko.com redirect)
@@ -440,7 +442,7 @@ export async function exportCsv(page: Page, days: number = 1): Promise<Extracted
   // Wait for dashboard to fully load
   await new Promise(r => setTimeout(r, 2000));
 
-  if (isLocal) {
+  if (DEBUG_SCREENSHOTS) {
     await page.screenshot({ path: "/tmp/glooko-dashboard.png", fullPage: true });
     console.log("Dashboard screenshot saved to /tmp/glooko-dashboard.png");
   }
@@ -490,8 +492,8 @@ export async function exportCsv(page: Page, days: number = 1): Promise<Extracted
   }
 
   if (!exportButton) {
-    // Dump page HTML for debugging
-    if (isLocal) {
+    // Dump page HTML for debugging only when explicitly enabled (contains PHI)
+    if (DEBUG_PERSIST_CSV) {
       const html = await page.content();
       const { writeFileSync } = await import("fs");
       writeFileSync("/tmp/glooko-page.html", html);
@@ -570,7 +572,7 @@ export async function exportCsv(page: Page, days: number = 1): Promise<Extracted
   // Wait for modal/dialog to appear
   await new Promise(r => setTimeout(r, 2000));
 
-  if (isLocal) {
+  if (DEBUG_SCREENSHOTS) {
     await page.screenshot({ path: "/tmp/glooko-after-export-click.png", fullPage: true });
     console.log("Screenshot saved to /tmp/glooko-after-export-click.png");
   }
@@ -668,12 +670,15 @@ export async function exportCsv(page: Page, days: number = 1): Promise<Extracted
     }
 
     if (!csvFiles!) {
-      if (isLocal) {
+      if (DEBUG_SCREENSHOTS) {
         await page.screenshot({ path: "/tmp/glooko-export-failed.png", fullPage: true });
+        console.log("Debug screenshot saved to /tmp/glooko-export-failed.png");
+      }
+      if (DEBUG_PERSIST_CSV) {
         const html = await page.content();
         const { writeFileSync } = await import("fs");
         writeFileSync("/tmp/glooko-export-page.html", html);
-        console.log("Debug files saved to /tmp/glooko-export-*.png and .html");
+        console.log("Debug HTML saved to /tmp/glooko-export-page.html");
       }
       throw new Error("Could not download CSV from Glooko");
     }
@@ -782,9 +787,8 @@ function parseRowLegacy(
 export function parseCsvFiles(csvFiles: ExtractedCsv[]): GlookoTreatment[] {
   const treatments: GlookoTreatment[] = [];
 
-  // Save CSV files to /tmp for debugging (only in local mode)
-  const isLocal = !process.env.AWS_LAMBDA_FUNCTION_NAME;
-  if (isLocal) {
+  // Save CSV files to /tmp for debugging only when explicitly enabled (contains PHI)
+  if (DEBUG_PERSIST_CSV) {
     import("fs").then(({ writeFileSync, mkdirSync }) => {
       mkdirSync("/tmp/glooko-csvs", { recursive: true });
       for (const { fileName, content } of csvFiles) {
@@ -1144,6 +1148,7 @@ export async function scrapeGlooko(
     return {
       success: true,
       treatments,
+      csvFiles, // Return raw CSV files for new parsing pipeline
       scrapedAt: Date.now(),
     };
   } catch (error) {
@@ -1205,7 +1210,7 @@ export async function handler(): Promise<{ statusCode: number; body: string }> {
   // Run the scraper to get CSV files
   const result = await scrapeGlooko({ email, password, exportDays: 14 });
 
-  if (result.success) {
+  if (result.success && result.csvFiles) {
     // Import the new storage and parser modules
     const { parseGlookoExport } = await import("./csv-parser.js");
     const { GlookoStorage } = await import("./storage.js");
@@ -1214,29 +1219,10 @@ export async function handler(): Promise<{ statusCode: number; body: string }> {
     // Create storage instance
     const storage = new GlookoStorage(tableName, DEFAULT_USER_ID);
 
-    // We need to re-export and parse the CSV files
-    // The legacy scrapeGlooko returns treatments, but we need the raw CSV files
-    // For now, we'll use the treatments for legacy compatibility
-    // and store them using the new storage layer
+    // Use the CSV files returned from scrapeGlooko (single browser session)
+    const csvFiles = result.csvFiles;
 
-    // Parse the raw CSV files into strongly-typed records
-    // Note: We need to access the CSV files before they're converted to treatments
-    // This requires modifying scrapeGlooko or calling exportCsv directly
-
-    // For now, let's create a new scraping path that returns raw CSVs
-    // We'll run a separate browser session since scrapeGlooko closes the browser
-    let browser: Browser | null = null;
     try {
-      browser = await launchBrowser();
-      const page = await browser.newPage();
-
-      await page.setUserAgent(
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      );
-
-      await loginToGlooko(page, email, password);
-      const csvFiles = await exportCsv(page, 14); // 14 days for good historical data
-
       // Parse all CSV files into strongly-typed records
       const parseResult = parseGlookoExport(csvFiles);
 
@@ -1332,11 +1318,31 @@ export async function handler(): Promise<{ statusCode: number; body: string }> {
           counts: parseResult.counts,
         }),
       };
-    } finally {
-      if (browser) {
-        await browser.close();
-      }
+    } catch (parseError) {
+      const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
+      console.error("Failed to parse/store CSV files:", errorMessage);
+      // Fall through to return success with legacy data only
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          success: true,
+          legacyOnly: true,
+          treatmentCount: result.treatments.length,
+          error: errorMessage,
+        }),
+      };
     }
+  } else if (result.success) {
+    // Legacy fallback: scraper succeeded but no CSV files (shouldn't happen)
+    console.warn("Scraper succeeded but no CSV files returned");
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        success: true,
+        legacyOnly: true,
+        treatmentCount: result.treatments.length,
+      }),
+    };
   } else {
     // Update scraper state with failure
     const { DynamoDBClient } = await import("@aws-sdk/client-dynamodb");

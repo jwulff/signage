@@ -39,6 +39,56 @@ export interface ParseResult {
 }
 
 // =============================================================================
+// Medical Value Validation
+// =============================================================================
+
+/**
+ * Physiological limits for medical values.
+ * Values outside these ranges are rejected as data errors.
+ */
+const VALIDATION = {
+  // Glucose values (mg/dL)
+  // CGM range is typically 40-400, but we allow wider for finger sticks
+  GLUCOSE_MIN: 20,    // Below this is device error
+  GLUCOSE_MAX: 600,   // Above this is device error
+
+  // Insulin values (units)
+  INSULIN_BOLUS_MAX: 100,  // Max reasonable bolus (typical max is 25-50u)
+  INSULIN_BASAL_RATE_MAX: 10,  // Max basal rate u/hr (typical max is 2-5u/hr)
+
+  // Carbs (grams)
+  CARBS_MAX: 500,  // Max reasonable meal (typical is 30-100g)
+} as const;
+
+/**
+ * Validate glucose value is within physiological range
+ */
+function isValidGlucose(value: number): boolean {
+  return value >= VALIDATION.GLUCOSE_MIN && value <= VALIDATION.GLUCOSE_MAX;
+}
+
+/**
+ * Validate insulin bolus is within reasonable range
+ */
+function isValidInsulinBolus(value: number): boolean {
+  return value > 0 && value <= VALIDATION.INSULIN_BOLUS_MAX;
+}
+
+/**
+ * Validate basal rate is within reasonable range
+ */
+function isValidBasalRate(value: number): boolean {
+  return value >= 0 && value <= VALIDATION.INSULIN_BASAL_RATE_MAX;
+}
+
+/**
+ * Validate carbs value is within reasonable range
+ */
+function isValidCarbs(value: number): boolean {
+  return value > 0 && value <= VALIDATION.CARBS_MAX;
+}
+
+// =============================================================================
 // CSV Utilities
 // =============================================================================
 
@@ -88,50 +138,57 @@ function findHeaderAndDataStart(
 }
 
 /**
- * Parse timestamp string into Unix milliseconds
+ * Parse timestamp string into Unix milliseconds.
+ * IMPORTANT: All timestamps are parsed as UTC to avoid timezone ambiguity.
+ * Glooko exports timestamps in the user's local timezone, but we store them
+ * as UTC to ensure consistent handling across server environments.
  */
 function parseTimestamp(value: string): number | null {
   if (!value || value === "0") return null;
 
-  // Try ISO format first
-  let date = new Date(value);
+  // Try ISO format first (already includes timezone info)
+  const date = new Date(value);
   if (!isNaN(date.getTime())) {
     return date.getTime();
   }
 
   // Try "YYYY-MM-DD HH:MM" format (common in Glooko)
+  // Parse as UTC to avoid server timezone issues
   const glookoFormat = value.match(
     /(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})/
   );
   if (glookoFormat) {
     const [, year, month, day, hour, minute] = glookoFormat;
-    date = new Date(
+    // Use Date.UTC to parse in UTC timezone
+    const timestamp = Date.UTC(
       parseInt(year),
       parseInt(month) - 1,
       parseInt(day),
       parseInt(hour),
       parseInt(minute)
     );
-    if (!isNaN(date.getTime())) {
-      return date.getTime();
+    if (!isNaN(timestamp)) {
+      return timestamp;
     }
   }
 
   // Try US format MM/DD/YYYY HH:MM
+  // Parse as UTC to avoid server timezone issues
   const usFormat = value.match(
     /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/
   );
   if (usFormat) {
     const [, month, day, year, hour, minute] = usFormat;
-    date = new Date(
+    // Use Date.UTC to parse in UTC timezone
+    const timestamp = Date.UTC(
       parseInt(year),
       parseInt(month) - 1,
       parseInt(day),
       parseInt(hour),
       parseInt(minute)
     );
-    if (!isNaN(date.getTime())) {
-      return date.getTime();
+    if (!isNaN(timestamp)) {
+      return timestamp;
     }
   }
 
@@ -208,7 +265,8 @@ function parseCgmCsv(
     const glucose = parseFloat0(
       getColumn(row, colMap, "cgmglucosevaluemgdl", "glucosevalue", "glucose")
     );
-    if (glucose <= 0) continue;
+    // Validate glucose is within physiological range
+    if (!isValidGlucose(glucose)) continue;
 
     records.push({
       type: "cgm",
@@ -250,7 +308,8 @@ function parseBgCsv(
     const glucose = parseFloat0(
       getColumn(row, colMap, "glucosevaluemgdl", "glucosevalue", "glucose")
     );
-    if (glucose <= 0) continue;
+    // Validate glucose is within physiological range
+    if (!isValidGlucose(glucose)) continue;
 
     const manualFlag = getColumn(row, colMap, "manualreading", "manual");
 
@@ -300,7 +359,10 @@ function parseBolusCsv(
       getColumn(row, colMap, "carbsinputg", "carbsinput", "carbs")
     );
 
-    if (insulinDelivered <= 0 && carbsInput <= 0) continue;
+    // Validate insulin and carbs are within reasonable ranges
+    const validInsulin = insulinDelivered > 0 && isValidInsulinBolus(insulinDelivered);
+    const validCarbs = carbsInput > 0 && isValidCarbs(carbsInput);
+    if (!validInsulin && !validCarbs) continue;
 
     const bolusTypeStr = getColumn(row, colMap, "insulintype", "bolustype", "type");
     let bolusType: BolusType = "Normal";
@@ -310,16 +372,18 @@ function parseBolusCsv(
       bolusType = "Combo";
     }
 
+    const bgInput = parseFloat0(
+      getColumn(row, colMap, "bloodglucoseinputmgdl", "bginput", "glucose")
+    );
+
     records.push({
       type: "bolus",
       timestamp,
       bolusType,
-      bgInputMgDl: parseFloat0(
-        getColumn(row, colMap, "bloodglucoseinputmgdl", "bginput", "glucose")
-      ),
-      carbsInputGrams: carbsInput,
+      bgInputMgDl: isValidGlucose(bgInput) ? bgInput : 0,
+      carbsInputGrams: validCarbs ? carbsInput : 0,
       carbRatio: parseFloat0(getColumn(row, colMap, "carbsratio", "ratio")),
-      insulinDeliveredUnits: insulinDelivered,
+      insulinDeliveredUnits: validInsulin ? insulinDelivered : 0,
       initialDeliveryUnits:
         parseFloat0(getColumn(row, colMap, "initialdeliveryu", "initialdelivery")) ||
         undefined,
@@ -359,6 +423,12 @@ function parseBasalCsv(
     );
     if (!timestamp) continue;
 
+    const rate = parseFloat0(getColumn(row, colMap, "rate"));
+    const insulinDelivered = parseFloat0(getColumn(row, colMap, "insulindeliveredu", "delivered"));
+
+    // Validate basal rate is within reasonable range
+    if (rate > 0 && !isValidBasalRate(rate)) continue;
+
     records.push({
       type: "basal",
       timestamp,
@@ -367,10 +437,8 @@ function parseBasalCsv(
         getColumn(row, colMap, "durationminutes", "duration")
       ),
       percentage: parseFloat0(getColumn(row, colMap, "percentage")) || undefined,
-      rate: parseFloat0(getColumn(row, colMap, "rate")) || undefined,
-      insulinDeliveredUnits:
-        parseFloat0(getColumn(row, colMap, "insulindeliveredu", "delivered")) ||
-        undefined,
+      rate: rate || undefined,
+      insulinDeliveredUnits: insulinDelivered || undefined,
       deviceSerial: getColumn(row, colMap, "serialnumber") || undefined,
       sourceFile: fileName,
       importedAt,
@@ -494,7 +562,8 @@ function parseCarbsCsv(
     if (!timestamp) continue;
 
     const carbs = parseFloat0(getColumn(row, colMap, "carbsg", "carbs"));
-    if (carbs <= 0) continue;
+    // Validate carbs are within reasonable range
+    if (!isValidCarbs(carbs)) continue;
 
     records.push({
       type: "carbs",
@@ -535,11 +604,14 @@ function parseFoodCsv(
     const name = getColumn(row, colMap, "name", "food", "description");
     if (!name) continue;
 
+    const foodCarbs = parseFloat0(getColumn(row, colMap, "carbsg", "carbs"));
+
     records.push({
       type: "food",
       timestamp,
       name,
-      carbsGrams: parseFloat0(getColumn(row, colMap, "carbsg", "carbs")) || undefined,
+      // Only include carbs if within valid range
+      carbsGrams: (foodCarbs > 0 && isValidCarbs(foodCarbs)) ? foodCarbs : undefined,
       fatGrams: parseFloat0(getColumn(row, colMap, "fat")) || undefined,
       proteinGrams: parseFloat0(getColumn(row, colMap, "protein")) || undefined,
       calories: parseFloat0(getColumn(row, colMap, "calories")) || undefined,
@@ -675,7 +747,8 @@ function parseManualInsulinCsv(
     if (!timestamp) continue;
 
     const units = parseFloat0(getColumn(row, colMap, "value", "units", "dose"));
-    if (units <= 0) continue;
+    // Validate insulin is within reasonable range
+    if (!isValidInsulinBolus(units)) continue;
 
     records.push({
       type: "manual_insulin",
