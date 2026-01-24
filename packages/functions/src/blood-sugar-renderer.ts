@@ -8,7 +8,7 @@ import {
   PostToConnectionCommand,
 } from "@aws-sdk/client-apigatewaymanagementapi";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { ScheduledHandler } from "aws-lambda";
 import { createSolidFrame, setPixel, encodeFrameToBase64 } from "@signage/core";
@@ -273,10 +273,10 @@ async function getActiveConnections() {
 
   do {
     const result = await ddb.send(
-      new ScanCommand({
+      new QueryCommand({
         TableName: Resource.SignageTable.name,
-        FilterExpression: "begins_with(pk, :prefix)",
-        ExpressionAttributeValues: { ":prefix": "CONNECTION#" },
+        KeyConditionExpression: "pk = :pk",
+        ExpressionAttributeValues: { ":pk": "CONNECTIONS" },
         ExclusiveStartKey: lastEvaluatedKey,
       })
     );

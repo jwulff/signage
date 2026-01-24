@@ -8,7 +8,7 @@ import {
   GoneException,
 } from "@aws-sdk/client-apigatewaymanagementapi";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, ScanCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { WidgetUpdateMessage } from "./types";
 
@@ -32,11 +32,11 @@ export async function broadcastWidgetUpdate(
 
   // Get all connections
   const result = await ddb.send(
-    new ScanCommand({
+    new QueryCommand({
       TableName: Resource.SignageTable.name,
-      FilterExpression: "begins_with(pk, :prefix)",
+      KeyConditionExpression: "pk = :pk",
       ExpressionAttributeValues: {
-        ":prefix": "CONNECTION#",
+        ":pk": "CONNECTIONS",
       },
     })
   );
