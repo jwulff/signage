@@ -116,10 +116,19 @@ const TINY_FONT: Record<string, number[]> = {
   " ": [0b000, 0b000, 0b000, 0b000, 0b000],
   "/": [0b001, 0b001, 0b010, 0b100, 0b100],
   "-": [0b000, 0b000, 0b111, 0b000, 0b000],
+  "%": [0b101, 0b001, 0b010, 0b100, 0b101],
 };
 
 const TINY_CHAR_WIDTH = 3;
 const TINY_CHAR_HEIGHT = 5;
+
+/**
+ * Calculate the pixel width of a tiny text string
+ */
+export function measureTinyText(text: string): number {
+  if (text.length === 0) return 0;
+  return text.length * (TINY_CHAR_WIDTH + 1) - 1;
+}
 
 /**
  * Draw tiny text (3x5 font) for legends
