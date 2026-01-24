@@ -353,9 +353,22 @@ export function renderBloodSugarRegion(
   // Bottom: Split sparkline chart (21h compressed | 3h detailed)
   if (history && history.points.length > 0) {
     const legendY = CHART_Y + CHART_HEIGHT - 5; // 5px tiny font, at bottom
+    const rightX = CHART_X + CHART_LEFT_WIDTH;
 
     // Calculate time markers (midnight, 6am, noon, 6pm) for both charts
     const timeMarkers = calculateTimeMarkers(timezone);
+
+    // Draw labels FIRST so sparkline renders on top
+    drawTinyText(frame, `${CHART_LEFT_HOURS}h`, CHART_X, legendY, COLORS.veryDim);
+    drawTinyText(frame, `${CHART_RIGHT_HOURS}h`, rightX, legendY, COLORS.veryDim);
+
+    // TIR percentage in bottom right corner
+    const tir = calculateTIR(history.points);
+    if (tir !== null) {
+      const tirStr = `${tir}%`;
+      const tirX = CHART_X + CHART_WIDTH - measureTinyText(tirStr);
+      drawTinyText(frame, tirStr, tirX, legendY, COLORS.veryDim);
+    }
 
     // Left half: 21 hour compressed history (from -24h to -3h, offset by 3h)
     renderChart(frame, history.points, {
@@ -368,10 +381,8 @@ export function renderBloodSugarRegion(
       timeMarkers,
       timezone,
     });
-    drawTinyText(frame, `${CHART_LEFT_HOURS}h`, CHART_X, legendY, COLORS.veryDim);
 
     // Right half: 3 hour detailed history
-    const rightX = CHART_X + CHART_LEFT_WIDTH;
     renderChart(frame, history.points, {
       x: rightX,
       y: CHART_Y,
@@ -381,15 +392,6 @@ export function renderBloodSugarRegion(
       timeMarkers,
       timezone,
     });
-    drawTinyText(frame, `${CHART_RIGHT_HOURS}h`, rightX, legendY, COLORS.veryDim);
-
-    // TIR percentage in bottom right corner
-    const tir = calculateTIR(history.points);
-    if (tir !== null) {
-      const tirStr = `${tir}%`;
-      const tirX = CHART_X + CHART_WIDTH - measureTinyText(tirStr);
-      drawTinyText(frame, tirStr, tirX, legendY, COLORS.veryDim);
-    }
   }
 }
 
