@@ -21,12 +21,13 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
   console.log(`Client connected: ${connectionId}, terminal: ${terminalId}, type: ${terminalType}`);
 
   // Store connection in DynamoDB
+  // Using pk="CONNECTIONS" allows efficient Query to list all connections
   await ddb.send(
     new PutCommand({
       TableName: Resource.SignageTable.name,
       Item: {
-        pk: `CONNECTION#${connectionId}`,
-        sk: "METADATA",
+        pk: "CONNECTIONS",
+        sk: connectionId,
         connectionId,
         terminalId: terminalId || null,
         terminalType,

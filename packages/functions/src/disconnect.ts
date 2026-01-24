@@ -20,8 +20,8 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
     new DeleteCommand({
       TableName: Resource.SignageTable.name,
       Key: {
-        pk: `CONNECTION#${connectionId}`,
-        sk: "METADATA",
+        pk: "CONNECTIONS",
+        sk: connectionId,
       },
     })
   );

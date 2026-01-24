@@ -1,9 +1,9 @@
 /**
  * Connection Counter Reconciliation
- * Counts actual CONNECTION# records and resets the counter to prevent drift.
+ * Counts actual CONNECTIONS records and resets the counter to prevent drift.
  */
 
-import { DynamoDBClient, paginateScan } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, paginateQuery } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { ScheduledEvent } from "aws-lambda";
@@ -12,18 +12,18 @@ const client = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(client);
 
 /**
- * Count actual CONNECTION# records in DynamoDB.
+ * Count actual CONNECTIONS records in DynamoDB.
  */
 async function countActualConnections(): Promise<number> {
   let count = 0;
 
-  const paginator = paginateScan(
+  const paginator = paginateQuery(
     { client },
     {
       TableName: Resource.SignageTable.name,
-      FilterExpression: "begins_with(pk, :prefix)",
+      KeyConditionExpression: "pk = :pk",
       ExpressionAttributeValues: {
-        ":prefix": { S: "CONNECTION#" },
+        ":pk": { S: "CONNECTIONS" },
       },
       Select: "COUNT",
     }

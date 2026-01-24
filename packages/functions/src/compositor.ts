@@ -12,7 +12,7 @@ import {
   PostToConnectionCommand,
 } from "@aws-sdk/client-apigatewaymanagementapi";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, ScanCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { ScheduledHandler } from "aws-lambda";
 import { encodeFrameToBase64 } from "@signage/core";
@@ -26,7 +26,12 @@ import {
   type ClockWeatherData,
   type ReadinessDisplayData,
 } from "./rendering/index.js";
-import type { OuraUsersListItem, OuraUserItem, OuraReadinessItem, OuraSleepItem } from "./oura/types.js";
+import {
+  getOuraUsers,
+  getOuraUserProfile,
+  getCachedReadiness,
+  getCachedSleep,
+} from "./oura/client.js";
 import {
   getSessionId,
   fetchGlucoseReadings,
@@ -122,20 +127,18 @@ const WEATHER_CACHE_TTL_MS = 30 * 60 * 1000;
 async function getCachedWeather(): Promise<ClockWeatherData | null> {
   try {
     const result = await ddb.send(
-      new ScanCommand({
+      new GetCommand({
         TableName: Resource.SignageTable.name,
-        FilterExpression: "pk = :pk",
-        ExpressionAttributeValues: { ":pk": "WEATHER_CACHE" },
+        Key: { pk: "WEATHER_CACHE", sk: "LATEST" },
       })
     );
 
-    if (result.Items && result.Items.length > 0) {
-      const cached = result.Items[0];
-      const age = Date.now() - (cached.timestamp as number);
+    if (result.Item) {
+      const age = Date.now() - (result.Item.timestamp as number);
 
       if (age < WEATHER_CACHE_TTL_MS) {
         console.log(`Using cached weather data (${Math.round(age / 1000)}s old)`);
-        return cached.data as ClockWeatherData;
+        return result.Item.data as ClockWeatherData;
       }
     }
   } catch (error) {
@@ -263,107 +266,6 @@ async function fetchWeatherData(): Promise<ClockWeatherData | null> {
 const READINESS_STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Get list of active Oura users
- */
-async function getOuraUsers(): Promise<string[]> {
-  try {
-    const result = await ddb.send(
-      new ScanCommand({
-        TableName: Resource.SignageTable.name,
-        FilterExpression: "pk = :pk AND sk = :sk",
-        ExpressionAttributeValues: {
-          ":pk": "OURA_USERS",
-          ":sk": "LIST",
-        },
-      })
-    );
-
-    if (result.Items && result.Items.length > 0) {
-      const item = result.Items[0] as OuraUsersListItem;
-      return item.userIds || [];
-    }
-  } catch (error) {
-    console.error("Failed to get Oura users:", error);
-  }
-  return [];
-}
-
-/**
- * Get user profile
- */
-async function getOuraUserProfile(userId: string): Promise<OuraUserItem | null> {
-  try {
-    const result = await ddb.send(
-      new ScanCommand({
-        TableName: Resource.SignageTable.name,
-        FilterExpression: "pk = :pk AND sk = :sk",
-        ExpressionAttributeValues: {
-          ":pk": `OURA_USER#${userId}`,
-          ":sk": "PROFILE",
-        },
-      })
-    );
-
-    if (result.Items && result.Items.length > 0) {
-      return result.Items[0] as OuraUserItem;
-    }
-  } catch (error) {
-    console.error(`Failed to get user profile for ${userId}:`, error);
-  }
-  return null;
-}
-
-/**
- * Get cached readiness for a user
- */
-async function getCachedReadiness(userId: string, date: string): Promise<OuraReadinessItem | null> {
-  try {
-    const result = await ddb.send(
-      new ScanCommand({
-        TableName: Resource.SignageTable.name,
-        FilterExpression: "pk = :pk AND sk = :sk",
-        ExpressionAttributeValues: {
-          ":pk": `OURA_USER#${userId}`,
-          ":sk": `READINESS#${date}`,
-        },
-      })
-    );
-
-    if (result.Items && result.Items.length > 0) {
-      return result.Items[0] as OuraReadinessItem;
-    }
-  } catch (error) {
-    console.error(`Failed to get cached readiness for ${userId}:`, error);
-  }
-  return null;
-}
-
-/**
- * Get cached sleep for a user
- */
-async function getCachedSleep(userId: string, date: string): Promise<OuraSleepItem | null> {
-  try {
-    const result = await ddb.send(
-      new ScanCommand({
-        TableName: Resource.SignageTable.name,
-        FilterExpression: "pk = :pk AND sk = :sk",
-        ExpressionAttributeValues: {
-          ":pk": `OURA_USER#${userId}`,
-          ":sk": `SLEEP#${date}`,
-        },
-      })
-    );
-
-    if (result.Items && result.Items.length > 0) {
-      return result.Items[0] as OuraSleepItem;
-    }
-  } catch (error) {
-    console.error(`Failed to get cached sleep for ${userId}:`, error);
-  }
-  return null;
-}
-
-/**
  * Fetch readiness and sleep data for all linked Oura users
  */
 async function fetchReadinessData(): Promise<ReadinessDisplayData[]> {
@@ -413,6 +315,7 @@ async function fetchReadinessData(): Promise<ReadinessDisplayData[]> {
 
 /**
  * Get active WebSocket connections
+ * Uses Query on pk="CONNECTIONS" for efficient retrieval
  */
 async function getActiveConnections() {
   const allItems: Record<string, unknown>[] = [];
@@ -420,10 +323,10 @@ async function getActiveConnections() {
 
   do {
     const result = await ddb.send(
-      new ScanCommand({
+      new QueryCommand({
         TableName: Resource.SignageTable.name,
-        FilterExpression: "begins_with(pk, :prefix)",
-        ExpressionAttributeValues: { ":prefix": "CONNECTION#" },
+        KeyConditionExpression: "pk = :pk",
+        ExpressionAttributeValues: { ":pk": "CONNECTIONS" },
         ExclusiveStartKey: lastEvaluatedKey,
       })
     );

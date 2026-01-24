@@ -8,7 +8,7 @@ import {
   PostToConnectionCommand,
 } from "@aws-sdk/client-apigatewaymanagementapi";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, ScanCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { APIGatewayProxyWebsocketHandlerV2 } from "aws-lambda";
 
@@ -100,11 +100,11 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
 
     // Get all connections
     const result = await ddb.send(
-      new ScanCommand({
+      new QueryCommand({
         TableName: Resource.SignageTable.name,
-        FilterExpression: "begins_with(pk, :prefix)",
+        KeyConditionExpression: "pk = :pk",
         ExpressionAttributeValues: {
-          ":prefix": "CONNECTION#",
+          ":pk": "CONNECTIONS",
         },
       })
     );
