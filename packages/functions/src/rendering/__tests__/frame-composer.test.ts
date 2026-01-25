@@ -172,7 +172,8 @@ describe("generateCompositeFrame", () => {
       },
       treatments: {
         treatments: [
-          { timestamp: now - 30 * 60 * 1000, type: "insulin", value: 5 },
+          // Use 5 hours ago (in the 24h-3h window shown as bars on left)
+          { timestamp: now - 5 * 60 * 60 * 1000, type: "insulin", value: 5 },
         ],
         recentInsulinUnits: 5,
         recentCarbsGrams: 0,
@@ -213,7 +214,8 @@ describe("generateCompositeFrame", () => {
       },
       treatments: {
         treatments: [
-          { timestamp: now - 30 * 60 * 1000, type: "carbs", value: 50 },
+          // Use 5 hours ago (in the 24h-3h window shown as bars on left)
+          { timestamp: now - 5 * 60 * 60 * 1000, type: "carbs", value: 50 },
         ],
         recentInsulinUnits: 0,
         recentCarbsGrams: 50,
@@ -254,7 +256,8 @@ describe("generateCompositeFrame", () => {
       },
       treatments: {
         treatments: [
-          { timestamp: now - 30 * 60 * 1000, type: "insulin", value: 10 },
+          // Use 5 hours ago (in the 24h-3h window)
+          { timestamp: now - 5 * 60 * 60 * 1000, type: "insulin", value: 10 },
         ],
         recentInsulinUnits: 10,
         recentCarbsGrams: 0,
