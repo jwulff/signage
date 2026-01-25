@@ -121,7 +121,7 @@ export function renderClockRegion(
   // Draw date (dimmer) and time (brighter) with different colors
   const dateTimeX = centerXInBounds(dateTimeStr, startX, endX);
   const dateWidth = measureText(dateStr);
-  drawText(frame, dateStr, dateTimeX, startY + 1, COLORS.clockAmPm, startY, endY);
+  drawText(frame, dateStr, dateTimeX, startY + 1, COLORS.clockSecondary, startY, endY);
   drawText(frame, timeStr, dateTimeX + dateWidth + 1, startY + 1, COLORS.clockTime, startY, endY);
 
   // Sunlight gradient band with temperature overlay
