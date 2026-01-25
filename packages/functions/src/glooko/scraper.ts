@@ -1077,32 +1077,104 @@ function createColumnMap(header: string[]): Map<string, number> {
 }
 
 /**
- * Parse a timestamp string into Unix milliseconds
+ * The timezone that Glooko exports data in. This is the user's local timezone
+ * configured in their Glooko account settings.
+ */
+const GLOOKO_EXPORT_TIMEZONE = "America/Los_Angeles";
+
+/**
+ * Parse a naive datetime (no timezone info) as if it's in the specified timezone,
+ * returning UTC milliseconds. This handles DST correctly.
+ */
+function parseLocalDateTime(
+  year: number,
+  month: number, // 0-indexed
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+  timezone: string
+): number {
+  // Create a Date in UTC with these components as a starting guess
+  const utcGuess = Date.UTC(year, month, day, hour, minute, second);
+
+  // Format utcGuess in the target timezone to see what local time it maps to
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(new Date(utcGuess));
+  const localHour = parseInt(parts.find(p => p.type === "hour")?.value || "0");
+  const localMinute = parseInt(parts.find(p => p.type === "minute")?.value || "0");
+  const localDay = parseInt(parts.find(p => p.type === "day")?.value || "0");
+  const localMonth = parseInt(parts.find(p => p.type === "month")?.value || "0") - 1;
+  const localYear = parseInt(parts.find(p => p.type === "year")?.value || "0");
+
+  // Create a UTC timestamp from the local components we observed
+  // This gives us the "equivalent" UTC for what the timezone sees
+  const localAsUtc = Date.UTC(localYear, localMonth, localDay, localHour, localMinute);
+
+  // The offset is the difference between our guess and what local time it produced
+  // offset = utcGuess - localAsUtc (positive if timezone is behind UTC)
+  // To convert our target local time to UTC, we add this offset
+  const offsetMs = utcGuess - localAsUtc;
+
+  return utcGuess + offsetMs;
+}
+
+/**
+ * Parse a timestamp string into Unix milliseconds.
+ * Glooko exports timestamps in the user's local timezone (America/Los_Angeles),
+ * so we parse them in that timezone to get correct UTC milliseconds.
  */
 function parseTimestamp(value: string): number | null {
   if (!value) return null;
 
-  // Try ISO format first
-  let date = new Date(value);
+  // Try ISO format first (already includes timezone info)
+  const date = new Date(value);
   if (!isNaN(date.getTime())) {
     return date.getTime();
   }
 
-  // Try common date formats
-  // MM/DD/YYYY HH:MM:SS
-  const usFormat = value.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):?(\d{2})?/);
-  if (usFormat) {
-    const [, month, day, year, hour, minute, second = "0"] = usFormat;
-    date = new Date(
+  // Try YYYY-MM-DD HH:MM[:SS] format (common in Glooko CSV exports)
+  const isoLikeFormat = value.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (isoLikeFormat) {
+    const [, year, month, day, hour, minute, second = "0"] = isoLikeFormat;
+    const timestamp = parseLocalDateTime(
       parseInt(year),
       parseInt(month) - 1,
       parseInt(day),
       parseInt(hour),
       parseInt(minute),
-      parseInt(second)
+      parseInt(second),
+      GLOOKO_EXPORT_TIMEZONE
     );
-    if (!isNaN(date.getTime())) {
-      return date.getTime();
+    if (!isNaN(timestamp)) {
+      return timestamp;
+    }
+  }
+
+  // Try US format MM/DD/YYYY HH:MM[:SS]
+  const usFormat = value.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (usFormat) {
+    const [, month, day, year, hour, minute, second = "0"] = usFormat;
+    const timestamp = parseLocalDateTime(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day),
+      parseInt(hour),
+      parseInt(minute),
+      parseInt(second),
+      GLOOKO_EXPORT_TIMEZONE
+    );
+    if (!isNaN(timestamp)) {
+      return timestamp;
     }
   }
 
