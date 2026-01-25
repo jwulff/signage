@@ -350,9 +350,16 @@ function renderTreatmentChart(
 
   const dayStrs = dayTotals.map(formatInsulin);
 
-  // Format latency indicator (time since last Glooko data)
-  const formatLatency = (lastFetchedAt: number): string => {
-    const msAgo = now - lastFetchedAt;
+  // Find the most recent insulin treatment timestamp
+  const insulinTreatments = treatmentList.filter(t => t.type === "insulin");
+  const lastInsulinTime = insulinTreatments.length > 0
+    ? Math.max(...insulinTreatments.map(t => t.timestamp))
+    : 0;
+
+  // Format latency indicator (time since last known insulin delivery)
+  const formatLatency = (lastTimestamp: number): string => {
+    if (lastTimestamp === 0) return "?";
+    const msAgo = now - lastTimestamp;
     const minsAgo = Math.floor(msAgo / (60 * 1000));
     if (minsAgo < 60) {
       return `${minsAgo}m`;
@@ -360,7 +367,7 @@ function renderTreatmentChart(
     const hoursAgo = Math.ceil(minsAgo / 60);
     return `${hoursAgo}h`;
   };
-  const latencyStr = formatLatency(treatments.lastFetchedAt);
+  const latencyStr = formatLatency(lastInsulinTime);
 
   // Calculate total width needed (4 day totals + latency)
   const dayWidths = dayStrs.map(s => measureTinyText(s));
