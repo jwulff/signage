@@ -176,6 +176,7 @@ describe("generateCompositeFrame", () => {
         ],
         recentInsulinUnits: 5,
         recentCarbsGrams: 0,
+        lastFetchedAt: now,
         isStale: false,
       },
     };
@@ -216,6 +217,7 @@ describe("generateCompositeFrame", () => {
         ],
         recentInsulinUnits: 0,
         recentCarbsGrams: 50,
+        lastFetchedAt: now,
         isStale: false,
       },
     };
@@ -256,6 +258,7 @@ describe("generateCompositeFrame", () => {
         ],
         recentInsulinUnits: 10,
         recentCarbsGrams: 0,
+        lastFetchedAt: now - 7 * 60 * 60 * 1000, // 7 hours ago
         isStale: true, // Stale data should not render
       },
     };
