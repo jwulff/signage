@@ -17,6 +17,11 @@ export default defineConfig({
       'packages/*/src/**/*.test.ts',
       'packages/*/src/**/*.spec.ts',
     ],
+    // Exclude web tests from coverage run - they use jsdom and run separately
+    exclude: [
+      'packages/web/**',
+      'node_modules/**',
+    ],
 
     coverage: {
       provider: 'v8',
@@ -27,7 +32,7 @@ export default defineConfig({
         'packages/core/src/**/*.ts',
         'packages/functions/src/**/*.ts',
         'packages/relay/src/**/*.ts',
-        'packages/web/src/**/*.{ts,tsx}',
+        // Web coverage excluded - tests run separately with jsdom
       ],
 
       exclude: [
