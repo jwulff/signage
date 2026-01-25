@@ -278,25 +278,29 @@ export function calculateInsulinTotal(
 }
 
 /**
- * Get midnight timestamp for a given date in a timezone
+ * Get midnight timestamp for a given date in a timezone.
+ * Works correctly regardless of runtime timezone (e.g., UTC on Lambda).
  */
 function getMidnightTimestamp(date: Date, timezone: string): number {
-  // Format the date parts in the target timezone
+  // Get the current time-of-day in the target timezone
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
   });
-  const parts = formatter.formatToParts(date);
-  const year = parseInt(parts.find(p => p.type === "year")?.value || "2026");
-  const month = parseInt(parts.find(p => p.type === "month")?.value || "1") - 1;
-  const day = parseInt(parts.find(p => p.type === "day")?.value || "1");
 
-  // Create a date at midnight in the local timezone
-  // (This works when the device is in the same timezone as the target)
-  const midnightLocal = new Date(year, month, day, 0, 0, 0);
-  return midnightLocal.getTime();
+  const parts = formatter.formatToParts(date);
+  const hour = parseInt(parts.find(p => p.type === "hour")?.value || "0");
+  const minute = parseInt(parts.find(p => p.type === "minute")?.value || "0");
+  const second = parseInt(parts.find(p => p.type === "second")?.value || "0");
+
+  // Calculate seconds since midnight in the target timezone
+  const secondsSinceMidnight = hour * 3600 + minute * 60 + second;
+
+  // Subtract that from the timestamp to get midnight
+  return date.getTime() - secondsSinceMidnight * 1000;
 }
 
 /**
@@ -309,22 +313,31 @@ function renderTreatmentChart(
 ): void {
   const { treatments: treatmentList } = treatments;
   const now = Date.now();
-  const DAY_MS = 24 * 60 * 60 * 1000;
   const tz = timezone || "America/Los_Angeles";
 
-  // Get today's midnight in the target timezone
-  const nowDate = new Date(now);
-  const todayMidnight = getMidnightTimestamp(nowDate, tz);
+  // Calculate midnights for each of the last 4 days
+  // We calculate each separately to handle DST transitions correctly
+  // (a calendar day may be 23h or 25h on DST change days)
+  const midnights: number[] = [];
+  let datePointer = new Date(now);
 
-  // Calculate insulin totals for each of the last 4 days (midnight to midnight)
-  // Day 0: 3 days ago (oldest)
-  // Day 1: 2 days ago
-  // Day 2: yesterday
-  // Day 3: today (partial, up to now)
+  // Get today's midnight
+  midnights.push(getMidnightTimestamp(datePointer, tz));
+
+  // Go back 3 more days, calculating each midnight separately
+  for (let i = 0; i < 3; i++) {
+    // Go back 30 hours (safely past one day boundary) then find that day's midnight
+    datePointer = new Date(datePointer.getTime() - 30 * 60 * 60 * 1000);
+    midnights.unshift(getMidnightTimestamp(datePointer, tz));
+  }
+
+  // midnights = [3 days ago, 2 days ago, yesterday, today]
+  // Calculate insulin totals for each day
   const dayTotals: number[] = [];
-  for (let i = 3; i >= 0; i--) {
-    const dayStart = todayMidnight - i * DAY_MS;
-    const dayEnd = i === 0 ? now : dayStart + DAY_MS; // Today ends at now, others at midnight
+  for (let i = 0; i < 4; i++) {
+    const dayStart = midnights[i];
+    // Today (i=3) ends at now, other days end at next midnight
+    const dayEnd = i === 3 ? now : midnights[i + 1];
     const total = calculateInsulinTotal(treatmentList, dayStart, dayEnd);
     dayTotals.push(total);
   }
