@@ -4,7 +4,7 @@
 
 import type { Frame } from "@signage/core";
 import { setPixel } from "@signage/core";
-import { drawText, drawTinyText, measureText, measureTinyText, DISPLAY_WIDTH } from "./text.js";
+import { drawText, drawTinyText, measureText, DISPLAY_WIDTH } from "./text.js";
 import { COLORS } from "./colors.js";
 
 // Clock region boundaries (default full width)
@@ -109,23 +109,17 @@ export function renderClockRegion(
   }
 
   // Full-width region - compact layout with sunlight band
-  // Time at row 1, date at row 7
-  const timeX = centerXInBounds(timeStr, startX, endX);
-  drawText(frame, timeStr, timeX, startY + 1, COLORS.clockTime, startY, endY);
-
-  // Format date as "MON JAN 19 2026"
+  // Combined date and time on single row: "SAT JAN 24 11:09"
   const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
   const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
   const dayName = days[localTime.getDay()];
   const monthName = months[localTime.getMonth()];
   const dayNum = localTime.getDate();
-  const year = localTime.getFullYear();
-  const dateStr = `${dayName} ${monthName} ${dayNum} ${year}`;
+  const dateTimeStr = `${dayName} ${monthName} ${dayNum} ${timeStr}`;
 
-  // Draw date centered below time (dimmer than clock)
-  const dateWidth = measureTinyText(dateStr);
-  const dateX = startX + Math.floor((endX - startX + 1 - dateWidth) / 2);
-  drawTinyText(frame, dateStr, dateX, startY + 7, COLORS.clockAmPm);
+  // Draw combined date/time centered
+  const dateTimeX = centerXInBounds(dateTimeStr, startX, endX);
+  drawText(frame, dateTimeStr, dateTimeX, startY + 1, COLORS.clockTime, startY, endY);
 
   // Rows 18-25: Sunlight gradient band with temperature overlay
   renderSunlightBand(frame, currentHour24, weather, startX, endX);

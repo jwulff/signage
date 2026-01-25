@@ -34,20 +34,21 @@ describe("renderClockRegion", () => {
     expect(hasPixels).toBe(true);
   });
 
-  it("renders date text below time", () => {
+  it("renders combined date and time on single row", () => {
     const frame = createSolidFrame(64, 64);
     renderClockRegion(frame, "America/Los_Angeles");
 
-    // Date should be rendered around row 7 (compact layout)
-    let hasDatePixels = false;
+    // Combined date+time should span most of the width at row 1
+    // Format: "SAT JAN 24 2:30" (16 chars = ~63 pixels)
+    let pixelCount = 0;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 8);
+      const pixel = getPixel(frame, x, 4); // Middle of text (row 1 + 3)
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
-        hasDatePixels = true;
-        break;
+        pixelCount++;
       }
     }
-    expect(hasDatePixels).toBe(true);
+    // Combined line should have more pixels than just time alone
+    expect(pixelCount).toBeGreaterThan(15);
   });
 
   it("renders sunlight band", () => {
