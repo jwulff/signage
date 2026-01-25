@@ -9,13 +9,13 @@ The codebase has 190 tests but no visibility into what code is actually covered.
 ## How
 
 - Added `@vitest/coverage-v8` to measure coverage using V8's native instrumentation
-- Created root `vitest.config.ts` with workspace alias resolution and coverage configuration
+- Created root `vitest.coverage.config.ts` with workspace alias resolution and coverage configuration
 - Added `pnpm test:coverage` script to generate coverage reports
 - Configured HTML reports locally, JSON/lcov in CI for future integration
 
 ## Key Design Decisions
 
-- **V8 provider over Istanbul**: 2-3x faster with equal accuracy since Vitest 3.2
+- **V8 provider over Istanbul**: Uses V8's native instrumentation for significantly faster coverage collection with comparable accuracy
 - **Root-level config with aliases**: Resolves workspace packages (`@signage/core`, `@signage/functions`) for monorepo-wide coverage
 - **No thresholds in Phase 1**: Measure baseline first, set thresholds in Phase 2 based on actual coverage
 - **Pre-push hook unchanged**: Keep local development fast; enforce coverage in CI (Phase 2)

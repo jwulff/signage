@@ -1,6 +1,8 @@
 import { defineConfig, coverageConfigDefaults } from 'vitest/config'
-import { resolve } from 'path'
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
 
+const __dirname = dirname(fileURLToPath(import.meta.url))
 const isCI = process.env.CI === 'true'
 
 export default defineConfig({
