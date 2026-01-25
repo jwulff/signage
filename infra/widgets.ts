@@ -57,6 +57,11 @@ export const glookoScraperCron = new sst.aws.Cron("GlookoScraper", {
     handler: "packages/functions/src/glooko/scraper.handler",
     link: [table, glookoEmail, glookoPassword],
     timeout: "120 seconds",
-    memory: "1024 MB",
+    memory: "2048 MB",
+    nodejs: {
+      // Install @sparticuz/chromium directly (not bundled by esbuild)
+      // The chromium binary must be copied to Lambda, not bundled
+      install: ["@sparticuz/chromium"],
+    },
   },
 });

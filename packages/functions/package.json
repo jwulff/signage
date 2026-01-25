@@ -20,7 +20,7 @@
     "@signage/core": "workspace:*",
     "@sparticuz/chromium": "^131.0.0",
     "puppeteer-core": "^23.0.0",
-    "sst": "^3.5.0"
+    "sst": "^3.17.37"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.145",
