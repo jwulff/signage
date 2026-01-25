@@ -1095,12 +1095,10 @@ function parseLocalDateTime(
   second: number,
   timezone: string
 ): number {
-  // Create a Date in UTC with these components
+  // Create a Date in UTC with these components as a starting guess
   const utcGuess = Date.UTC(year, month, day, hour, minute, second);
 
-  // Get the offset for this datetime in the target timezone
-  // Strategy: Use Intl.DateTimeFormat to figure out what local time
-  // our UTC guess corresponds to, then adjust.
+  // Format utcGuess in the target timezone to see what local time it maps to
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     year: "numeric",
@@ -1111,7 +1109,6 @@ function parseLocalDateTime(
     hour12: false,
   });
 
-  // Format our UTC guess in the target timezone to see what local time it maps to
   const parts = formatter.formatToParts(new Date(utcGuess));
   const localHour = parseInt(parts.find(p => p.type === "hour")?.value || "0");
   const localMinute = parseInt(parts.find(p => p.type === "minute")?.value || "0");
@@ -1119,13 +1116,16 @@ function parseLocalDateTime(
   const localMonth = parseInt(parts.find(p => p.type === "month")?.value || "0") - 1;
   const localYear = parseInt(parts.find(p => p.type === "year")?.value || "0");
 
-  // Calculate the offset (in ms) between our target local time and what UTC maps to
-  const targetMinutes = year * 525600 + month * 43800 + day * 1440 + hour * 60 + minute;
-  const actualMinutes = localYear * 525600 + localMonth * 43800 + localDay * 1440 + localHour * 60 + localMinute;
-  const offsetMinutes = actualMinutes - targetMinutes;
+  // Create a UTC timestamp from the local components we observed
+  // This gives us the "equivalent" UTC for what the timezone sees
+  const localAsUtc = Date.UTC(localYear, localMonth, localDay, localHour, localMinute);
 
-  // Adjust: if the local time we got is ahead of target, we need earlier UTC
-  return utcGuess + offsetMinutes * 60 * 1000;
+  // The offset is the difference between our guess and what local time it produced
+  // offset = utcGuess - localAsUtc (positive if timezone is behind UTC)
+  // To convert our target local time to UTC, we add this offset
+  const offsetMs = utcGuess - localAsUtc;
+
+  return utcGuess + offsetMs;
 }
 
 /**

@@ -10,14 +10,14 @@ Glooko exports timestamps in the user's local timezone (America/Los_Angeles), bu
 ## How
 Fixed the timestamp parsing in both CSV parsers to interpret naive datetime strings in the user's timezone:
 1. Added `parseLocalDateTime()` function that correctly converts local time to UTC
-2. Uses Intl.DateTimeFormat to handle DST transitions properly
-3. Added `correctTreatmentTimestamps()` shim at display time to fix already-stored data
+2. Uses Intl.DateTimeFormat to calculate the timezone offset, handling DST automatically
+3. Uses Date.UTC() for offset calculation to correctly handle month/year boundaries
 
 ## Key Design Decisions
-- **Parse in target timezone**: Use Intl.DateTimeFormat to calculate the correct UTC offset for any given local datetime, handling DST automatically
-- **Correction at display time**: Since data is already stored with wrong timestamps, we apply a correction when reading treatment data for display
+- **Parse in target timezone**: Use Intl.DateTimeFormat to calculate the correct UTC offset for any given local datetime, handling DST and month boundaries correctly
+- **No migration shim**: Rather than adding display-time correction that would double-correct new data, we let old data age out naturally (4 days for insulin totals)
 - **Same fix in both parsers**: Updated both csv-parser.ts and scraper.ts to use the same timezone-aware parsing
 
 ## What's Next
 - After the next Glooko scrape, newly stored data will have correct timestamps
-- The display-time correction handles old data until it ages out
+- Old data with incorrect timestamps will age out in 4 days
