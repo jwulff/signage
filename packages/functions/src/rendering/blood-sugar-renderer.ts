@@ -342,10 +342,10 @@ function renderTreatmentChart(
     dayTotals.push(total);
   }
 
-  // Format numbers for display
+  // Format numbers for display (cap at 99+ to indicate truncation)
   const formatInsulin = (value: number): string => {
     const rounded = Math.round(value);
-    return rounded > 99 ? "99" : String(rounded);
+    return rounded > 99 ? "99+" : String(rounded);
   };
 
   const dayStrs = dayTotals.map(formatInsulin);
@@ -461,7 +461,7 @@ export function renderBloodSugarRegion(
   const deltaTimeStr = useFullSpacing ? `${deltaStr} ${timeStr}` : `${deltaStr} ${timeStr}`;
   drawText(frame, deltaTimeStr, textX, TEXT_ROW, secondaryColor, BG_REGION_START, BG_REGION_END);
 
-  // Treatment chart (36h insulin totals in 6h buckets with daylight bars)
+  // Treatment chart (4-day midnight-to-midnight insulin totals)
   if (treatments && !treatments.isStale) {
     renderTreatmentChart(frame, treatments, timezone);
   }
