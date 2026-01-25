@@ -115,11 +115,14 @@ export function renderClockRegion(
   const dayName = days[localTime.getDay()];
   const monthName = months[localTime.getMonth()];
   const dayNum = localTime.getDate();
-  const dateTimeStr = `${dayName} ${monthName} ${dayNum} ${timeStr}`;
+  const dateStr = `${dayName} ${monthName} ${dayNum} `;
+  const dateTimeStr = `${dateStr}${timeStr}`;
 
-  // Draw combined date/time centered
+  // Draw date (dimmer) and time (brighter) with different colors
   const dateTimeX = centerXInBounds(dateTimeStr, startX, endX);
-  drawText(frame, dateTimeStr, dateTimeX, startY + 1, COLORS.clockTime, startY, endY);
+  const dateWidth = measureText(dateStr);
+  drawText(frame, dateStr, dateTimeX, startY + 1, COLORS.clockAmPm, startY, endY);
+  drawText(frame, timeStr, dateTimeX + dateWidth + 1, startY + 1, COLORS.clockTime, startY, endY);
 
   // Sunlight gradient band with temperature overlay
   renderSunlightBand(frame, currentHour24, weather, startX, endX);
