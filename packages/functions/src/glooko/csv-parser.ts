@@ -138,10 +138,62 @@ function findHeaderAndDataStart(
 }
 
 /**
+ * The timezone that Glooko exports data in. This is the user's local timezone
+ * configured in their Glooko account settings.
+ */
+const GLOOKO_EXPORT_TIMEZONE = "America/Los_Angeles";
+
+/**
+ * Parse a naive datetime (no timezone info) as if it's in the specified timezone,
+ * returning UTC milliseconds. This handles DST correctly.
+ */
+function parseLocalDateTime(
+  year: number,
+  month: number, // 0-indexed
+  day: number,
+  hour: number,
+  minute: number,
+  timezone: string
+): number {
+  // Create a Date in UTC with these components
+  const utcGuess = Date.UTC(year, month, day, hour, minute);
+
+  // Get the offset for this datetime in the target timezone
+  // We need to find: what UTC time corresponds to this local time?
+  //
+  // Strategy: Use Intl.DateTimeFormat to figure out what local time
+  // our UTC guess corresponds to, then adjust.
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  // Format our UTC guess in the target timezone to see what local time it maps to
+  const parts = formatter.formatToParts(new Date(utcGuess));
+  const localHour = parseInt(parts.find(p => p.type === "hour")?.value || "0");
+  const localMinute = parseInt(parts.find(p => p.type === "minute")?.value || "0");
+  const localDay = parseInt(parts.find(p => p.type === "day")?.value || "0");
+  const localMonth = parseInt(parts.find(p => p.type === "month")?.value || "0") - 1;
+  const localYear = parseInt(parts.find(p => p.type === "year")?.value || "0");
+
+  // Calculate the offset (in ms) between our target local time and what UTC maps to
+  const targetMinutes = year * 525600 + month * 43800 + day * 1440 + hour * 60 + minute;
+  const actualMinutes = localYear * 525600 + localMonth * 43800 + localDay * 1440 + localHour * 60 + localMinute;
+  const offsetMinutes = actualMinutes - targetMinutes;
+
+  // Adjust: if the local time we got is ahead of target, we need earlier UTC
+  return utcGuess + offsetMinutes * 60 * 1000;
+}
+
+/**
  * Parse timestamp string into Unix milliseconds.
- * IMPORTANT: All timestamps are parsed as UTC to avoid timezone ambiguity.
- * Glooko exports timestamps in the user's local timezone, but we store them
- * as UTC to ensure consistent handling across server environments.
+ * Glooko exports timestamps in the user's local timezone (America/Los_Angeles),
+ * so we parse them in that timezone to get correct UTC milliseconds.
  */
 function parseTimestamp(value: string): number | null {
   if (!value || value === "0") return null;
@@ -153,19 +205,18 @@ function parseTimestamp(value: string): number | null {
   }
 
   // Try "YYYY-MM-DD HH:MM" format (common in Glooko)
-  // Parse as UTC to avoid server timezone issues
   const glookoFormat = value.match(
     /(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})/
   );
   if (glookoFormat) {
     const [, year, month, day, hour, minute] = glookoFormat;
-    // Use Date.UTC to parse in UTC timezone
-    const timestamp = Date.UTC(
+    const timestamp = parseLocalDateTime(
       parseInt(year),
       parseInt(month) - 1,
       parseInt(day),
       parseInt(hour),
-      parseInt(minute)
+      parseInt(minute),
+      GLOOKO_EXPORT_TIMEZONE
     );
     if (!isNaN(timestamp)) {
       return timestamp;
@@ -173,19 +224,18 @@ function parseTimestamp(value: string): number | null {
   }
 
   // Try US format MM/DD/YYYY HH:MM
-  // Parse as UTC to avoid server timezone issues
   const usFormat = value.match(
     /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/
   );
   if (usFormat) {
     const [, month, day, year, hour, minute] = usFormat;
-    // Use Date.UTC to parse in UTC timezone
-    const timestamp = Date.UTC(
+    const timestamp = parseLocalDateTime(
       parseInt(year),
       parseInt(month) - 1,
       parseInt(day),
       parseInt(hour),
-      parseInt(minute)
+      parseInt(minute),
+      GLOOKO_EXPORT_TIMEZONE
     );
     if (!isNaN(timestamp)) {
       return timestamp;

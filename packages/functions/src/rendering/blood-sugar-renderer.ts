@@ -278,6 +278,86 @@ export function calculateInsulinTotal(
 }
 
 /**
+ * Correct a timestamp that was incorrectly parsed as UTC when it was actually local time.
+ *
+ * The Glooko CSV parser had a bug where timestamps like "2026-01-25 10:00" were parsed
+ * as UTC instead of the user's local timezone. This function corrects those timestamps.
+ *
+ * @param incorrectUtc - The timestamp that was incorrectly parsed as UTC
+ * @param timezone - The timezone the original string was meant to represent
+ * @returns The corrected UTC timestamp
+ */
+function correctTimezone(incorrectUtc: number, timezone: string): number {
+  // The incorrectUtc represents what the parser thought was UTC,
+  // but it was actually local time values. We need to figure out
+  // what the offset should have been and add it.
+
+  // Format the incorrect timestamp in UTC to get the original "local time" values
+  const utcFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  const utcParts = utcFormatter.formatToParts(new Date(incorrectUtc));
+  const utcHour = parseInt(utcParts.find(p => p.type === "hour")?.value || "0");
+  const utcMinute = parseInt(utcParts.find(p => p.type === "minute")?.value || "0");
+  const utcDay = parseInt(utcParts.find(p => p.type === "day")?.value || "0");
+  const utcMonth = parseInt(utcParts.find(p => p.type === "month")?.value || "0");
+  const utcYear = parseInt(utcParts.find(p => p.type === "year")?.value || "0");
+
+  // Now format in the target timezone to see what time this UTC corresponds to there
+  const tzFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  const tzParts = tzFormatter.formatToParts(new Date(incorrectUtc));
+  const tzHour = parseInt(tzParts.find(p => p.type === "hour")?.value || "0");
+  const tzMinute = parseInt(tzParts.find(p => p.type === "minute")?.value || "0");
+  const tzDay = parseInt(tzParts.find(p => p.type === "day")?.value || "0");
+  const tzMonth = parseInt(tzParts.find(p => p.type === "month")?.value || "0");
+  const tzYear = parseInt(tzParts.find(p => p.type === "year")?.value || "0");
+
+  // Calculate the offset in minutes between what the string said vs what it meant
+  // The original string values = UTC interpretation = (utcYear, utcMonth, utcDay, utcHour, utcMinute)
+  // What the timestamp corresponds to in target TZ = (tzYear, tzMonth, tzDay, tzHour, tzMinute)
+  // The offset = (tz values - utc values) converted to minutes
+
+  const utcTotalMins = utcYear * 525600 + utcMonth * 43800 + utcDay * 1440 + utcHour * 60 + utcMinute;
+  const tzTotalMins = tzYear * 525600 + tzMonth * 43800 + tzDay * 1440 + tzHour * 60 + tzMinute;
+
+  // If tzTotalMins < utcTotalMins, the timezone is behind UTC (like PST = UTC-8)
+  // The offset to add is: utcTotalMins - tzTotalMins (positive for PST)
+  const offsetMinutes = utcTotalMins - tzTotalMins;
+
+  return incorrectUtc + offsetMinutes * 60 * 1000;
+}
+
+/**
+ * Correct all treatment timestamps that were incorrectly parsed as UTC.
+ * This is a migration shim for data stored before the parser was fixed.
+ */
+function correctTreatmentTimestamps(
+  treatments: TreatmentDisplayData["treatments"],
+  timezone: string
+): TreatmentDisplayData["treatments"] {
+  return treatments.map(t => ({
+    ...t,
+    timestamp: correctTimezone(t.timestamp, timezone),
+  }));
+}
+
+/**
  * Get midnight timestamp for a given date in a timezone.
  * Works correctly regardless of runtime timezone (e.g., UTC on Lambda).
  */
@@ -311,9 +391,12 @@ function renderTreatmentChart(
   treatments: TreatmentDisplayData,
   timezone?: string
 ): void {
-  const { treatments: treatmentList } = treatments;
   const now = Date.now();
   const tz = timezone || "America/Los_Angeles";
+
+  // Correct treatment timestamps that were incorrectly parsed as UTC
+  // This is a migration shim for data stored before the parser was fixed
+  const treatmentList = correctTreatmentTimestamps(treatments.treatments, tz);
 
   // Calculate midnights for each of the last 4 days
   // We calculate each separately to handle DST transitions correctly
