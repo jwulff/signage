@@ -26,43 +26,40 @@ const sampleHistory = Array.from({ length: 288 }, (_, i) => ({
   glucose: 120 + Math.sin(i / 20) * 40 + Math.random() * 10,
 }));
 
-// Sample treatment data spanning 3 days for comparison feature
+// Sample treatment data spanning 36 hours in 6-hour buckets
+// Layout: oldest → newest with daylight bars between each bucket
 const HOUR = 60 * 60 * 1000;
 const sampleTreatments: GlookoTreatment[] = [
-  // Period 3: 24h-3h ago (current period, shown as bars on left + number on right)
-  // Total insulin: 8 + 5 + 10 + 7 = 30u
-  { timestamp: now - 5 * HOUR, type: "insulin", value: 8 },
-  { timestamp: now - 5 * HOUR, type: "carbs", value: 60 },
-  { timestamp: now - 8 * HOUR, type: "insulin", value: 5 },
-  { timestamp: now - 12 * HOUR, type: "insulin", value: 10 },
-  { timestamp: now - 12 * HOUR, type: "carbs", value: 80 },
-  { timestamp: now - 18 * HOUR, type: "insulin", value: 7 },
-  { timestamp: now - 18 * HOUR, type: "carbs", value: 45 },
+  // Bucket 5: 6h-0h ago (most recent) - Total: 12u
+  { timestamp: now - 1 * HOUR, type: "insulin", value: 4 },
+  { timestamp: now - 3 * HOUR, type: "insulin", value: 5 },
+  { timestamp: now - 5 * HOUR, type: "insulin", value: 3 },
 
-  // Period 2: 48h-27h ago (yesterday same window)
-  // Total insulin: 6 + 8 + 4 + 7 = 25u
-  { timestamp: now - 30 * HOUR, type: "insulin", value: 6 },
-  { timestamp: now - 30 * HOUR, type: "carbs", value: 55 },
-  { timestamp: now - 33 * HOUR, type: "insulin", value: 8 },
-  { timestamp: now - 36 * HOUR, type: "insulin", value: 4 },
-  { timestamp: now - 36 * HOUR, type: "carbs", value: 70 },
-  { timestamp: now - 42 * HOUR, type: "insulin", value: 7 },
-  { timestamp: now - 42 * HOUR, type: "carbs", value: 50 },
+  // Bucket 4: 12h-6h ago - Total: 8u
+  { timestamp: now - 7 * HOUR, type: "insulin", value: 3 },
+  { timestamp: now - 10 * HOUR, type: "insulin", value: 5 },
 
-  // Period 1: 72h-51h ago (2 days ago same window)
-  // Total insulin: 5 + 9 + 6 = 20u
-  { timestamp: now - 54 * HOUR, type: "insulin", value: 5 },
-  { timestamp: now - 54 * HOUR, type: "carbs", value: 40 },
-  { timestamp: now - 60 * HOUR, type: "insulin", value: 9 },
-  { timestamp: now - 60 * HOUR, type: "carbs", value: 65 },
-  { timestamp: now - 66 * HOUR, type: "insulin", value: 6 },
-  { timestamp: now - 66 * HOUR, type: "carbs", value: 55 },
+  // Bucket 3: 18h-12h ago - Total: 15u
+  { timestamp: now - 13 * HOUR, type: "insulin", value: 6 },
+  { timestamp: now - 16 * HOUR, type: "insulin", value: 9 },
+
+  // Bucket 2: 24h-18h ago - Total: 10u
+  { timestamp: now - 19 * HOUR, type: "insulin", value: 4 },
+  { timestamp: now - 22 * HOUR, type: "insulin", value: 6 },
+
+  // Bucket 1: 30h-24h ago - Total: 7u
+  { timestamp: now - 25 * HOUR, type: "insulin", value: 3 },
+  { timestamp: now - 28 * HOUR, type: "insulin", value: 4 },
+
+  // Bucket 0: 36h-30h ago (oldest) - Total: 5u
+  { timestamp: now - 31 * HOUR, type: "insulin", value: 2 },
+  { timestamp: now - 34 * HOUR, type: "insulin", value: 3 },
 ];
 
 const sampleTreatmentData: TreatmentDisplayData = {
   treatments: sampleTreatments,
-  recentInsulinUnits: 30, // Period 3 total
-  recentCarbsGrams: 185,
+  recentInsulinUnits: 12, // Last 6h total
+  recentCarbsGrams: 0,
   lastFetchedAt: now,
   isStale: false,
 };
