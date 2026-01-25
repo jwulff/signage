@@ -11,6 +11,7 @@
     "dev:web": "VITE_WEBSOCKET_URL=ws://localhost:8080 pnpm --filter @signage/web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
+    "test:coverage": "vitest run --coverage --config vitest.coverage.config.ts",
     "lint": "eslint . && pnpm -r lint",
     "lint:fix": "eslint . --fix && pnpm -r lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
@@ -21,6 +22,7 @@
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@types/node": "^22.10.0",
+    "@vitest/coverage-v8": "^2.1.0",
     "eslint": "^9.17.0",
     "eslint-config-prettier": "^9.1.0",
     "prettier": "^3.4.0",
