@@ -115,21 +115,22 @@ export function drawText(
 
   for (const char of text) {
     const bitmap = TINY_FONT[char];
-    if (!bitmap) continue;
-
-    for (let row = 0; row < CHAR_HEIGHT; row++) {
-      for (let col = 0; col < CHAR_WIDTH; col++) {
-        const bit = (bitmap[row] >> (CHAR_WIDTH - 1 - col)) & 1;
-        if (bit) {
-          const x = cursorX + col;
-          const y = startY + row;
-          if (x >= 0 && x < DISPLAY_WIDTH && y >= minY && y <= maxY) {
-            setPixel(frame, x, y, color);
+    // If character is missing, treat as space (advance cursor but draw nothing)
+    if (bitmap) {
+      for (let row = 0; row < CHAR_HEIGHT; row++) {
+        for (let col = 0; col < CHAR_WIDTH; col++) {
+          const bit = (bitmap[row] >> (CHAR_WIDTH - 1 - col)) & 1;
+          if (bit) {
+            const x = cursorX + col;
+            const y = startY + row;
+            if (x >= 0 && x < DISPLAY_WIDTH && y >= minY && y <= maxY) {
+              setPixel(frame, x, y, color);
+            }
           }
         }
       }
     }
-
+    // Always advance cursor, even for missing characters
     cursorX += CHAR_WIDTH + 1;
   }
 }

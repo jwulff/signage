@@ -158,4 +158,123 @@ describe("generateCompositeFrame", () => {
     }
     expect(hasChartPixels).toBe(true);
   });
+
+  it("renders treatment chart with insulin bars below center line", () => {
+    const now = Date.now();
+    const data: CompositorData = {
+      bloodSugar: {
+        glucose: 120,
+        trend: "Flat",
+        delta: 5,
+        timestamp: now,
+        rangeStatus: "normal",
+        isStale: false,
+      },
+      treatments: {
+        treatments: [
+          { timestamp: now - 30 * 60 * 1000, type: "insulin", value: 5 },
+        ],
+        recentInsulinUnits: 5,
+        recentCarbsGrams: 0,
+        isStale: false,
+      },
+    };
+
+    const frame = generateCompositeFrame(data);
+
+    // Treatment chart is rows 28-39, center at row 34
+    // Insulin bars should appear BELOW center (rows 35+)
+    let hasInsulinPixels = false;
+    for (let x = 0; x < 64; x++) {
+      for (let y = 35; y < 39; y++) {
+        const pixel = getPixel(frame, x, y);
+        // Insulin is light blue (b > r)
+        if (pixel && pixel.b > pixel.r && pixel.b > 0) {
+          hasInsulinPixels = true;
+          break;
+        }
+      }
+      if (hasInsulinPixels) break;
+    }
+    expect(hasInsulinPixels).toBe(true);
+  });
+
+  it("renders treatment chart with carbs bars above center line", () => {
+    const now = Date.now();
+    const data: CompositorData = {
+      bloodSugar: {
+        glucose: 120,
+        trend: "Flat",
+        delta: 5,
+        timestamp: now,
+        rangeStatus: "normal",
+        isStale: false,
+      },
+      treatments: {
+        treatments: [
+          { timestamp: now - 30 * 60 * 1000, type: "carbs", value: 50 },
+        ],
+        recentInsulinUnits: 0,
+        recentCarbsGrams: 50,
+        isStale: false,
+      },
+    };
+
+    const frame = generateCompositeFrame(data);
+
+    // Treatment chart is rows 28-39, center at row 34
+    // Carbs bars should appear ABOVE center (rows 28-33)
+    let hasCarbsPixels = false;
+    for (let x = 0; x < 64; x++) {
+      for (let y = 28; y < 34; y++) {
+        const pixel = getPixel(frame, x, y);
+        // Carbs is light orange (r > b)
+        if (pixel && pixel.r > pixel.b && pixel.r > 0) {
+          hasCarbsPixels = true;
+          break;
+        }
+      }
+      if (hasCarbsPixels) break;
+    }
+    expect(hasCarbsPixels).toBe(true);
+  });
+
+  it("does not render treatment chart when treatments are stale", () => {
+    const now = Date.now();
+    const data: CompositorData = {
+      bloodSugar: {
+        glucose: 120,
+        trend: "Flat",
+        delta: 5,
+        timestamp: now,
+        rangeStatus: "normal",
+        isStale: false,
+      },
+      treatments: {
+        treatments: [
+          { timestamp: now - 30 * 60 * 1000, type: "insulin", value: 10 },
+        ],
+        recentInsulinUnits: 10,
+        recentCarbsGrams: 0,
+        isStale: true, // Stale data should not render
+      },
+    };
+
+    const frame = generateCompositeFrame(data);
+
+    // Treatment chart should NOT have treatment pixels (only center line at most)
+    let hasTreatmentBars = false;
+    for (let x = 0; x < 64; x++) {
+      for (let y = 35; y < 39; y++) { // Below center line
+        const pixel = getPixel(frame, x, y);
+        // Check for blue insulin pixels
+        if (pixel && pixel.b > pixel.r && pixel.b > 50) {
+          hasTreatmentBars = true;
+          break;
+        }
+      }
+      if (hasTreatmentBars) break;
+    }
+    expect(hasTreatmentBars).toBe(false);
+  });
 });

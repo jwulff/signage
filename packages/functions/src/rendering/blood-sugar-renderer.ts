@@ -279,10 +279,16 @@ function renderTreatmentChart(
   const { treatments: treatmentList } = treatments;
   const now = Date.now();
 
-  // Find max values for scaling
+  // Filter to visible 24h window (21h left + 3h right) for max calculation
+  const visibleWindowMs = 24 * 60 * 60 * 1000;
+  const visibleTreatments = treatmentList.filter(
+    (t) => t.timestamp >= now - visibleWindowMs && t.timestamp <= now
+  );
+
+  // Find max values for scaling from visible window only
   let maxInsulin = 0;
   let maxCarbs = 0;
-  for (const t of treatmentList) {
+  for (const t of visibleTreatments) {
     if (t.type === "insulin") {
       maxInsulin = Math.max(maxInsulin, t.value);
     } else {
@@ -415,9 +421,9 @@ export function renderBloodSugarRegion(
   drawText(frame, glucoseStr, textX, TEXT_ROW, valueColor, BG_REGION_START, BG_REGION_END);
   textX += measureText(glucoseStr);
 
-  // Add space if using full spacing
+  // Add space if using full spacing (use measureText for font-consistent spacing)
   if (useFullSpacing) {
-    textX += 6; // space width
+    textX += measureText(" ");
   }
 
   // Draw delta and time in white
