@@ -153,10 +153,11 @@ function parseLocalDateTime(
   day: number,
   hour: number,
   minute: number,
+  second: number,
   timezone: string
 ): number {
   // Create a Date in UTC with these components as a starting guess
-  const utcGuess = Date.UTC(year, month, day, hour, minute);
+  const utcGuess = Date.UTC(year, month, day, hour, minute, second);
 
   // Format utcGuess in the target timezone to see what local time it maps to
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -202,18 +203,19 @@ function parseTimestamp(value: string): number | null {
     return date.getTime();
   }
 
-  // Try "YYYY-MM-DD HH:MM" format (common in Glooko)
+  // Try "YYYY-MM-DD HH:MM[:SS]" format (common in Glooko)
   const glookoFormat = value.match(
-    /(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})/
+    /(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/
   );
   if (glookoFormat) {
-    const [, year, month, day, hour, minute] = glookoFormat;
+    const [, year, month, day, hour, minute, second = "0"] = glookoFormat;
     const timestamp = parseLocalDateTime(
       parseInt(year),
       parseInt(month) - 1,
       parseInt(day),
       parseInt(hour),
       parseInt(minute),
+      parseInt(second),
       GLOOKO_EXPORT_TIMEZONE
     );
     if (!isNaN(timestamp)) {
@@ -221,18 +223,19 @@ function parseTimestamp(value: string): number | null {
     }
   }
 
-  // Try US format MM/DD/YYYY HH:MM
+  // Try US format MM/DD/YYYY HH:MM[:SS]
   const usFormat = value.match(
-    /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/
+    /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/
   );
   if (usFormat) {
-    const [, month, day, year, hour, minute] = usFormat;
+    const [, month, day, year, hour, minute, second = "0"] = usFormat;
     const timestamp = parseLocalDateTime(
       parseInt(year),
       parseInt(month) - 1,
       parseInt(day),
       parseInt(hour),
       parseInt(minute),
+      parseInt(second),
       GLOOKO_EXPORT_TIMEZONE
     );
     if (!isNaN(timestamp)) {

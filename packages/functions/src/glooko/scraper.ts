@@ -1142,9 +1142,26 @@ function parseTimestamp(value: string): number | null {
     return date.getTime();
   }
 
-  // Try common date formats
-  // MM/DD/YYYY HH:MM:SS
-  const usFormat = value.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):?(\d{2})?/);
+  // Try YYYY-MM-DD HH:MM[:SS] format (common in Glooko CSV exports)
+  const isoLikeFormat = value.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (isoLikeFormat) {
+    const [, year, month, day, hour, minute, second = "0"] = isoLikeFormat;
+    const timestamp = parseLocalDateTime(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day),
+      parseInt(hour),
+      parseInt(minute),
+      parseInt(second),
+      GLOOKO_EXPORT_TIMEZONE
+    );
+    if (!isNaN(timestamp)) {
+      return timestamp;
+    }
+  }
+
+  // Try US format MM/DD/YYYY HH:MM[:SS]
+  const usFormat = value.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
   if (usFormat) {
     const [, month, day, year, hour, minute, second = "0"] = usFormat;
     const timestamp = parseLocalDateTime(
