@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { calculateTIR, classifyRange } from "./blood-sugar-renderer.js";
+import { calculateTIR, classifyRange, calculateInsulinTotal } from "./blood-sugar-renderer.js";
 
 describe("calculateTIR", () => {
   const now = Date.now();
@@ -108,5 +108,52 @@ describe("classifyRange", () => {
   it("classifies very high (>250)", () => {
     expect(classifyRange(251)).toBe("veryHigh");
     expect(classifyRange(400)).toBe("veryHigh");
+  });
+});
+
+describe("calculateInsulinTotal", () => {
+  const now = Date.now();
+  const HOUR = 60 * 60 * 1000;
+
+  it("returns 0 for empty treatments array", () => {
+    expect(calculateInsulinTotal([], now - 24 * HOUR, now)).toBe(0);
+  });
+
+  it("sums only insulin treatments, ignoring carbs", () => {
+    const treatments = [
+      { timestamp: now - 5 * HOUR, type: "insulin" as const, value: 5 },
+      { timestamp: now - 6 * HOUR, type: "carbs" as const, value: 50 },
+      { timestamp: now - 7 * HOUR, type: "insulin" as const, value: 3 },
+    ];
+    expect(calculateInsulinTotal(treatments, now - 24 * HOUR, now)).toBe(8);
+  });
+
+  it("filters by time window (startTime inclusive, endTime exclusive)", () => {
+    const treatments = [
+      { timestamp: now - 25 * HOUR, type: "insulin" as const, value: 10 }, // before window
+      { timestamp: now - 24 * HOUR, type: "insulin" as const, value: 5 }, // at start (included)
+      { timestamp: now - 12 * HOUR, type: "insulin" as const, value: 3 }, // in window
+      { timestamp: now - 3 * HOUR, type: "insulin" as const, value: 7 }, // at end (excluded)
+      { timestamp: now - 1 * HOUR, type: "insulin" as const, value: 2 }, // after window
+    ];
+    // Window: 24h ago to 3h ago (exclusive)
+    expect(calculateInsulinTotal(treatments, now - 24 * HOUR, now - 3 * HOUR)).toBe(8); // 5 + 3
+  });
+
+  it("handles fractional insulin values", () => {
+    const treatments = [
+      { timestamp: now - 5 * HOUR, type: "insulin" as const, value: 2.5 },
+      { timestamp: now - 6 * HOUR, type: "insulin" as const, value: 1.5 },
+    ];
+    expect(calculateInsulinTotal(treatments, now - 24 * HOUR, now)).toBe(4);
+  });
+
+  it("returns 0 when no treatments fall within window", () => {
+    const treatments = [
+      { timestamp: now - 30 * HOUR, type: "insulin" as const, value: 10 },
+      { timestamp: now - 1 * HOUR, type: "insulin" as const, value: 5 },
+    ];
+    // Window: 24h to 3h ago - neither treatment falls in this window
+    expect(calculateInsulinTotal(treatments, now - 24 * HOUR, now - 3 * HOUR)).toBe(0);
   });
 });

@@ -270,14 +270,17 @@ const TREATMENT_COLORS = {
 
 /**
  * Calculate total insulin units in a time window
+ * @param treatments - Array of treatment records
+ * @param startTime - Start of window (inclusive)
+ * @param endTime - End of window (exclusive)
  */
-function calculateInsulinTotal(
+export function calculateInsulinTotal(
   treatments: TreatmentDisplayData["treatments"],
   startTime: number,
   endTime: number
 ): number {
   return treatments
-    .filter((t) => t.type === "insulin" && t.timestamp >= startTime && t.timestamp <= endTime)
+    .filter((t) => t.type === "insulin" && t.timestamp >= startTime && t.timestamp < endTime)
     .reduce((sum, t) => sum + t.value, 0);
 }
 
@@ -355,10 +358,11 @@ function renderTreatmentChart(
     }
   }
 
-  // Right section: 3-day insulin comparison (same 21h window)
-  // Period 1: 72-51h ago (3 days back)
-  // Period 2: 48-27h ago (2 days back)
-  // Period 3: 24-3h ago (current, same as left chart)
+  // Right section: insulin totals for the same 21h window across 3 periods
+  // Each period is the same 21h window (24h-3h), offset by 24h
+  // Period 1: 72h-51h ago (oldest, dimmest)
+  // Period 2: 48h-27h ago (middle)
+  // Period 3: 24h-3h ago (current, brightest - matches left chart)
   const period3 = calculateInsulinTotal(treatmentList, now - 24 * HOUR_MS, now - 3 * HOUR_MS);
   const period2 = calculateInsulinTotal(treatmentList, now - 48 * HOUR_MS, now - 27 * HOUR_MS);
   const period1 = calculateInsulinTotal(treatmentList, now - 72 * HOUR_MS, now - 51 * HOUR_MS);
@@ -366,24 +370,35 @@ function renderTreatmentChart(
   // Display as 3 numbers horizontally with brightness indicating recency
   // Oldest (dimmest) -> newest (brightest)
   const rightX = CHART_X + CHART_LEFT_WIDTH + 1;
+  const rightWidth = CHART_RIGHT_WIDTH - 1; // Available width for numbers
   const textY = TREATMENT_CHART_Y + 3; // Center vertically in chart area
 
-  // Format numbers (round to integers)
-  const p1Str = String(Math.round(period1));
-  const p2Str = String(Math.round(period2));
-  const p3Str = String(Math.round(period3));
+  // Format numbers (round to integers, cap at 99 for display to prevent overflow)
+  const formatInsulin = (value: number): string => {
+    const rounded = Math.round(value);
+    return rounded > 99 ? "99+" : String(rounded);
+  };
+
+  const p1Str = formatInsulin(period1);
+  const p2Str = formatInsulin(period2);
+  const p3Str = formatInsulin(period3);
 
   // Colors: dim -> medium -> bright blue
   const dimBlue: RGB = { r: 40, g: 60, b: 100 };
   const medBlue: RGB = { r: 70, g: 100, b: 160 };
   const brightBlue: RGB = { r: 100, g: 150, b: 255 };
 
-  // Draw the 3 numbers with spacing
+  // Calculate total width needed and adjust spacing if necessary
+  const totalTextWidth = measureTinyText(p1Str) + measureTinyText(p2Str) + measureTinyText(p3Str);
+  const availableForSpacing = rightWidth - totalTextWidth;
+  const spacing = Math.max(1, Math.min(2, Math.floor(availableForSpacing / 2)));
+
+  // Draw the 3 numbers with dynamic spacing
   let textX = rightX;
   drawTinyText(frame, p1Str, textX, textY, dimBlue);
-  textX += measureTinyText(p1Str) + 2;
+  textX += measureTinyText(p1Str) + spacing;
   drawTinyText(frame, p2Str, textX, textY, medBlue);
-  textX += measureTinyText(p2Str) + 2;
+  textX += measureTinyText(p2Str) + spacing;
   drawTinyText(frame, p3Str, textX, textY, brightBlue);
 }
 
