@@ -76,21 +76,21 @@ const TREND_ARROWS: Record<string, number[]> = {
   doubleup: [
     0b00100,
     0b01010,
+    0b00000,
     0b00100,
     0b01010,
-    0b00000,
   ],
   // ↑ Single up arrow
   singleup: [
     0b00100,
     0b01110,
-    0b00100,
+    0b10101,
     0b00100,
     0b00100,
   ],
   // ↗ Diagonal up-right
   fortyfiveup: [
-    0b01111,
+    0b00111,
     0b00011,
     0b00101,
     0b01000,
@@ -98,11 +98,11 @@ const TREND_ARROWS: Record<string, number[]> = {
   ],
   // → Flat/steady
   flat: [
-    0b00000,
     0b00100,
+    0b00010,
     0b11111,
+    0b00010,
     0b00100,
-    0b00000,
   ],
   // ↘ Diagonal down-right
   fortyfivedown: [
@@ -110,21 +110,21 @@ const TREND_ARROWS: Record<string, number[]> = {
     0b01000,
     0b00101,
     0b00011,
-    0b01111,
+    0b00111,
   ],
   // ↓ Single down arrow
   singledown: [
     0b00100,
     0b00100,
-    0b00100,
+    0b10101,
     0b01110,
     0b00100,
   ],
   // ↓↓ Double down - two stacked chevrons
   doubledown: [
-    0b00000,
     0b01010,
     0b00100,
+    0b00000,
     0b01010,
     0b00100,
   ],
