@@ -21,11 +21,13 @@ const CHART_WIDTH = DISPLAY_WIDTH - 2; // Full width minus margins
 
 // Treatment chart (insulin/carbs) - 1/3 of available chart space
 const TREATMENT_CHART_Y = 28; // After text (5px) + 1px margin
-const TREATMENT_CHART_HEIGHT = 12; // ~1/3 of 35px available
+const TREATMENT_CHART_HEIGHT = 11; // Rows 28-38
+
+// 1px blank separator at row 39
 
 // Glucose chart - 2/3 of available chart space
-const GLUCOSE_CHART_Y = 40; // After treatment chart
-const GLUCOSE_CHART_HEIGHT = 23; // Rows 40-62, ~2/3 of 35px available
+const GLUCOSE_CHART_Y = 40; // After treatment chart + 1px gap
+const GLUCOSE_CHART_HEIGHT = 23; // Rows 40-62
 
 // Split chart: left half = 21h compressed, right half = 3h detailed
 const CHART_LEFT_WIDTH = Math.floor(CHART_WIDTH / 2);
