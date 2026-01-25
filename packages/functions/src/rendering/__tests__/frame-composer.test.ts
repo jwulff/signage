@@ -172,9 +172,9 @@ describe("generateCompositeFrame", () => {
       },
       treatments: {
         treatments: [
-          // Insulin across multiple 6h buckets
+          // Insulin across multiple days (midnight to midnight)
           { timestamp: now - 2 * 60 * 60 * 1000, type: "insulin", value: 5 },
-          { timestamp: now - 8 * 60 * 60 * 1000, type: "insulin", value: 3 },
+          { timestamp: now - 26 * 60 * 60 * 1000, type: "insulin", value: 8 },
         ],
         recentInsulinUnits: 5,
         recentCarbsGrams: 0,
@@ -186,7 +186,7 @@ describe("generateCompositeFrame", () => {
     const frame = generateCompositeFrame(data);
 
     // Treatment chart is rows 28-38
-    // Should have blue pixels for insulin numbers
+    // Should have blue pixels for insulin numbers (4-day totals)
     let hasBluePixels = false;
     for (let x = 0; x < 64; x++) {
       for (let y = 28; y < 39; y++) {
@@ -200,48 +200,6 @@ describe("generateCompositeFrame", () => {
       if (hasBluePixels) break;
     }
     expect(hasBluePixels).toBe(true);
-  });
-
-  it("renders daylight bars between insulin buckets", () => {
-    const now = Date.now();
-    const data: CompositorData = {
-      bloodSugar: {
-        glucose: 120,
-        trend: "Flat",
-        delta: 5,
-        timestamp: now,
-        rangeStatus: "normal",
-        isStale: false,
-      },
-      timezone: "America/Los_Angeles",
-      treatments: {
-        treatments: [
-          { timestamp: now - 2 * 60 * 60 * 1000, type: "insulin", value: 5 },
-        ],
-        recentInsulinUnits: 5,
-        recentCarbsGrams: 0,
-        lastFetchedAt: now,
-        isStale: false,
-      },
-    };
-
-    const frame = generateCompositeFrame(data);
-
-    // Treatment chart should have daylight bar pixels (purple to yellow gradient)
-    // These appear as vertical lines between buckets
-    let hasDaylightPixels = false;
-    for (let x = 0; x < 64; x++) {
-      for (let y = 28; y < 39; y++) {
-        const pixel = getPixel(frame, x, y);
-        // Daylight bars are purple-yellow gradient (significant r and b, varying g)
-        if (pixel && pixel.r > 50 && (pixel.b > 50 || pixel.g > 50)) {
-          hasDaylightPixels = true;
-          break;
-        }
-      }
-      if (hasDaylightPixels) break;
-    }
-    expect(hasDaylightPixels).toBe(true);
   });
 
   it("does not render treatment chart when treatments are stale", () => {
@@ -273,7 +231,7 @@ describe("generateCompositeFrame", () => {
     for (let x = 0; x < 64; x++) {
       for (let y = 28; y < 39; y++) {
         const pixel = getPixel(frame, x, y);
-        // Check for any bright pixels (blue numbers or daylight bars)
+        // Check for any bright pixels (blue numbers)
         if (pixel && (pixel.b > 50 || pixel.r > 80)) {
           hasTreatmentPixels = true;
           break;

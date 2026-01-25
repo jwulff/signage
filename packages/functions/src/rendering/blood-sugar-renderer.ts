@@ -278,23 +278,33 @@ export function calculateInsulinTotal(
 }
 
 /**
- * Calculate daylight color for a given hour (0-23)
- * Uses cosine curve: peaks at noon (yellow), bottoms at midnight (purple)
+ * Get midnight timestamp for a given date in a timezone.
+ * Works correctly regardless of runtime timezone (e.g., UTC on Lambda).
  */
-function getDaylightColor(hour: number): RGB {
-  const sunlight = (1 + Math.cos((hour - 12) * Math.PI / 12)) / 2;
-  const purple = { r: 120, g: 50, b: 180 };
-  const yellow = { r: 120, g: 100, b: 25 };
-  return {
-    r: Math.round(purple.r + (yellow.r - purple.r) * sunlight),
-    g: Math.round(purple.g + (yellow.g - purple.g) * sunlight),
-    b: Math.round(purple.b + (yellow.b - purple.b) * sunlight),
-  };
+function getMidnightTimestamp(date: Date, timezone: string): number {
+  // Get the current time-of-day in the target timezone
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(date);
+  const hour = parseInt(parts.find(p => p.type === "hour")?.value || "0");
+  const minute = parseInt(parts.find(p => p.type === "minute")?.value || "0");
+  const second = parseInt(parts.find(p => p.type === "second")?.value || "0");
+
+  // Calculate seconds since midnight in the target timezone
+  const secondsSinceMidnight = hour * 3600 + minute * 60 + second;
+
+  // Subtract that from the timestamp to get midnight
+  return date.getTime() - secondsSinceMidnight * 1000;
 }
 
 /**
- * Render treatment chart showing 36 hours of insulin totals in 6-hour buckets
- * with 1px vertical daylight bars between each bucket indicating time of day
+ * Render treatment chart showing last 4 days of insulin totals (midnight to midnight)
  */
 function renderTreatmentChart(
   frame: Frame,
@@ -303,76 +313,66 @@ function renderTreatmentChart(
 ): void {
   const { treatments: treatmentList } = treatments;
   const now = Date.now();
-  const HOUR_MS = 60 * 60 * 1000;
   const tz = timezone || "America/Los_Angeles";
 
-  // 6 buckets of 6 hours each, covering last 36 hours
-  // Bucket 0: 36h-30h ago (oldest)
-  // Bucket 1: 30h-24h ago
-  // Bucket 2: 24h-18h ago
-  // Bucket 3: 18h-12h ago
-  // Bucket 4: 12h-6h ago
-  // Bucket 5: 6h-0h ago (most recent)
-  const buckets: number[] = [];
-  for (let i = 0; i < 6; i++) {
-    const startHours = (6 - i) * 6; // 36, 30, 24, 18, 12, 6
-    const endHours = (5 - i) * 6;   // 30, 24, 18, 12, 6, 0
-    const total = calculateInsulinTotal(
-      treatmentList,
-      now - startHours * HOUR_MS,
-      now - endHours * HOUR_MS
-    );
-    buckets.push(total);
+  // Calculate midnights for each of the last 4 days
+  // We calculate each separately to handle DST transitions correctly
+  // (a calendar day may be 23h or 25h on DST change days)
+  const midnights: number[] = [];
+  let datePointer = new Date(now);
+
+  // Get today's midnight
+  midnights.push(getMidnightTimestamp(datePointer, tz));
+
+  // Go back 3 more days, calculating each midnight separately
+  for (let i = 0; i < 3; i++) {
+    // Go back 30 hours (safely past one day boundary) then find that day's midnight
+    datePointer = new Date(datePointer.getTime() - 30 * 60 * 60 * 1000);
+    midnights.unshift(getMidnightTimestamp(datePointer, tz));
   }
 
-  // Calculate the hour at each boundary for daylight bars (5 boundaries between 6 buckets)
-  // Boundary hours are at: 30h, 24h, 18h, 12h, 6h ago
-  const boundaryHours: number[] = [];
-  for (let i = 0; i < 5; i++) {
-    const hoursAgo = (5 - i) * 6; // 30, 24, 18, 12, 6
-    const boundaryTime = now - hoursAgo * HOUR_MS;
-    const hour = parseInt(
-      new Intl.DateTimeFormat("en-US", {
-        timeZone: tz,
-        hour: "2-digit",
-        hour12: false,
-      }).format(new Date(boundaryTime))
-    );
-    boundaryHours.push(hour);
+  // midnights = [3 days ago, 2 days ago, yesterday, today]
+  // Calculate insulin totals for each day
+  const dayTotals: number[] = [];
+  for (let i = 0; i < 4; i++) {
+    const dayStart = midnights[i];
+    // Today (i=3) ends at now, other days end at next midnight
+    const dayEnd = i === 3 ? now : midnights[i + 1];
+    const total = calculateInsulinTotal(treatmentList, dayStart, dayEnd);
+    dayTotals.push(total);
   }
 
-  // Format numbers for display
+  // Format numbers for display (cap at 99+ to indicate truncation)
   const formatInsulin = (value: number): string => {
     const rounded = Math.round(value);
-    return rounded > 99 ? "99" : String(rounded);
+    return rounded > 99 ? "99+" : String(rounded);
   };
 
-  const bucketStrs = buckets.map(formatInsulin);
+  const dayStrs = dayTotals.map(formatInsulin);
 
   // Calculate total width needed
-  const bucketWidths = bucketStrs.map(s => measureTinyText(s));
-  const totalTextWidth = bucketWidths.reduce((a, b) => a + b, 0);
-  const numBars = 5; // 5 daylight bars between 6 buckets
-  const barWidth = 1;
+  const dayWidths = dayStrs.map(s => measureTinyText(s));
+  const totalTextWidth = dayWidths.reduce((a, b) => a + b, 0);
 
   // Available width for the treatment chart
   const availableWidth = CHART_WIDTH;
 
-  // Calculate spacing dynamically
-  const extraSpace = availableWidth - totalTextWidth - numBars * barWidth;
-  const spacing = Math.max(1, Math.floor(extraSpace / (numBars * 2)));
+  // Calculate spacing between numbers (no vertical bars)
+  const numGaps = 3; // 3 gaps between 4 numbers
+  const extraSpace = availableWidth - totalTextWidth;
+  const spacing = Math.max(2, Math.floor(extraSpace / numGaps));
 
   // Center the content
-  const totalUsedWidth = totalTextWidth + numBars * (barWidth + 2 * spacing);
+  const totalUsedWidth = totalTextWidth + numGaps * spacing;
   const startX = CHART_X + Math.max(0, Math.floor((availableWidth - totalUsedWidth) / 2));
 
   // Vertical positioning - center text in chart area
   const textY = TREATMENT_CHART_Y + Math.floor((TREATMENT_CHART_HEIGHT - 5) / 2);
 
   // Brightness gradient: oldest (dimmest) to newest (brightest)
-  const getBucketColor = (index: number): RGB => {
-    // index 0 = oldest (dimmest), index 5 = newest (brightest)
-    const brightness = 0.3 + (index / 5) * 0.7; // 0.3 to 1.0
+  const getDayColor = (index: number): RGB => {
+    // index 0 = oldest (dimmest), index 3 = newest (brightest)
+    const brightness = 0.3 + (index / 3) * 0.7; // 0.3 to 1.0
     return {
       r: Math.round(100 * brightness),
       g: Math.round(150 * brightness),
@@ -380,24 +380,16 @@ function renderTreatmentChart(
     };
   };
 
-  // Draw buckets and daylight bars
+  // Draw 4 day totals
   let x = startX;
-  for (let i = 0; i < 6; i++) {
-    // Draw bucket number
-    const color = getBucketColor(i);
-    drawTinyText(frame, bucketStrs[i], x, textY, color);
-    x += bucketWidths[i];
+  for (let i = 0; i < 4; i++) {
+    const color = getDayColor(i);
+    drawTinyText(frame, dayStrs[i], x, textY, color);
+    x += dayWidths[i];
 
-    // Draw daylight bar after each bucket except the last
-    if (i < 5) {
+    // Add spacing after each number except the last
+    if (i < 3) {
       x += spacing;
-
-      // Draw vertical daylight bar
-      const barColor = getDaylightColor(boundaryHours[i]);
-      for (let py = TREATMENT_CHART_Y; py < TREATMENT_CHART_Y + TREATMENT_CHART_HEIGHT; py++) {
-        setPixel(frame, x, py, barColor);
-      }
-      x += barWidth + spacing;
     }
   }
 }
@@ -469,7 +461,7 @@ export function renderBloodSugarRegion(
   const deltaTimeStr = useFullSpacing ? `${deltaStr} ${timeStr}` : `${deltaStr} ${timeStr}`;
   drawText(frame, deltaTimeStr, textX, TEXT_ROW, secondaryColor, BG_REGION_START, BG_REGION_END);
 
-  // Treatment chart (36h insulin totals in 6h buckets with daylight bars)
+  // Treatment chart (4-day midnight-to-midnight insulin totals)
   if (treatments && !treatments.isStale) {
     renderTreatmentChart(frame, treatments, timezone);
   }

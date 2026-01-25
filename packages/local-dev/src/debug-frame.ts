@@ -26,39 +26,44 @@ const sampleHistory = Array.from({ length: 288 }, (_, i) => ({
   glucose: 120 + Math.sin(i / 20) * 40 + Math.random() * 10,
 }));
 
-// Sample treatment data spanning 36 hours in 6-hour buckets
-// Layout: oldest → newest with daylight bars between each bucket
+// Sample treatment data spanning 4 days (midnight to midnight)
+// Each day shows total insulin for that calendar day
 const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+
+// Calculate midnight today in local time
+const todayMidnight = new Date(now);
+todayMidnight.setHours(0, 0, 0, 0);
+const midnight = todayMidnight.getTime();
+
 const sampleTreatments: GlookoTreatment[] = [
-  // Bucket 5: 6h-0h ago (most recent) - Total: 12u
-  { timestamp: now - 1 * HOUR, type: "insulin", value: 4 },
-  { timestamp: now - 3 * HOUR, type: "insulin", value: 5 },
-  { timestamp: now - 5 * HOUR, type: "insulin", value: 3 },
+  // Day 3: Today (partial day, up to now) - Total: 18u
+  { timestamp: midnight + 2 * HOUR, type: "insulin", value: 6 },   // 2am
+  { timestamp: midnight + 8 * HOUR, type: "insulin", value: 7 },   // 8am
+  { timestamp: midnight + 12 * HOUR, type: "insulin", value: 5 },  // noon
 
-  // Bucket 4: 12h-6h ago - Total: 8u
-  { timestamp: now - 7 * HOUR, type: "insulin", value: 3 },
-  { timestamp: now - 10 * HOUR, type: "insulin", value: 5 },
+  // Day 2: Yesterday - Total: 42u
+  { timestamp: midnight - 22 * HOUR, type: "insulin", value: 8 },  // 2am yesterday
+  { timestamp: midnight - 16 * HOUR, type: "insulin", value: 10 }, // 8am yesterday
+  { timestamp: midnight - 12 * HOUR, type: "insulin", value: 12 }, // noon yesterday
+  { timestamp: midnight - 6 * HOUR, type: "insulin", value: 12 },  // 6pm yesterday
 
-  // Bucket 3: 18h-12h ago - Total: 15u
-  { timestamp: now - 13 * HOUR, type: "insulin", value: 6 },
-  { timestamp: now - 16 * HOUR, type: "insulin", value: 9 },
+  // Day 1: 2 days ago - Total: 35u
+  { timestamp: midnight - DAY - 22 * HOUR, type: "insulin", value: 7 },
+  { timestamp: midnight - DAY - 16 * HOUR, type: "insulin", value: 9 },
+  { timestamp: midnight - DAY - 12 * HOUR, type: "insulin", value: 10 },
+  { timestamp: midnight - DAY - 6 * HOUR, type: "insulin", value: 9 },
 
-  // Bucket 2: 24h-18h ago - Total: 10u
-  { timestamp: now - 19 * HOUR, type: "insulin", value: 4 },
-  { timestamp: now - 22 * HOUR, type: "insulin", value: 6 },
-
-  // Bucket 1: 30h-24h ago - Total: 7u
-  { timestamp: now - 25 * HOUR, type: "insulin", value: 3 },
-  { timestamp: now - 28 * HOUR, type: "insulin", value: 4 },
-
-  // Bucket 0: 36h-30h ago (oldest) - Total: 5u
-  { timestamp: now - 31 * HOUR, type: "insulin", value: 2 },
-  { timestamp: now - 34 * HOUR, type: "insulin", value: 3 },
+  // Day 0: 3 days ago (oldest) - Total: 28u
+  { timestamp: midnight - 2 * DAY - 22 * HOUR, type: "insulin", value: 6 },
+  { timestamp: midnight - 2 * DAY - 16 * HOUR, type: "insulin", value: 8 },
+  { timestamp: midnight - 2 * DAY - 12 * HOUR, type: "insulin", value: 7 },
+  { timestamp: midnight - 2 * DAY - 6 * HOUR, type: "insulin", value: 7 },
 ];
 
 const sampleTreatmentData: TreatmentDisplayData = {
   treatments: sampleTreatments,
-  recentInsulinUnits: 12, // Last 6h total
+  recentInsulinUnits: 18, // Today's total
   recentCarbsGrams: 0,
   lastFetchedAt: now,
   isStale: false,

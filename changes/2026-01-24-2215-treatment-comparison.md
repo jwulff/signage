@@ -1,24 +1,24 @@
-# Treatment Chart: 36-Hour Insulin Totals with Daylight Bars
+# Treatment Chart: 4-Day Insulin Totals
 
 *Date: 2026-01-24 2215*
 
 ## Why
-Glooko treatment data is always delayed, making the 3h "recent" section of the treatment chart perpetually empty. The full treatment chart space can be better used to show actionable insulin insights.
+Glooko treatment data is always delayed, making the 3h "recent" section of the treatment chart perpetually empty. The full treatment chart space can be better used to show actionable insulin insights. The previous 6-hour bucket design with daylight bars was visually too busy.
 
 ## How
-Display 36 hours of insulin totals in 6-hour buckets with daylight time markers:
-- **6 buckets**: Each showing total insulin units for a 6-hour period
-  - Bucket 0 (36h-30h ago) → Bucket 5 (6h-0h ago, most recent)
-- **5 daylight bars**: 1px vertical lines between buckets showing time-of-day
-  - Purple (midnight) → Yellow (noon) gradient based on boundary hour
-- **Brightness gradient**: Older buckets are dimmer, newest is brightest blue
+Display last 4 days of insulin totals (midnight to midnight):
+- **4 numbers**: Total insulin units for each calendar day
+  - 3 days ago (dimmest) → Today (brightest)
+- **Brightness gradient**: Older days are dimmer blue, today is brightest blue
+- **No vertical separators**: Clean, minimal display of just the numbers
+- **Midnight-to-midnight**: Each day counted from local midnight
 
 ## Key Design Decisions
-- **6-hour buckets**: Match natural meal/dosing rhythms (breakfast, lunch, dinner, overnight)
-- **Daylight bars**: Provide time context using the same purple→yellow gradient as the glucose chart, making it easy to correlate insulin with time of day
-- **Full-width layout**: Removed the split left/right design to maximize readability
-- **Insulin-only focus**: Carbs removed since insulin is more actionable for dosing decisions
+- **Calendar days**: More intuitive than rolling time windows - "yesterday's total" is clearer than "24h-48h ago"
+- **No divider bars**: Previous daylight bars added visual noise without much benefit in this context
+- **4-day history**: Gives enough context to spot patterns (weekday vs weekend, for example)
+- **Timezone-aware**: Uses local timezone for midnight calculations
 
 ## What's Next
-- Consider adding a simple trend indicator comparing recent buckets
-- Could show carbs as a secondary row if vertical space permits
+- Monitor if 4 days is enough or if 5-7 days would be more useful
+- Consider adding a trend arrow if today differs significantly from recent average
