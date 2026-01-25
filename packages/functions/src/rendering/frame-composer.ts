@@ -1,14 +1,16 @@
 /**
  * Frame composer - combines all widgets into a single frame
  *
- * Layout (64x64):
+ * Layout (64x64) - 4 equally-spaced sections above sparkline:
  * ┌───────────────────────────────────────┐
- * │           10:45                       │  row 1-5
- * │        SUN JAN 19 2026                │  row 7-11
- * │      [weather/sunlight band]          │  rows 13-20
- * ├───────────────────────────────────────┤  row 21
- * │  → 142 +5 2m                          │  row 22-26
- * │     [treatment chart - insulin/carbs] │  rows 28-39 (12px)
+ * │        SUN JAN 19 10:45               │  rows 3-7
+ * │                                       │  gap
+ * │      [weather/sunlight band]          │  rows 12-19
+ * │                                       │  gap
+ * │        12  24  36  48  5m             │  rows 23-27 (insulin totals)
+ * │                                       │  gap
+ * │  → 142 +5 2m                          │  rows 32-36 (glucose reading)
+ * │                                       │  gap
  * │     [glucose sparkline chart]         │  rows 40-62 (23px)
  * └───────────────────────────────────────┘
  */

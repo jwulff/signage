@@ -22,7 +22,7 @@ export interface ClockRegionBounds {
 }
 
 // Sunlight band configuration (compact layout)
-const BAND_Y = 13; // Start row for the band (moved up from 18)
+const BAND_Y = 12; // Start row for the band
 const BAND_HEIGHT = 8; // Height of the sunlight band
 const BAND_MARGIN = 1; // Left/right margin
 
@@ -121,8 +121,8 @@ export function renderClockRegion(
   // Draw date (dimmer) and time (brighter) with different colors
   const dateTimeX = centerXInBounds(dateTimeStr, startX, endX);
   const dateWidth = measureText(dateStr);
-  drawText(frame, dateStr, dateTimeX, startY + 1, COLORS.clockSecondary, startY, endY);
-  drawText(frame, timeStr, dateTimeX + dateWidth + 1, startY + 1, COLORS.clockTime, startY, endY);
+  drawText(frame, dateStr, dateTimeX, startY + 3, COLORS.clockSecondary, startY, endY);
+  drawText(frame, timeStr, dateTimeX + dateWidth + 1, startY + 3, COLORS.clockTime, startY, endY);
 
   // Sunlight gradient band with temperature overlay
   renderSunlightBand(frame, currentHour24, weather, startX, endX);

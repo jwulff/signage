@@ -13,20 +13,21 @@ import type { TreatmentDisplayData } from "../glooko/types.js";
 const BG_REGION_START = 21;
 const BG_REGION_END = 63;
 
-// Layout configuration - text on top, treatment chart, then glucose chart
-const TEXT_ROW = 22; // 1px below divider at row 21
+// Layout configuration - equal spacing above sparkline
+// Sections: date/time (rows 3-7), weather (12-19), insulin (23-27), glucose (32-36)
 const TEXT_MARGIN = 1; // Left/right margin for text
 const CHART_X = 1;
 const CHART_WIDTH = DISPLAY_WIDTH - 2; // Full width minus margins
 
-// Treatment chart (insulin/carbs) - 1/3 of available chart space
-const TREATMENT_CHART_Y = 28; // After text (5px) + 1px margin
-const TREATMENT_CHART_HEIGHT = 11; // Rows 28-38
+// Treatment chart (insulin totals) - above glucose reading
+const TREATMENT_CHART_Y = 23;
+const TREATMENT_CHART_HEIGHT = 5; // Rows 23-27
 
-// 1px blank separator at row 39
+// Glucose reading - right above sparkline
+const TEXT_ROW = 32; // Rows 32-36
 
-// Glucose chart - 2/3 of available chart space
-const GLUCOSE_CHART_Y = 40; // After treatment chart + 1px gap
+// Glucose sparkline chart
+const GLUCOSE_CHART_Y = 40;
 const GLUCOSE_CHART_HEIGHT = 23; // Rows 40-62
 
 // Split chart: left half = 21h compressed, right half = 3h detailed
@@ -94,19 +95,19 @@ const TREND_ARROWS: Record<string, number[]> = {
     0b00011,
     0b00101,
     0b01001,
-    0b00000,
+    0b10000,
   ],
   // → Flat/steady
   flat: [
     0b00100,
     0b00010,
-    0b01111,
+    0b11111,
     0b00010,
     0b00100,
   ],
   // ↘ Diagonal down-right
   fortyfivedown: [
-    0b00000,
+    0b10000,
     0b01001,
     0b00101,
     0b00011,
