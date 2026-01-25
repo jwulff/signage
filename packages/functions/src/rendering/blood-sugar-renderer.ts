@@ -350,15 +350,28 @@ function renderTreatmentChart(
 
   const dayStrs = dayTotals.map(formatInsulin);
 
-  // Calculate total width needed
+  // Format latency indicator (time since last Glooko data)
+  const formatLatency = (lastFetchedAt: number): string => {
+    const msAgo = now - lastFetchedAt;
+    const minsAgo = Math.floor(msAgo / (60 * 1000));
+    if (minsAgo < 60) {
+      return `${minsAgo}m`;
+    }
+    const hoursAgo = Math.ceil(minsAgo / 60);
+    return `${hoursAgo}h`;
+  };
+  const latencyStr = formatLatency(treatments.lastFetchedAt);
+
+  // Calculate total width needed (4 day totals + latency)
   const dayWidths = dayStrs.map(s => measureTinyText(s));
-  const totalTextWidth = dayWidths.reduce((a, b) => a + b, 0);
+  const latencyWidth = measureTinyText(latencyStr);
+  const totalTextWidth = dayWidths.reduce((a, b) => a + b, 0) + latencyWidth;
 
   // Available width for the treatment chart
   const availableWidth = CHART_WIDTH;
 
-  // Calculate spacing between numbers (no vertical bars)
-  const numGaps = 3; // 3 gaps between 4 numbers
+  // Calculate spacing between numbers (3 gaps between 4 day totals + 1 gap before latency)
+  const numGaps = 4; // 4 gaps total
   const extraSpace = availableWidth - totalTextWidth;
   const spacing = Math.max(2, Math.floor(extraSpace / numGaps));
 
@@ -385,13 +398,11 @@ function renderTreatmentChart(
   for (let i = 0; i < 4; i++) {
     const color = getDayColor(i);
     drawTinyText(frame, dayStrs[i], x, textY, color);
-    x += dayWidths[i];
-
-    // Add spacing after each number except the last
-    if (i < 3) {
-      x += spacing;
-    }
+    x += dayWidths[i] + spacing;
   }
+
+  // Draw latency indicator (same color as clock time - white/grey)
+  drawTinyText(frame, latencyStr, x, textY, COLORS.clockTime);
 }
 
 /**
