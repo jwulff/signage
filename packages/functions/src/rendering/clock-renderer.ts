@@ -121,7 +121,7 @@ export function renderClockRegion(
   const dateTimeX = centerXInBounds(dateTimeStr, startX, endX);
   drawText(frame, dateTimeStr, dateTimeX, startY + 1, COLORS.clockTime, startY, endY);
 
-  // Rows 18-25: Sunlight gradient band with temperature overlay
+  // Sunlight gradient band with temperature overlay
   renderSunlightBand(frame, currentHour24, weather, startX, endX);
 }
 

@@ -39,7 +39,7 @@ describe("renderClockRegion", () => {
     renderClockRegion(frame, "America/Los_Angeles");
 
     // Combined date+time should span most of the width at row 1
-    // Format: "SAT JAN 24 2:30" (16 chars = ~63 pixels)
+    // Format: "SAT JAN 24 2:30" (15 chars ≈ 59 pixels)
     let pixelCount = 0;
     for (let x = 0; x < 64; x++) {
       const pixel = getPixel(frame, x, 4); // Middle of text (row 1 + 3)
