@@ -33,6 +33,9 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      - name: Check coverage
+        run: pnpm test:coverage
+
       - name: Type check
         run: pnpm lint
 
