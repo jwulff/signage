@@ -204,8 +204,8 @@ describe("renderClockRegion", () => {
 
     renderClockRegion(frame, "America/Los_Angeles", rainyWeather);
 
-    // Bottom row of band (row 20, compact layout) should have rain indicator (blue)
-    const precipPixel = getPixel(frame, 20, 20);
+    // Bottom row of band (row 19, compact layout) should have rain indicator (blue)
+    const precipPixel = getPixel(frame, 20, 19);
     expect(precipPixel).not.toBeNull();
     // Rain should have blue component
     expect(precipPixel!.b).toBeGreaterThan(precipPixel!.r);
