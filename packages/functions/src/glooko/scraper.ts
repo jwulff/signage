@@ -1141,7 +1141,8 @@ function parseTimestamp(value: string): number | null {
   // FIRST: Check for explicit timezone info (Z or offset like +00:00 or -08:00)
   // These are unambiguous and should be parsed by new Date() directly.
   // This handles ISO 8601 like "2024-01-15T08:30:00Z" or "2024-01-15T08:30:00-08:00"
-  if (/Z|[+-]\d{2}:\d{2}/.test(value)) {
+  // Anchor to end of string to avoid false positives (e.g., "PIZZA" matching Z)
+  if (/[Zz]$|[+-]\d{2}:\d{2}$/.test(value)) {
     const date = new Date(value);
     if (!isNaN(date.getTime())) {
       return date.getTime();

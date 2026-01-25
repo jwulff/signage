@@ -202,17 +202,18 @@ function parseTimestamp(value: string): number | null {
   // FIRST: Check for explicit timezone info (Z or offset like +00:00 or -08:00)
   // These are unambiguous and should be parsed by new Date() directly.
   // This handles ISO 8601 like "2024-01-15T08:30:00Z" or "2024-01-15T08:30:00-08:00"
-  if (/Z|[+-]\d{2}:\d{2}/.test(value)) {
+  // Anchor to end of string to avoid false positives (e.g., "PIZZA" matching Z)
+  if (/[Zz]$|[+-]\d{2}:\d{2}$/.test(value)) {
     const date = new Date(value);
     if (!isNaN(date.getTime())) {
       return date.getTime();
     }
   }
 
-  // Try "YYYY-MM-DD HH:MM[:SS]" format (common in Glooko)
+  // Try "YYYY-MM-DD HH:MM[:SS]" or "YYYY-MM-DDTHH:MM[:SS]" format (common in Glooko)
   // These are NAIVE timestamps (no timezone) that Glooko exports in user's local timezone.
   const glookoFormat = value.match(
-    /(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/
+    /(\d{4})-(\d{2})-(\d{2})[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?/
   );
   if (glookoFormat) {
     const [, year, month, day, hour, minute, second = "0"] = glookoFormat;
