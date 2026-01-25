@@ -8,7 +8,7 @@ export const COLORS = {
   // Clock colors
   clockHeader: { r: 0, g: 200, b: 255 } as RGB,
   clockTime: { r: 255, g: 255, b: 255 } as RGB,
-  clockAmPm: { r: 100, g: 100, b: 100 } as RGB,
+  clockSecondary: { r: 100, g: 100, b: 100 } as RGB, // Date, AM/PM, and other secondary text
 
   // Blood sugar colors by range
   urgentLow: { r: 255, g: 0, b: 0 } as RGB,

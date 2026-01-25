@@ -51,6 +51,34 @@ describe("renderClockRegion", () => {
     expect(pixelCount).toBeGreaterThan(15);
   });
 
+  it("renders date in dim color and time in bright color", () => {
+    const frame = createSolidFrame(64, 64);
+    renderClockRegion(frame, "America/Los_Angeles");
+
+    // Scan row 4 (middle of text) for color differences
+    // Date portion uses clockSecondary (100, 100, 100)
+    // Time portion uses clockTime (255, 255, 255)
+    let foundDimPixel = false;
+    let foundBrightPixel = false;
+
+    for (let x = 0; x < 64; x++) {
+      const pixel = getPixel(frame, x, 4);
+      if (pixel) {
+        // Dim gray (date)
+        if (pixel.r === 100 && pixel.g === 100 && pixel.b === 100) {
+          foundDimPixel = true;
+        }
+        // Bright white (time)
+        if (pixel.r === 255 && pixel.g === 255 && pixel.b === 255) {
+          foundBrightPixel = true;
+        }
+      }
+    }
+
+    expect(foundDimPixel).toBe(true);
+    expect(foundBrightPixel).toBe(true);
+  });
+
   it("renders sunlight band", () => {
     const frame = createSolidFrame(64, 64);
     renderClockRegion(frame, "America/Los_Angeles");
