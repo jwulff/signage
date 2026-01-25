@@ -24,14 +24,7 @@ import {
   DISPLAY_HEIGHT,
   type BloodSugarDisplayData,
   type ClockWeatherData,
-  type ReadinessDisplayData,
 } from "./rendering/index.js";
-import {
-  getOuraUsers,
-  getOuraUserProfile,
-  getCachedReadiness,
-  getCachedSleep,
-} from "./oura/client.js";
 import {
   getSessionId,
   fetchGlucoseReadings,
@@ -264,57 +257,6 @@ async function fetchWeatherData(): Promise<ClockWeatherData | null> {
   }
 }
 
-// Stale readiness threshold: 24 hours
-const READINESS_STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
-
-/**
- * Fetch readiness and sleep data for all linked Oura users
- */
-async function fetchReadinessData(): Promise<ReadinessDisplayData[]> {
-  const userIds = await getOuraUsers();
-  if (userIds.length === 0) {
-    return [];
-  }
-
-  // Get today's date in Pacific timezone
-  const now = new Date();
-  const pacificDate = new Date(now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
-  const today = pacificDate.toISOString().split("T")[0];
-
-  const results: ReadinessDisplayData[] = [];
-
-  // Limit to first 2 users for display
-  for (const userId of userIds.slice(0, 2)) {
-    const profile = await getOuraUserProfile(userId);
-    if (!profile) {
-      continue;
-    }
-
-    // Fetch both readiness and sleep in parallel
-    const [readiness, sleep] = await Promise.all([
-      getCachedReadiness(userId, today),
-      getCachedSleep(userId, today),
-    ]);
-
-    // Data is stale if both are missing or if the most recent one is stale
-    const readinessStale = readiness ? (Date.now() - readiness.fetchedAt > READINESS_STALE_THRESHOLD_MS) : true;
-    const sleepStale = sleep ? (Date.now() - sleep.fetchedAt > READINESS_STALE_THRESHOLD_MS) : true;
-    const isStale = readinessStale && sleepStale;
-
-    const displayData: ReadinessDisplayData = {
-      initial: profile.initial || profile.displayName?.charAt(0).toUpperCase() || "?",
-      score: readiness?.score ?? null,
-      sleepScore: sleep?.score ?? null,
-      isStale,
-      needsReauth: profile.needsReauth ?? false,
-    };
-
-    results.push(displayData);
-  }
-
-  return results;
-}
-
 // Treatment stale threshold: 6 hours
 const TREATMENT_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 
@@ -461,11 +403,10 @@ async function updateDisplay(): Promise<{
 
   const apiClient = new ApiGatewayManagementApiClient({ endpoint });
 
-  // Fetch blood sugar, weather, readiness, and treatment data in parallel
-  const [bloodSugarResult, weatherData, readinessData, treatmentData] = await Promise.all([
+  // Fetch blood sugar, weather, and treatment data in parallel
+  const [bloodSugarResult, weatherData, treatmentData] = await Promise.all([
     fetchBloodSugarData(),
     fetchWeatherData(),
-    fetchReadinessData(),
     fetchTreatmentData(),
   ]);
 
@@ -483,13 +424,6 @@ async function updateDisplay(): Promise<{
     console.log("Weather data unavailable");
   }
 
-  if (readinessData.length > 0) {
-    const ouraStr = readinessData.map(r => `${r.initial}:${r.score ?? '--'}/${r.sleepScore ?? '--'}`).join(', ');
-    console.log(`Oura (readiness/sleep): ${ouraStr}`);
-  } else {
-    console.log("No Oura data (no linked users)");
-  }
-
   if (treatmentData && !treatmentData.isStale) {
     console.log(`Treatments (4h): ${treatmentData.recentInsulinUnits}u insulin, ${treatmentData.recentCarbsGrams}g carbs, ${treatmentData.treatments.length} events`);
   } else if (treatmentData?.isStale) {
@@ -504,7 +438,6 @@ async function updateDisplay(): Promise<{
     bloodSugarHistory: history.length > 0 ? { points: history } : undefined,
     timezone: "America/Los_Angeles",
     weather: weatherData ?? undefined,
-    readiness: readinessData.length > 0 ? readinessData : undefined,
     treatments: treatmentData,
   });
 

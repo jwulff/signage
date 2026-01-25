@@ -34,17 +34,17 @@ describe("measureTinyText", () => {
 
 describe("measureText", () => {
   it("returns correct width for text", () => {
-    // Standard font is 5px wide + 1px spacing
-    // Single char: 5px
-    expect(measureText("A")).toBe(5);
-    // Two chars: 5px + 1px + 5px = 11px
-    expect(measureText("AB")).toBe(11);
+    // Compact font is 3px wide + 1px spacing (same as tiny font)
+    // Single char: 3px
+    expect(measureText("A")).toBe(3);
+    // Two chars: 3px + 1px + 3px = 7px
+    expect(measureText("AB")).toBe(7);
   });
 });
 
 describe("centerX", () => {
   it("centers text on 64px display", () => {
-    // For a 5px wide single char: (64 - 5) / 2 = 29.5 -> 29
-    expect(centerX("A")).toBe(29);
+    // For a 3px wide single char: (64 - 3) / 2 = 30.5 -> 30
+    expect(centerX("A")).toBe(30);
   });
 });

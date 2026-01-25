@@ -3,14 +3,13 @@
  *
  * Layout (64x64):
  * ┌───────────────────────────────────────┐
- * │           10:45                       │  row 2
- * │        SUN JAN 19 2026                │  row 11
- * │      [weather/sunlight band]          │  rows 18-25
- * │         J 82    S 75                  │  row 27 (readiness)
- * ├───────────────────────────────────────┤
- * │                                       │  rows 32-63
- * │           GLUCOSE                     │
- * │                                       │
+ * │           10:45                       │  row 1-5
+ * │        SUN JAN 19 2026                │  row 7-11
+ * │      [weather/sunlight band]          │  rows 13-20
+ * ├───────────────────────────────────────┤  row 21
+ * │  → 142 +5 2m                          │  row 22-26
+ * │     [treatment chart - insulin/carbs] │  rows 28-39 (12px)
+ * │     [glucose sparkline chart]         │  rows 40-62 (23px)
  * └───────────────────────────────────────┘
  */
 
@@ -24,10 +23,6 @@ import {
   type BloodSugarDisplayData,
   type BloodSugarHistory,
 } from "./blood-sugar-renderer.js";
-import {
-  renderReadinessRegion,
-  type ReadinessDisplayData,
-} from "./readiness-renderer.js";
 import type { TreatmentDisplayData } from "../glooko/types.js";
 
 export interface CompositorData {
@@ -35,7 +30,6 @@ export interface CompositorData {
   bloodSugarHistory?: BloodSugarHistory;
   timezone?: string;
   weather?: ClockWeatherData;
-  readiness?: ReadinessDisplayData[];
   treatments?: TreatmentDisplayData | null;
 }
 
@@ -66,14 +60,7 @@ export function generateCompositeFrame(data: CompositorData): Frame {
     errors.push("clock");
   }
 
-  // Render readiness scores horizontally below weather band (if available)
-  if (data.readiness && data.readiness.length > 0) {
-    if (!safeRender("readiness", () => renderReadinessRegion(frame, data.readiness!))) {
-      errors.push("readiness");
-    }
-  }
-
-  // Render blood sugar in bottom region (with optional history chart and treatments)
+  // Render blood sugar in bottom region (with treatment chart and glucose chart)
   if (!safeRender("bloodSugar", () => renderBloodSugarRegion(frame, data.bloodSugar, data.bloodSugarHistory, data.timezone, data.treatments))) {
     errors.push("bloodSugar");
   }

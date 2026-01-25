@@ -4,9 +4,8 @@
 
 import type { Frame } from "@signage/core";
 import { setPixel } from "@signage/core";
-import { drawText, drawTinyText, DISPLAY_WIDTH } from "./text.js";
+import { drawText, drawTinyText, measureText, measureTinyText, DISPLAY_WIDTH } from "./text.js";
 import { COLORS } from "./colors.js";
-import { CHAR_WIDTH } from "../font.js";
 
 // Clock region boundaries (default full width)
 const CLOCK_REGION_START_Y = 0;
@@ -22,8 +21,8 @@ export interface ClockRegionBounds {
   endY: number;
 }
 
-// Sunlight band configuration (moved up 2px to make room for readiness row)
-const BAND_Y = 18; // Start row for the band
+// Sunlight band configuration (compact layout)
+const BAND_Y = 13; // Start row for the band (moved up from 18)
 const BAND_HEIGHT = 8; // Height of the sunlight band
 const BAND_MARGIN = 1; // Left/right margin
 
@@ -67,7 +66,7 @@ function getSunlightPercent(hour: number): number {
  */
 function centerXInBounds(text: string, startX: number, endX: number): number {
   const regionWidth = endX - startX + 1;
-  const textWidth = text.length * (CHAR_WIDTH + 1) - 1;
+  const textWidth = measureText(text);
   return startX + Math.floor((regionWidth - textWidth) / 2);
 }
 
@@ -109,10 +108,10 @@ export function renderClockRegion(
     return;
   }
 
-  // Full-width region - include sunlight band
-  // Time, date, and weather moved up 2px to make room for readiness row
+  // Full-width region - compact layout with sunlight band
+  // Time at row 1, date at row 7
   const timeX = centerXInBounds(timeStr, startX, endX);
-  drawText(frame, timeStr, timeX, startY + 2, COLORS.clockTime, startY, endY);
+  drawText(frame, timeStr, timeX, startY + 1, COLORS.clockTime, startY, endY);
 
   // Format date as "MON JAN 19 2026"
   const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -123,10 +122,10 @@ export function renderClockRegion(
   const year = localTime.getFullYear();
   const dateStr = `${dayName} ${monthName} ${dayNum} ${year}`;
 
-  // Draw date with tiny font, centered below time (dimmer than clock)
-  const dateWidth = dateStr.length * 4 - 1; // Tiny font: 3px char + 1px space
+  // Draw date centered below time (dimmer than clock)
+  const dateWidth = measureTinyText(dateStr);
   const dateX = startX + Math.floor((endX - startX + 1 - dateWidth) / 2);
-  drawTinyText(frame, dateStr, dateX, startY + 11, COLORS.clockAmPm);
+  drawTinyText(frame, dateStr, dateX, startY + 7, COLORS.clockAmPm);
 
   // Rows 18-25: Sunlight gradient band with temperature overlay
   renderSunlightBand(frame, currentHour24, weather, startX, endX);
