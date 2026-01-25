@@ -1,23 +1,24 @@
-# Treatment Chart 3-Day Insulin Comparison
+# Treatment Chart: 36-Hour Insulin Totals with Daylight Bars
 
 *Date: 2026-01-24 2215*
 
 ## Why
-Glooko treatment data is always delayed, making the 3h "recent" section of the treatment chart perpetually empty. That space can be better used to show actionable insights.
+Glooko treatment data is always delayed, making the 3h "recent" section of the treatment chart perpetually empty. The full treatment chart space can be better used to show actionable insulin insights.
 
 ## How
-Split the treatment chart into two distinct sections:
-- **Left half**: Bar chart showing individual treatments (insulin down, carbs up) for the 21h window (24h-3h ago), matching the glucose chart's left section
-- **Right half**: 3 numbers showing total insulin for the same 21h window across 3 consecutive days:
-  - 72-51h ago (dimmest blue)
-  - 48-27h ago (medium blue)
-  - 24-3h ago (brightest blue)
+Display 36 hours of insulin totals in 6-hour buckets with daylight time markers:
+- **6 buckets**: Each showing total insulin units for a 6-hour period
+  - Bucket 0 (36h-30h ago) → Bucket 5 (6h-0h ago, most recent)
+- **5 daylight bars**: 1px vertical lines between buckets showing time-of-day
+  - Purple (midnight) → Yellow (noon) gradient based on boundary hour
+- **Brightness gradient**: Older buckets are dimmer, newest is brightest blue
 
 ## Key Design Decisions
-- **Same time window comparison**: All 3 periods use the exact same 21h window (offset by 24h each) for apples-to-apples comparison
-- **Insulin only in comparison**: Carbs are shown as bars on the left but the comparison focuses on insulin since it's more actionable for dosing decisions
-- **Brightness for recency**: Older periods are dimmer, newest is brightest - instant visual pattern recognition
+- **6-hour buckets**: Match natural meal/dosing rhythms (breakfast, lunch, dinner, overnight)
+- **Daylight bars**: Provide time context using the same purple→yellow gradient as the glucose chart, making it easy to correlate insulin with time of day
+- **Full-width layout**: Removed the split left/right design to maximize readability
+- **Insulin-only focus**: Carbs removed since insulin is more actionable for dosing decisions
 
 ## What's Next
-- Consider adding carbs comparison below insulin if space permits
-- Could add trend indicator (arrow) if today vs yesterday differs significantly
+- Consider adding a simple trend indicator comparing recent buckets
+- Could show carbs as a secondary row if vertical space permits

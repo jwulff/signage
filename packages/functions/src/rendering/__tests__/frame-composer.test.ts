@@ -159,7 +159,7 @@ describe("generateCompositeFrame", () => {
     expect(hasChartPixels).toBe(true);
   });
 
-  it("renders treatment chart with insulin bars below center line", () => {
+  it("renders treatment chart with insulin totals as blue numbers", () => {
     const now = Date.now();
     const data: CompositorData = {
       bloodSugar: {
@@ -172,8 +172,9 @@ describe("generateCompositeFrame", () => {
       },
       treatments: {
         treatments: [
-          // Use 5 hours ago (in the 24h-3h window shown as bars on left)
-          { timestamp: now - 5 * 60 * 60 * 1000, type: "insulin", value: 5 },
+          // Insulin across multiple 6h buckets
+          { timestamp: now - 2 * 60 * 60 * 1000, type: "insulin", value: 5 },
+          { timestamp: now - 8 * 60 * 60 * 1000, type: "insulin", value: 3 },
         ],
         recentInsulinUnits: 5,
         recentCarbsGrams: 0,
@@ -184,24 +185,24 @@ describe("generateCompositeFrame", () => {
 
     const frame = generateCompositeFrame(data);
 
-    // Treatment chart is rows 28-39, center at row 34
-    // Insulin bars should appear BELOW center (rows 35+)
-    let hasInsulinPixels = false;
+    // Treatment chart is rows 28-38
+    // Should have blue pixels for insulin numbers
+    let hasBluePixels = false;
     for (let x = 0; x < 64; x++) {
-      for (let y = 35; y < 39; y++) {
+      for (let y = 28; y < 39; y++) {
         const pixel = getPixel(frame, x, y);
-        // Insulin is light blue (b > r)
-        if (pixel && pixel.b > pixel.r && pixel.b > 0) {
-          hasInsulinPixels = true;
+        // Insulin numbers are blue (b > r)
+        if (pixel && pixel.b > pixel.r && pixel.b > 30) {
+          hasBluePixels = true;
           break;
         }
       }
-      if (hasInsulinPixels) break;
+      if (hasBluePixels) break;
     }
-    expect(hasInsulinPixels).toBe(true);
+    expect(hasBluePixels).toBe(true);
   });
 
-  it("renders treatment chart with carbs bars above center line", () => {
+  it("renders daylight bars between insulin buckets", () => {
     const now = Date.now();
     const data: CompositorData = {
       bloodSugar: {
@@ -212,13 +213,13 @@ describe("generateCompositeFrame", () => {
         rangeStatus: "normal",
         isStale: false,
       },
+      timezone: "America/Los_Angeles",
       treatments: {
         treatments: [
-          // Use 5 hours ago (in the 24h-3h window shown as bars on left)
-          { timestamp: now - 5 * 60 * 60 * 1000, type: "carbs", value: 50 },
+          { timestamp: now - 2 * 60 * 60 * 1000, type: "insulin", value: 5 },
         ],
-        recentInsulinUnits: 0,
-        recentCarbsGrams: 50,
+        recentInsulinUnits: 5,
+        recentCarbsGrams: 0,
         lastFetchedAt: now,
         isStale: false,
       },
@@ -226,21 +227,21 @@ describe("generateCompositeFrame", () => {
 
     const frame = generateCompositeFrame(data);
 
-    // Treatment chart is rows 28-39, center at row 34
-    // Carbs bars should appear ABOVE center (rows 28-33)
-    let hasCarbsPixels = false;
+    // Treatment chart should have daylight bar pixels (purple to yellow gradient)
+    // These appear as vertical lines between buckets
+    let hasDaylightPixels = false;
     for (let x = 0; x < 64; x++) {
-      for (let y = 28; y < 34; y++) {
+      for (let y = 28; y < 39; y++) {
         const pixel = getPixel(frame, x, y);
-        // Carbs is light orange (r > b)
-        if (pixel && pixel.r > pixel.b && pixel.r > 0) {
-          hasCarbsPixels = true;
+        // Daylight bars are purple-yellow gradient (significant r and b, varying g)
+        if (pixel && pixel.r > 50 && (pixel.b > 50 || pixel.g > 50)) {
+          hasDaylightPixels = true;
           break;
         }
       }
-      if (hasCarbsPixels) break;
+      if (hasDaylightPixels) break;
     }
-    expect(hasCarbsPixels).toBe(true);
+    expect(hasDaylightPixels).toBe(true);
   });
 
   it("does not render treatment chart when treatments are stale", () => {
@@ -256,7 +257,6 @@ describe("generateCompositeFrame", () => {
       },
       treatments: {
         treatments: [
-          // Use 5 hours ago (in the 24h-3h window)
           { timestamp: now - 5 * 60 * 60 * 1000, type: "insulin", value: 10 },
         ],
         recentInsulinUnits: 10,
@@ -268,19 +268,19 @@ describe("generateCompositeFrame", () => {
 
     const frame = generateCompositeFrame(data);
 
-    // Treatment chart should NOT have treatment pixels (only center line at most)
-    let hasTreatmentBars = false;
+    // Treatment chart should NOT have any significant pixels when stale
+    let hasTreatmentPixels = false;
     for (let x = 0; x < 64; x++) {
-      for (let y = 35; y < 39; y++) { // Below center line
+      for (let y = 28; y < 39; y++) {
         const pixel = getPixel(frame, x, y);
-        // Check for blue insulin pixels
-        if (pixel && pixel.b > pixel.r && pixel.b > 50) {
-          hasTreatmentBars = true;
+        // Check for any bright pixels (blue numbers or daylight bars)
+        if (pixel && (pixel.b > 50 || pixel.r > 80)) {
+          hasTreatmentPixels = true;
           break;
         }
       }
-      if (hasTreatmentBars) break;
+      if (hasTreatmentPixels) break;
     }
-    expect(hasTreatmentBars).toBe(false);
+    expect(hasTreatmentPixels).toBe(false);
   });
 });

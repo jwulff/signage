@@ -261,13 +261,6 @@ function centerXWithMargin(text: string): number {
   return Math.max(TEXT_MARGIN, Math.min(centered, maxX));
 }
 
-// Treatment chart colors
-const TREATMENT_COLORS = {
-  insulin: { r: 100, g: 150, b: 255 }, // Light blue
-  carbs: { r: 255, g: 180, b: 100 }, // Light orange
-  centerLine: { r: 40, g: 40, b: 40 }, // Dim gray
-} as const;
-
 /**
  * Calculate total insulin units in a time window
  * @param treatments - Array of treatment records
@@ -285,121 +278,128 @@ export function calculateInsulinTotal(
 }
 
 /**
- * Render treatment chart:
- * - Left half: Treatment bars (21h window, 24h-3h ago) matching glucose chart
- * - Right half: 3-day insulin comparison as numbers (same 21h window across 3 days)
+ * Calculate daylight color for a given hour (0-23)
+ * Uses cosine curve: peaks at noon (yellow), bottoms at midnight (purple)
+ */
+function getDaylightColor(hour: number): RGB {
+  const sunlight = (1 + Math.cos((hour - 12) * Math.PI / 12)) / 2;
+  const purple = { r: 120, g: 50, b: 180 };
+  const yellow = { r: 120, g: 100, b: 25 };
+  return {
+    r: Math.round(purple.r + (yellow.r - purple.r) * sunlight),
+    g: Math.round(purple.g + (yellow.g - purple.g) * sunlight),
+    b: Math.round(purple.b + (yellow.b - purple.b) * sunlight),
+  };
+}
+
+/**
+ * Render treatment chart showing 36 hours of insulin totals in 6-hour buckets
+ * with 1px vertical daylight bars between each bucket indicating time of day
  */
 function renderTreatmentChart(
   frame: Frame,
-  treatments: TreatmentDisplayData
+  treatments: TreatmentDisplayData,
+  timezone?: string
 ): void {
-  if (!treatments.treatments || treatments.treatments.length === 0) return;
-
   const { treatments: treatmentList } = treatments;
   const now = Date.now();
   const HOUR_MS = 60 * 60 * 1000;
+  const tz = timezone || "America/Los_Angeles";
 
-  // Left section: bars for 21h window (24h-3h ago)
-  const leftStartTime = now - 24 * HOUR_MS;
-  const leftEndTime = now - 3 * HOUR_MS;
-
-  // Filter treatments for left section
-  const leftTreatments = treatmentList.filter(
-    (t) => t.timestamp >= leftStartTime && t.timestamp <= leftEndTime
-  );
-
-  // Find max values for scaling
-  let maxInsulin = 0;
-  let maxCarbs = 0;
-  for (const t of leftTreatments) {
-    if (t.type === "insulin") {
-      maxInsulin = Math.max(maxInsulin, t.value);
-    } else {
-      maxCarbs = Math.max(maxCarbs, t.value);
-    }
-  }
-  maxInsulin = Math.max(maxInsulin, 5);
-  maxCarbs = Math.max(maxCarbs, 30);
-
-  // Center line Y position
-  const centerY = TREATMENT_CHART_Y + Math.floor(TREATMENT_CHART_HEIGHT / 2);
-
-  // Draw faint center line across left section only
-  for (let x = CHART_X; x < CHART_X + CHART_LEFT_WIDTH; x++) {
-    setPixel(frame, x, centerY, TREATMENT_COLORS.centerLine);
+  // 6 buckets of 6 hours each, covering last 36 hours
+  // Bucket 0: 36h-30h ago (oldest)
+  // Bucket 1: 30h-24h ago
+  // Bucket 2: 24h-18h ago
+  // Bucket 3: 18h-12h ago
+  // Bucket 4: 12h-6h ago
+  // Bucket 5: 6h-0h ago (most recent)
+  const buckets: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    const startHours = (6 - i) * 6; // 36, 30, 24, 18, 12, 6
+    const endHours = (5 - i) * 6;   // 30, 24, 18, 12, 6, 0
+    const total = calculateInsulinTotal(
+      treatmentList,
+      now - startHours * HOUR_MS,
+      now - endHours * HOUR_MS
+    );
+    buckets.push(total);
   }
 
-  const halfHeight = Math.floor(TREATMENT_CHART_HEIGHT / 2) - 1;
-  const timeRange = 21 * HOUR_MS;
-
-  // Render left section bars
-  for (const treatment of leftTreatments) {
-    const timeOffset = treatment.timestamp - leftStartTime;
-    const barX = CHART_X + Math.round((timeOffset / timeRange) * (CHART_LEFT_WIDTH - 1));
-
-    if (barX >= CHART_X && barX < CHART_X + CHART_LEFT_WIDTH) {
-      if (treatment.type === "insulin") {
-        const barHeight = Math.max(1, Math.round((treatment.value / maxInsulin) * halfHeight));
-        for (let dy = 0; dy < barHeight; dy++) {
-          const py = centerY + 1 + dy;
-          if (py < TREATMENT_CHART_Y + TREATMENT_CHART_HEIGHT) {
-            setPixel(frame, barX, py, TREATMENT_COLORS.insulin);
-          }
-        }
-      } else {
-        const barHeight = Math.max(1, Math.round((treatment.value / maxCarbs) * halfHeight));
-        for (let dy = 0; dy < barHeight; dy++) {
-          const py = centerY - 1 - dy;
-          if (py >= TREATMENT_CHART_Y) {
-            setPixel(frame, barX, py, TREATMENT_COLORS.carbs);
-          }
-        }
-      }
-    }
+  // Calculate the hour at each boundary for daylight bars (5 boundaries between 6 buckets)
+  // Boundary hours are at: 30h, 24h, 18h, 12h, 6h ago
+  const boundaryHours: number[] = [];
+  for (let i = 0; i < 5; i++) {
+    const hoursAgo = (5 - i) * 6; // 30, 24, 18, 12, 6
+    const boundaryTime = now - hoursAgo * HOUR_MS;
+    const hour = parseInt(
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: tz,
+        hour: "2-digit",
+        hour12: false,
+      }).format(new Date(boundaryTime))
+    );
+    boundaryHours.push(hour);
   }
 
-  // Right section: insulin totals for the same 21h window across 3 periods
-  // Each period is the same 21h window (24h-3h), offset by 24h
-  // Period 1: 72h-51h ago (oldest, dimmest)
-  // Period 2: 48h-27h ago (middle)
-  // Period 3: 24h-3h ago (current, brightest - matches left chart)
-  const period3 = calculateInsulinTotal(treatmentList, now - 24 * HOUR_MS, now - 3 * HOUR_MS);
-  const period2 = calculateInsulinTotal(treatmentList, now - 48 * HOUR_MS, now - 27 * HOUR_MS);
-  const period1 = calculateInsulinTotal(treatmentList, now - 72 * HOUR_MS, now - 51 * HOUR_MS);
-
-  // Display as 3 numbers horizontally with brightness indicating recency
-  // Oldest (dimmest) -> newest (brightest)
-  const rightX = CHART_X + CHART_LEFT_WIDTH + 1;
-  const rightWidth = CHART_RIGHT_WIDTH - 1; // Available width for numbers
-  const textY = TREATMENT_CHART_Y + 3; // Center vertically in chart area
-
-  // Format numbers (round to integers, cap at 99 for display to prevent overflow)
+  // Format numbers for display
   const formatInsulin = (value: number): string => {
     const rounded = Math.round(value);
-    return rounded > 99 ? "99+" : String(rounded);
+    return rounded > 99 ? "99" : String(rounded);
   };
 
-  const p1Str = formatInsulin(period1);
-  const p2Str = formatInsulin(period2);
-  const p3Str = formatInsulin(period3);
+  const bucketStrs = buckets.map(formatInsulin);
 
-  // Colors: dim -> medium -> bright blue
-  const dimBlue: RGB = { r: 40, g: 60, b: 100 };
-  const medBlue: RGB = { r: 70, g: 100, b: 160 };
-  const brightBlue: RGB = { r: 100, g: 150, b: 255 };
+  // Calculate total width needed
+  const bucketWidths = bucketStrs.map(s => measureTinyText(s));
+  const totalTextWidth = bucketWidths.reduce((a, b) => a + b, 0);
+  const numBars = 5; // 5 daylight bars between 6 buckets
+  const barWidth = 1;
 
-  // Calculate total width needed and adjust spacing if necessary
-  const totalTextWidth = measureTinyText(p1Str) + measureTinyText(p2Str) + measureTinyText(p3Str);
-  const availableForSpacing = rightWidth - totalTextWidth;
-  const spacing = Math.max(1, Math.min(2, Math.floor(availableForSpacing / 2)));
+  // Available width for the treatment chart
+  const availableWidth = CHART_WIDTH;
 
-  // Draw the 3 numbers with dynamic spacing
-  let textX = rightX;
-  drawTinyText(frame, p1Str, textX, textY, dimBlue);
-  textX += measureTinyText(p1Str) + spacing;
-  drawTinyText(frame, p2Str, textX, textY, medBlue);
-  textX += measureTinyText(p2Str) + spacing;
-  drawTinyText(frame, p3Str, textX, textY, brightBlue);
+  // Calculate spacing dynamically
+  const extraSpace = availableWidth - totalTextWidth - numBars * barWidth;
+  const spacing = Math.max(1, Math.floor(extraSpace / (numBars * 2)));
+
+  // Center the content
+  const totalUsedWidth = totalTextWidth + numBars * (barWidth + 2 * spacing);
+  const startX = CHART_X + Math.max(0, Math.floor((availableWidth - totalUsedWidth) / 2));
+
+  // Vertical positioning - center text in chart area
+  const textY = TREATMENT_CHART_Y + Math.floor((TREATMENT_CHART_HEIGHT - 5) / 2);
+
+  // Brightness gradient: oldest (dimmest) to newest (brightest)
+  const getBucketColor = (index: number): RGB => {
+    // index 0 = oldest (dimmest), index 5 = newest (brightest)
+    const brightness = 0.3 + (index / 5) * 0.7; // 0.3 to 1.0
+    return {
+      r: Math.round(100 * brightness),
+      g: Math.round(150 * brightness),
+      b: Math.round(255 * brightness),
+    };
+  };
+
+  // Draw buckets and daylight bars
+  let x = startX;
+  for (let i = 0; i < 6; i++) {
+    // Draw bucket number
+    const color = getBucketColor(i);
+    drawTinyText(frame, bucketStrs[i], x, textY, color);
+    x += bucketWidths[i];
+
+    // Draw daylight bar after each bucket except the last
+    if (i < 5) {
+      x += spacing;
+
+      // Draw vertical daylight bar
+      const barColor = getDaylightColor(boundaryHours[i]);
+      for (let py = TREATMENT_CHART_Y; py < TREATMENT_CHART_Y + TREATMENT_CHART_HEIGHT; py++) {
+        setPixel(frame, x, py, barColor);
+      }
+      x += barWidth + spacing;
+    }
+  }
 }
 
 /**
@@ -469,9 +469,9 @@ export function renderBloodSugarRegion(
   const deltaTimeStr = useFullSpacing ? `${deltaStr} ${timeStr}` : `${deltaStr} ${timeStr}`;
   drawText(frame, deltaTimeStr, textX, TEXT_ROW, secondaryColor, BG_REGION_START, BG_REGION_END);
 
-  // Treatment chart (insulin/carbs bar chart)
-  if (treatments && treatments.treatments.length > 0 && !treatments.isStale) {
-    renderTreatmentChart(frame, treatments);
+  // Treatment chart (36h insulin totals in 6h buckets with daylight bars)
+  if (treatments && !treatments.isStale) {
+    renderTreatmentChart(frame, treatments, timezone);
   }
 
   // Glucose sparkline chart (split: 21h compressed | 3h detailed)
