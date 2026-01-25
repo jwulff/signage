@@ -63,56 +63,17 @@ describe("generateCompositeFrame", () => {
 
     const frame = generateCompositeFrame(data);
 
-    // Check for pixels in blood sugar region (bottom half, rows 32-63)
+    // Check for pixels in blood sugar region (compact layout, rows 21-63)
+    // Text row is at 22-26
     let hasBloodSugarPixels = false;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 36);
+      const pixel = getPixel(frame, x, 24); // Middle of text row (22-26)
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
         hasBloodSugarPixels = true;
         break;
       }
     }
     expect(hasBloodSugarPixels).toBe(true);
-  });
-
-  it("renders readiness region when data provided", () => {
-    const data: CompositorData = {
-      bloodSugar: null,
-      readiness: [
-        {
-          initial: "J",
-          score: 85,
-          sleepScore: 90,
-          isStale: false,
-        },
-      ],
-    };
-
-    const frame = generateCompositeFrame(data);
-
-    // Check for pixels in readiness region (row 27)
-    let hasReadinessPixels = false;
-    for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 27);
-      if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
-        hasReadinessPixels = true;
-        break;
-      }
-    }
-    expect(hasReadinessPixels).toBe(true);
-  });
-
-  it("skips readiness region when no data", () => {
-    const data: CompositorData = {
-      bloodSugar: null,
-      readiness: [],
-    };
-
-    const frame = generateCompositeFrame(data);
-
-    // Frame should still be valid
-    expect(frame.width).toBe(64);
-    expect(frame.height).toBe(64);
   });
 
   it("handles null blood sugar data gracefully", () => {
@@ -122,10 +83,10 @@ describe("generateCompositeFrame", () => {
 
     const frame = generateCompositeFrame(data);
 
-    // Should show error text in blood sugar region
+    // Should show error text in blood sugar region (starts at row 21)
     let hasBottomPixels = false;
     for (let x = 0; x < 64; x++) {
-      for (let y = 32; y < 64; y++) {
+      for (let y = 22; y < 28; y++) { // Check text row area (22-26)
         const pixel = getPixel(frame, x, y);
         if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
           hasBottomPixels = true;
@@ -149,10 +110,10 @@ describe("generateCompositeFrame", () => {
 
     const frame = generateCompositeFrame(data);
 
-    // Weather band should have some pixels (rows 18-25)
+    // Weather band should have some pixels (compact layout, rows 13-20)
     let hasWeatherPixels = false;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 20);
+      const pixel = getPixel(frame, x, 16);
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
         hasWeatherPixels = true;
         break;
@@ -183,10 +144,10 @@ describe("generateCompositeFrame", () => {
 
     const frame = generateCompositeFrame(data);
 
-    // Chart should have pixels in rows 42-62
+    // Chart should have pixels in rows 34-62 (compact layout, expanded chart)
     let hasChartPixels = false;
     for (let x = 0; x < 64; x++) {
-      for (let y = 45; y < 60; y++) {
+      for (let y = 40; y < 60; y++) {
         const pixel = getPixel(frame, x, y);
         if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
           hasChartPixels = true;

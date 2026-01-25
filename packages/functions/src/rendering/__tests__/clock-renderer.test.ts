@@ -38,10 +38,10 @@ describe("renderClockRegion", () => {
     const frame = createSolidFrame(64, 64);
     renderClockRegion(frame, "America/Los_Angeles");
 
-    // Date should be rendered around row 11
+    // Date should be rendered around row 7 (compact layout)
     let hasDatePixels = false;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 12);
+      const pixel = getPixel(frame, x, 8);
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
         hasDatePixels = true;
         break;
@@ -54,9 +54,9 @@ describe("renderClockRegion", () => {
     const frame = createSolidFrame(64, 64);
     renderClockRegion(frame, "America/Los_Angeles");
 
-    // Sunlight band is at rows 18-25
+    // Sunlight band is at rows 13-20 (compact layout)
     // Check center column for band pixels
-    const bandPixel = getPixel(frame, 32, 20);
+    const bandPixel = getPixel(frame, 32, 16);
     expect(bandPixel).not.toBeNull();
     // Should have some color (not black)
     expect(bandPixel!.r + bandPixel!.g + bandPixel!.b).toBeGreaterThan(0);
@@ -68,7 +68,7 @@ describe("renderClockRegion", () => {
 
     // Center line should be white at center of band
     const centerX = 32;
-    const bandY = 20;
+    const bandY = 16; // Compact layout band
     const pixel = getPixel(frame, centerX, bandY);
     expect(pixel).toEqual({ r: 255, g: 255, b: 255 });
   });
@@ -117,7 +117,7 @@ describe("renderClockRegion", () => {
     // The band with temps should have more varied pixels than without
     let nonBlackPixels = 0;
     for (let x = 0; x < 64; x++) {
-      for (let y = 18; y < 26; y++) {
+      for (let y = 13; y < 21; y++) { // Compact layout band rows
         const pixel = getPixel(frame, x, y);
         if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
           nonBlackPixels++;
@@ -147,10 +147,10 @@ describe("renderClockRegion", () => {
     renderClockRegion(frameNoCloud, "America/Los_Angeles", clearWeather);
     renderClockRegion(frameCloudy, "America/Los_Angeles", cloudyWeather);
 
-    // Compare brightness at a band position
+    // Compare brightness at a band position (compact layout)
     // Cloudy should be dimmer
-    const clearPixel = getPixel(frameNoCloud, 20, 20);
-    const cloudyPixel = getPixel(frameCloudy, 20, 20);
+    const clearPixel = getPixel(frameNoCloud, 20, 16);
+    const cloudyPixel = getPixel(frameCloudy, 20, 16);
 
     expect(clearPixel).not.toBeNull();
     expect(cloudyPixel).not.toBeNull();
@@ -175,8 +175,8 @@ describe("renderClockRegion", () => {
 
     renderClockRegion(frame, "America/Los_Angeles", rainyWeather);
 
-    // Bottom row of band (row 25) should have rain indicator (blue)
-    const precipPixel = getPixel(frame, 20, 25);
+    // Bottom row of band (row 20, compact layout) should have rain indicator (blue)
+    const precipPixel = getPixel(frame, 20, 20);
     expect(precipPixel).not.toBeNull();
     // Rain should have blue component
     expect(precipPixel!.b).toBeGreaterThan(precipPixel!.r);

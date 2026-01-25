@@ -14,10 +14,10 @@ describe("renderReadinessRegion", () => {
     const frame = createSolidFrame(64, 64);
     renderReadinessRegion(frame, []);
 
-    // Row 27 should be all black
+    // Row 22 should be all black
     let hasPixels = false;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 27);
+      const pixel = getPixel(frame, x, 22);
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
         hasPixels = true;
         break;
@@ -39,10 +39,10 @@ describe("renderReadinessRegion", () => {
 
     renderReadinessRegion(frame, users);
 
-    // Row 27 should have some content
+    // Row 22 should have some content
     let hasPixels = false;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 27);
+      const pixel = getPixel(frame, x, 22);
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
         hasPixels = true;
         break;
@@ -73,7 +73,7 @@ describe("renderReadinessRegion", () => {
     // Should have content across the row
     let pixelCount = 0;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 27);
+      const pixel = getPixel(frame, x, 22);
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
         pixelCount++;
       }
@@ -98,7 +98,7 @@ describe("renderReadinessRegion", () => {
     // Should still render (with "--" or stale indicator)
     let hasPixels = false;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 27);
+      const pixel = getPixel(frame, x, 22);
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
         hasPixels = true;
         break;
@@ -123,7 +123,7 @@ describe("renderReadinessRegion", () => {
     // Should render initial and "?"
     let hasPixels = false;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 27);
+      const pixel = getPixel(frame, x, 22);
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
         hasPixels = true;
         break;
@@ -148,7 +148,7 @@ describe("renderReadinessRegion", () => {
     // Should render without crashing
     let hasPixels = false;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 27);
+      const pixel = getPixel(frame, x, 22);
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
         hasPixels = true;
         break;
@@ -172,7 +172,7 @@ describe("renderReadinessRegion", () => {
 
     let hasPixels = false;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 27);
+      const pixel = getPixel(frame, x, 22);
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
         hasPixels = true;
         break;
@@ -196,7 +196,7 @@ describe("renderReadinessRegion", () => {
 
     let hasPixels = false;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 27);
+      const pixel = getPixel(frame, x, 22);
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
         hasPixels = true;
         break;
@@ -222,7 +222,7 @@ describe("renderReadinessRegion", () => {
     let leftmost = 64;
     let rightmost = 0;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 27);
+      const pixel = getPixel(frame, x, 22);
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
         leftmost = Math.min(leftmost, x);
         rightmost = Math.max(rightmost, x);

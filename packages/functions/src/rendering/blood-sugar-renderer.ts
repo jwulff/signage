@@ -8,19 +8,24 @@ import { drawText, drawTinyText, measureText, measureTinyText, DISPLAY_WIDTH } f
 import { COLORS, type RangeStatus } from "./colors.js";
 import { renderChart, type ChartPoint } from "./chart-renderer.js";
 import type { TreatmentDisplayData } from "../glooko/types.js";
-import { renderTreatmentSummary, renderTreatmentMarkers } from "./treatment-renderer.js";
 
-// Blood sugar region boundaries
-const BG_REGION_START = 32;
+// Blood sugar region boundaries (compact layout, no Oura)
+const BG_REGION_START = 21;
 const BG_REGION_END = 63;
 
-// Layout configuration - text on top, chart fills rest
-const TEXT_ROW = 34; // 2px margin from top of region (buffer from divider)
+// Layout configuration - text on top, treatment chart, then glucose chart
+const TEXT_ROW = 22; // 1px below divider at row 21
 const TEXT_MARGIN = 1; // Left/right margin for text
 const CHART_X = 1;
-const CHART_Y = 42; // After text (8px) + 1px margin
 const CHART_WIDTH = DISPLAY_WIDTH - 2; // Full width minus margins
-const CHART_HEIGHT = 21; // Rows 42-62, maximize vertical space
+
+// Treatment chart (insulin/carbs) - 1/3 of available chart space
+const TREATMENT_CHART_Y = 28; // After text (5px) + 1px margin
+const TREATMENT_CHART_HEIGHT = 12; // ~1/3 of 35px available
+
+// Glucose chart - 2/3 of available chart space
+const GLUCOSE_CHART_Y = 40; // After treatment chart
+const GLUCOSE_CHART_HEIGHT = 23; // Rows 40-62, ~2/3 of 35px available
 
 // Split chart: left half = 21h compressed, right half = 3h detailed
 const CHART_LEFT_WIDTH = Math.floor(CHART_WIDTH / 2);
@@ -60,91 +65,71 @@ export function classifyRange(mgdl: number): RangeStatus {
 }
 
 /**
- * Trend arrow bitmaps (7 wide x 8 tall) with outlined arrow heads
- * Each row is a byte, bits represent pixels left to right
+ * Compact trend arrow bitmaps (5 wide x 5 tall)
+ * Matches 3x5 font height for consistent appearance
+ * Each row is a byte, bits represent pixels left to right (5 bits used)
  */
 const TREND_ARROWS: Record<string, number[]> = {
-  // ↑↑ Double up - two outlined chevrons
+  // ↑↑ Double up - two stacked chevrons
   doubleup: [
-    0b0001000,
-    0b0010100,
-    0b0100010,
-    0b0001000,
-    0b0010100,
-    0b0100010,
-    0b0000000,
-    0b0000000,
+    0b00100,
+    0b01010,
+    0b00100,
+    0b01010,
+    0b00000,
   ],
-  // ↑ Single up arrow with outlined head
+  // ↑ Single up arrow
   singleup: [
-    0b0001000,
-    0b0010100,
-    0b0100010,
-    0b0001000,
-    0b0001000,
-    0b0001000,
-    0b0001000,
-    0b0000000,
+    0b00100,
+    0b01110,
+    0b00100,
+    0b00100,
+    0b00100,
   ],
-  // ↗ Diagonal up-right with outlined head
+  // ↗ Diagonal up-right
   fortyfiveup: [
-    0b0001110,
-    0b0000110,
-    0b0001010,
-    0b0010000,
-    0b0100000,
-    0b1000000,
-    0b0000000,
-    0b0000000,
+    0b01111,
+    0b00011,
+    0b00101,
+    0b01000,
+    0b10000,
   ],
-  // → Flat/steady with outlined head
+  // → Flat/steady
   flat: [
-    0b0000000,
-    0b0000100,
-    0b0000010,
-    0b1111111,
-    0b0000010,
-    0b0000100,
-    0b0000000,
-    0b0000000,
+    0b00000,
+    0b00100,
+    0b11111,
+    0b00100,
+    0b00000,
   ],
-  // ↘ Diagonal down-right with outlined head
+  // ↘ Diagonal down-right
   fortyfivedown: [
-    0b0000000,
-    0b0000000,
-    0b1000000,
-    0b0100000,
-    0b0010000,
-    0b0001010,
-    0b0000110,
-    0b0001110,
+    0b10000,
+    0b01000,
+    0b00101,
+    0b00011,
+    0b01111,
   ],
-  // ↓ Single down arrow with outlined head
+  // ↓ Single down arrow
   singledown: [
-    0b0000000,
-    0b0001000,
-    0b0001000,
-    0b0001000,
-    0b0001000,
-    0b0100010,
-    0b0010100,
-    0b0001000,
+    0b00100,
+    0b00100,
+    0b00100,
+    0b01110,
+    0b00100,
   ],
-  // ↓↓ Double down - two outlined chevrons
+  // ↓↓ Double down - two stacked chevrons
   doubledown: [
-    0b0000000,
-    0b0000000,
-    0b0100010,
-    0b0010100,
-    0b0001000,
-    0b0100010,
-    0b0010100,
-    0b0001000,
+    0b00000,
+    0b01010,
+    0b00100,
+    0b01010,
+    0b00100,
   ],
 };
 
-const ARROW_WIDTH = 7;
-const ARROW_HEIGHT = 8;
+const ARROW_WIDTH = 5;
+const ARROW_HEIGHT = 5;
 
 /**
  * Draw a trend arrow at specified position
@@ -274,9 +259,108 @@ function centerXWithMargin(text: string): number {
   return Math.max(TEXT_MARGIN, Math.min(centered, maxX));
 }
 
+// Treatment chart colors
+const TREATMENT_COLORS = {
+  insulin: { r: 100, g: 150, b: 255 }, // Light blue
+  carbs: { r: 255, g: 180, b: 100 }, // Light orange
+  centerLine: { r: 40, g: 40, b: 40 }, // Dim gray
+} as const;
+
+/**
+ * Render treatment chart showing insulin (bars down) and carbs (bars up)
+ * Chart is split left/right like glucose chart (21h | 3h)
+ */
+function renderTreatmentChart(
+  frame: Frame,
+  treatments: TreatmentDisplayData
+): void {
+  if (!treatments.treatments || treatments.treatments.length === 0) return;
+
+  const { treatments: treatmentList } = treatments;
+  const now = Date.now();
+
+  // Find max values for scaling
+  let maxInsulin = 0;
+  let maxCarbs = 0;
+  for (const t of treatmentList) {
+    if (t.type === "insulin") {
+      maxInsulin = Math.max(maxInsulin, t.value);
+    } else {
+      maxCarbs = Math.max(maxCarbs, t.value);
+    }
+  }
+
+  // Ensure minimum scale for visibility
+  maxInsulin = Math.max(maxInsulin, 5); // At least 5 units scale
+  maxCarbs = Math.max(maxCarbs, 30); // At least 30g scale
+
+  // Center line Y position (middle of treatment chart)
+  const centerY = TREATMENT_CHART_Y + Math.floor(TREATMENT_CHART_HEIGHT / 2);
+
+  // Draw faint center line
+  for (let x = CHART_X; x < CHART_X + CHART_WIDTH; x++) {
+    setPixel(frame, x, centerY, TREATMENT_COLORS.centerLine);
+  }
+
+  // Height available for each direction (up for carbs, down for insulin)
+  const halfHeight = Math.floor(TREATMENT_CHART_HEIGHT / 2) - 1;
+
+  // Render function for a chart section
+  const renderSection = (
+    sectionX: number,
+    sectionWidth: number,
+    hours: number,
+    offsetHours: number
+  ) => {
+    const endTime = now - offsetHours * 60 * 60 * 1000;
+    const startTime = endTime - hours * 60 * 60 * 1000;
+    const timeRange = hours * 60 * 60 * 1000;
+
+    // Filter treatments to this time range
+    const visible = treatmentList.filter(
+      (t) => t.timestamp >= startTime && t.timestamp <= endTime
+    );
+
+    for (const treatment of visible) {
+      // Calculate X position
+      const timeOffset = treatment.timestamp - startTime;
+      const barX = sectionX + Math.round((timeOffset / timeRange) * (sectionWidth - 1));
+
+      if (barX >= sectionX && barX < sectionX + sectionWidth) {
+        if (treatment.type === "insulin") {
+          // Insulin: blue bar going DOWN from center
+          const barHeight = Math.max(1, Math.round((treatment.value / maxInsulin) * halfHeight));
+          for (let dy = 0; dy < barHeight; dy++) {
+            const py = centerY + 1 + dy;
+            if (py < TREATMENT_CHART_Y + TREATMENT_CHART_HEIGHT) {
+              setPixel(frame, barX, py, TREATMENT_COLORS.insulin);
+            }
+          }
+        } else {
+          // Carbs: orange bar going UP from center
+          const barHeight = Math.max(1, Math.round((treatment.value / maxCarbs) * halfHeight));
+          for (let dy = 0; dy < barHeight; dy++) {
+            const py = centerY - 1 - dy;
+            if (py >= TREATMENT_CHART_Y) {
+              setPixel(frame, barX, py, TREATMENT_COLORS.carbs);
+            }
+          }
+        }
+      }
+    }
+  };
+
+  // Left section: 21h compressed (offset by 3h)
+  renderSection(CHART_X, CHART_LEFT_WIDTH, CHART_LEFT_HOURS, CHART_RIGHT_HOURS);
+
+  // Right section: 3h detailed
+  const rightX = CHART_X + CHART_LEFT_WIDTH;
+  renderSection(rightX, CHART_RIGHT_WIDTH, CHART_RIGHT_HOURS, 0);
+}
+
 /**
  * Render blood sugar widget to bottom region of frame
- * Layout: "- 181 +7 1m" on top (with optional treatment summary), sparkline on bottom
+ * Layout: text on top, treatment chart, then glucose sparkline
  */
 export function renderBloodSugarRegion(
   frame: Frame,
@@ -341,14 +425,14 @@ export function renderBloodSugarRegion(
   const deltaTimeStr = useFullSpacing ? `${deltaStr} ${timeStr}` : `${deltaStr} ${timeStr}`;
   drawText(frame, deltaTimeStr, textX, TEXT_ROW, secondaryColor, BG_REGION_START, BG_REGION_END);
 
-  // Treatment summary (top right, tiny text showing recent insulin/carbs)
-  if (treatments && !treatments.isStale) {
-    renderTreatmentSummary(frame, treatments, DISPLAY_WIDTH - 1, TEXT_ROW);
+  // Treatment chart (insulin/carbs bar chart)
+  if (treatments && treatments.treatments.length > 0 && !treatments.isStale) {
+    renderTreatmentChart(frame, treatments);
   }
 
-  // Bottom: Split sparkline chart (21h compressed | 3h detailed)
+  // Glucose sparkline chart (split: 21h compressed | 3h detailed)
   if (history && history.points.length > 0) {
-    const legendY = CHART_Y + CHART_HEIGHT - 5; // 5px tiny font, at bottom
+    const legendY = GLUCOSE_CHART_Y + GLUCOSE_CHART_HEIGHT - 5; // 5px tiny font, at bottom
     const rightX = CHART_X + CHART_LEFT_WIDTH;
 
     // Calculate time markers (midnight, 6am, noon, 6pm) for both charts
@@ -369,9 +453,9 @@ export function renderBloodSugarRegion(
     // Left half: 21 hour compressed history (from -24h to -3h, offset by 3h)
     renderChart(frame, history.points, {
       x: CHART_X,
-      y: CHART_Y,
+      y: GLUCOSE_CHART_Y,
       width: CHART_LEFT_WIDTH,
-      height: CHART_HEIGHT,
+      height: GLUCOSE_CHART_HEIGHT,
       hours: CHART_LEFT_HOURS,
       offsetHours: CHART_RIGHT_HOURS, // Offset by 3h so it shows -24h to -3h
       timeMarkers,
@@ -381,36 +465,14 @@ export function renderBloodSugarRegion(
     // Right half: 3 hour detailed history
     renderChart(frame, history.points, {
       x: rightX,
-      y: CHART_Y,
+      y: GLUCOSE_CHART_Y,
       width: CHART_RIGHT_WIDTH,
-      height: CHART_HEIGHT,
+      height: GLUCOSE_CHART_HEIGHT,
       hours: CHART_RIGHT_HOURS,
       timeMarkers,
       timezone,
     });
     drawTinyText(frame, `${CHART_RIGHT_HOURS}h`, rightX, legendY, COLORS.veryDim);
-
-    // Overlay treatment markers on both charts
-    if (treatments && treatments.treatments.length > 0 && !treatments.isStale) {
-      // Left chart: 21h history (offset by 3h)
-      renderTreatmentMarkers(frame, treatments.treatments, {
-        x: CHART_X,
-        y: CHART_Y,
-        width: CHART_LEFT_WIDTH,
-        height: CHART_HEIGHT,
-        hours: CHART_LEFT_HOURS,
-        offsetHours: CHART_RIGHT_HOURS,
-      });
-
-      // Right chart: 3h detailed history
-      renderTreatmentMarkers(frame, treatments.treatments, {
-        x: rightX,
-        y: CHART_Y,
-        width: CHART_RIGHT_WIDTH,
-        height: CHART_HEIGHT,
-        hours: CHART_RIGHT_HOURS,
-      });
-    }
   }
 }
 

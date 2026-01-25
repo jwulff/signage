@@ -18,8 +18,8 @@ export interface ReadinessDisplayData {
   needsReauth?: boolean;
 }
 
-// Row position (below weather band)
-const READINESS_ROW_Y = 27;
+// Row position (below weather band, compact layout)
+const READINESS_ROW_Y = 22;
 
 /**
  * Render Oura scores in a horizontal row
