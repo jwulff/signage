@@ -53,8 +53,8 @@ export function PixelDisplay({
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(tempCanvas, 0, 0, canvas.width, canvas.height);
 
-    // Draw grid lines
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+    // Draw grid lines (black pixel outlines)
+    ctx.strokeStyle = "#000";
     ctx.lineWidth = 1;
     for (let x = 0; x <= width; x++) {
       ctx.beginPath();
