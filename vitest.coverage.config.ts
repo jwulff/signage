@@ -42,13 +42,12 @@ export default defineConfig({
         '**/index.ts',
       ],
 
-      // Phase 2: Add global threshold based on baseline
-      // thresholds: {
-      //   lines: 80,
-      //   branches: 75,
-      //   functions: 80,
-      //   statements: 80,
-      // },
+      thresholds: {
+        lines: 20,
+        branches: 15,
+        functions: 20,
+        statements: 20,
+      },
     },
   },
 })
