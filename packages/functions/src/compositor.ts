@@ -37,6 +37,8 @@ import {
   fetchGlucoseReadings,
   parseDexcomTimestamp,
 } from "./dexcom/client.js";
+import type { TreatmentDisplayData, GlookoTreatmentsItem } from "./glooko/types.js";
+import { calculateTreatmentTotals } from "./rendering/treatment-renderer.js";
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
@@ -313,6 +315,49 @@ async function fetchReadinessData(): Promise<ReadinessDisplayData[]> {
   return results;
 }
 
+// Treatment stale threshold: 6 hours
+const TREATMENT_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Fetch treatment data from DynamoDB (populated by Glooko scraper)
+ */
+async function fetchTreatmentData(): Promise<TreatmentDisplayData | null> {
+  try {
+    const result = await ddb.send(
+      new GetCommand({
+        TableName: Resource.SignageTable.name,
+        Key: {
+          pk: "GLOOKO#TREATMENTS",
+          sk: "DATA",
+        },
+      })
+    );
+
+    if (!result.Item) {
+      return null;
+    }
+
+    const item = result.Item as GlookoTreatmentsItem;
+    const treatments = item.treatments || [];
+    const lastFetchedAt = item.lastFetchedAt || 0;
+    const isStale = Date.now() - lastFetchedAt > TREATMENT_STALE_THRESHOLD_MS;
+
+    // Calculate totals for last 4 hours
+    const totals = calculateTreatmentTotals(treatments, 4);
+
+    return {
+      recentInsulinUnits: totals.insulinUnits,
+      recentCarbsGrams: totals.carbGrams,
+      treatments,
+      lastFetchedAt,
+      isStale,
+    };
+  } catch (error) {
+    console.error("Failed to fetch treatment data:", error);
+    return null;
+  }
+}
+
 /**
  * Get active WebSocket connections
  * Uses Query on pk="CONNECTIONS" for efficient retrieval
@@ -416,11 +461,12 @@ async function updateDisplay(): Promise<{
 
   const apiClient = new ApiGatewayManagementApiClient({ endpoint });
 
-  // Fetch blood sugar, weather, and readiness data in parallel
-  const [bloodSugarResult, weatherData, readinessData] = await Promise.all([
+  // Fetch blood sugar, weather, readiness, and treatment data in parallel
+  const [bloodSugarResult, weatherData, readinessData, treatmentData] = await Promise.all([
     fetchBloodSugarData(),
     fetchWeatherData(),
     fetchReadinessData(),
+    fetchTreatmentData(),
   ]);
 
   const { current: bloodSugarData, history } = bloodSugarResult;
@@ -444,6 +490,14 @@ async function updateDisplay(): Promise<{
     console.log("No Oura data (no linked users)");
   }
 
+  if (treatmentData && !treatmentData.isStale) {
+    console.log(`Treatments (4h): ${treatmentData.recentInsulinUnits}u insulin, ${treatmentData.recentCarbsGrams}g carbs, ${treatmentData.treatments.length} events`);
+  } else if (treatmentData?.isStale) {
+    console.log("Treatment data is stale (>6h old)");
+  } else {
+    console.log("No treatment data available");
+  }
+
   // Generate composite frame using shared rendering module
   const frame = generateCompositeFrame({
     bloodSugar: bloodSugarData,
@@ -451,6 +505,7 @@ async function updateDisplay(): Promise<{
     timezone: "America/Los_Angeles",
     weather: weatherData ?? undefined,
     readiness: readinessData.length > 0 ? readinessData : undefined,
+    treatments: treatmentData,
   });
 
   // Get current time in Pacific for logging

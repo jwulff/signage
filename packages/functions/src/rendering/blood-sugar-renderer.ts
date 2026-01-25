@@ -7,6 +7,8 @@ import { setPixel } from "@signage/core";
 import { drawText, drawTinyText, measureText, measureTinyText, DISPLAY_WIDTH } from "./text.js";
 import { COLORS, type RangeStatus } from "./colors.js";
 import { renderChart, type ChartPoint } from "./chart-renderer.js";
+import type { TreatmentDisplayData } from "../glooko/types.js";
+import { renderTreatmentSummary, renderTreatmentMarkers } from "./treatment-renderer.js";
 
 // Blood sugar region boundaries
 const BG_REGION_START = 32;
@@ -274,13 +276,14 @@ function centerXWithMargin(text: string): number {
 
 /**
  * Render blood sugar widget to bottom region of frame
- * Layout: "- 181 +7 1m" on top, sparkline on bottom
+ * Layout: "- 181 +7 1m" on top (with optional treatment summary), sparkline on bottom
  */
 export function renderBloodSugarRegion(
   frame: Frame,
   data: BloodSugarDisplayData | null,
   history?: BloodSugarHistory,
-  timezone?: string
+  timezone?: string,
+  treatments?: TreatmentDisplayData | null
 ): void {
   if (!data) {
     const errText = "BG ERR";
@@ -338,6 +341,11 @@ export function renderBloodSugarRegion(
   const deltaTimeStr = useFullSpacing ? `${deltaStr} ${timeStr}` : `${deltaStr} ${timeStr}`;
   drawText(frame, deltaTimeStr, textX, TEXT_ROW, secondaryColor, BG_REGION_START, BG_REGION_END);
 
+  // Treatment summary (top right, tiny text showing recent insulin/carbs)
+  if (treatments && !treatments.isStale) {
+    renderTreatmentSummary(frame, treatments, DISPLAY_WIDTH - 1, TEXT_ROW);
+  }
+
   // Bottom: Split sparkline chart (21h compressed | 3h detailed)
   if (history && history.points.length > 0) {
     const legendY = CHART_Y + CHART_HEIGHT - 5; // 5px tiny font, at bottom
@@ -380,6 +388,29 @@ export function renderBloodSugarRegion(
       timeMarkers,
       timezone,
     });
+    drawTinyText(frame, `${CHART_RIGHT_HOURS}h`, rightX, legendY, COLORS.veryDim);
+
+    // Overlay treatment markers on both charts
+    if (treatments && treatments.treatments.length > 0 && !treatments.isStale) {
+      // Left chart: 21h history (offset by 3h)
+      renderTreatmentMarkers(frame, treatments.treatments, {
+        x: CHART_X,
+        y: CHART_Y,
+        width: CHART_LEFT_WIDTH,
+        height: CHART_HEIGHT,
+        hours: CHART_LEFT_HOURS,
+        offsetHours: CHART_RIGHT_HOURS,
+      });
+
+      // Right chart: 3h detailed history
+      renderTreatmentMarkers(frame, treatments.treatments, {
+        x: rightX,
+        y: CHART_Y,
+        width: CHART_RIGHT_WIDTH,
+        height: CHART_HEIGHT,
+        hours: CHART_RIGHT_HOURS,
+      });
+    }
   }
 }
 

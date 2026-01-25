@@ -5,7 +5,14 @@
 
 import { table } from "./storage";
 import { api } from "./api";
-import { dexcomUsername, dexcomPassword, ouraClientId, ouraClientSecret } from "./secrets";
+import {
+  dexcomUsername,
+  dexcomPassword,
+  ouraClientId,
+  ouraClientSecret,
+  glookoEmail,
+  glookoPassword,
+} from "./secrets";
 
 // Display compositor - combines all widgets into a single frame
 // Updates every minute with clock + blood sugar
@@ -39,5 +46,17 @@ export const ouraReadinessCron = new sst.aws.Cron("OuraReadinessFetch", {
     link: [table, ouraClientId, ouraClientSecret],
     timeout: "120 seconds",
     memory: "256 MB",
+  },
+});
+
+// Scrape Glooko treatment data (insulin/carbs) hourly
+// Uses Puppeteer to log in and export CSV data
+export const glookoScraperCron = new sst.aws.Cron("GlookoScraper", {
+  schedule: "rate(1 hour)",
+  function: {
+    handler: "packages/functions/src/glooko/scraper.handler",
+    link: [table, glookoEmail, glookoPassword],
+    timeout: "120 seconds",
+    memory: "1024 MB",
   },
 });
