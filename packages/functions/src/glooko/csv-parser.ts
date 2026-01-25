@@ -193,17 +193,24 @@ function parseLocalDateTime(
  * Parse timestamp string into Unix milliseconds.
  * Glooko exports timestamps in the user's local timezone (America/Los_Angeles),
  * so we parse them in that timezone to get correct UTC milliseconds.
+ *
+ * Timestamps with explicit timezone info (Z or offset) are parsed directly.
  */
 function parseTimestamp(value: string): number | null {
   if (!value || value === "0") return null;
 
-  // Try ISO format first (already includes timezone info)
-  const date = new Date(value);
-  if (!isNaN(date.getTime())) {
-    return date.getTime();
+  // FIRST: Check for explicit timezone info (Z or offset like +00:00 or -08:00)
+  // These are unambiguous and should be parsed by new Date() directly.
+  // This handles ISO 8601 like "2024-01-15T08:30:00Z" or "2024-01-15T08:30:00-08:00"
+  if (/Z|[+-]\d{2}:\d{2}/.test(value)) {
+    const date = new Date(value);
+    if (!isNaN(date.getTime())) {
+      return date.getTime();
+    }
   }
 
   // Try "YYYY-MM-DD HH:MM[:SS]" format (common in Glooko)
+  // These are NAIVE timestamps (no timezone) that Glooko exports in user's local timezone.
   const glookoFormat = value.match(
     /(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/
   );
