@@ -377,9 +377,6 @@ function renderTreatmentChart(
       total = bolusTotal;
     }
 
-    // Debug: log bolus calculation for each day
-    console.log(`Insulin ${dateStr}: total=${total.toFixed(1)}, bolus=${bolusTotal.toFixed(1)}, basal=${(total - bolusTotal).toFixed(1)}, ratio=${total > 0 ? ((bolusTotal / total) * 100).toFixed(0) : 0}%`);
-
     dayData.push({ total, bolus: bolusTotal });
   }
 
@@ -396,9 +393,6 @@ function renderTreatmentChart(
   const lastInsulinTime = insulinTreatments.length > 0
     ? Math.max(...insulinTreatments.map(t => t.timestamp))
     : 0;
-
-  // Debug: log total treatment count
-  console.log(`Treatment count: ${treatmentList.length} total, ${insulinTreatments.length} insulin`);
 
   // Format latency indicator (time since last known insulin delivery)
   const formatLatency = (lastTimestamp: number): string => {
