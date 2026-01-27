@@ -43,6 +43,7 @@ function pacificToUtcMs(pacificTimeStr: string): number {
   const [, year, month, day, hour, minute, second = "0"] = match;
 
   // Use Intl to get the offset for this specific date/time in Pacific
+  // Use hourCycle: 'h23' to ensure hours are 0-23 (not 24 for midnight)
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Los_Angeles",
     year: "numeric",
@@ -50,7 +51,7 @@ function pacificToUtcMs(pacificTimeStr: string): number {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    hourCycle: "h23",
   });
 
   // Create a UTC guess and calculate the offset
