@@ -386,13 +386,33 @@ function renderTreatmentChart(
 
   const dayStrs = dayData.map(d => formatInsulin(d.total));
 
-  // Calculate layout - 5 numbers evenly spaced
+  // Find the most recent insulin treatment timestamp for latency indicator
+  const insulinTreatments = treatmentList.filter(t => t.type === "insulin");
+  const lastInsulinTime = insulinTreatments.length > 0
+    ? Math.max(...insulinTreatments.map(t => t.timestamp))
+    : 0;
+
+  // Format latency indicator (time since last known insulin delivery)
+  const formatLatency = (lastTimestamp: number): string => {
+    if (lastTimestamp === 0) return "?";
+    const msAgo = now - lastTimestamp;
+    const minsAgo = Math.floor(msAgo / (60 * 1000));
+    if (minsAgo < 60) {
+      return `${minsAgo}m`;
+    }
+    const hoursAgo = Math.ceil(minsAgo / 60);
+    return `${hoursAgo}h`;
+  };
+  const latencyStr = formatLatency(lastInsulinTime);
+
+  // Calculate layout - 5 numbers + latency indicator
   const dayWidths = dayStrs.map(s => measureTinyText(s));
-  const totalTextWidth = dayWidths.reduce((a, b) => a + b, 0);
+  const latencyWidth = measureTinyText(latencyStr);
+  const totalTextWidth = dayWidths.reduce((a, b) => a + b, 0) + latencyWidth;
   const availableWidth = CHART_WIDTH;
 
-  // Calculate spacing between numbers (4 gaps between 5 day totals)
-  const numGaps = numDays - 1;
+  // Calculate spacing between numbers (4 gaps between 5 days + 1 gap before latency)
+  const numGaps = numDays;
   const extraSpace = availableWidth - totalTextWidth;
   const spacing = Math.max(2, Math.floor(extraSpace / numGaps));
 
@@ -461,6 +481,9 @@ function renderTreatmentChart(
 
     x += dayWidths[i] + spacing;
   }
+
+  // Draw latency indicator (time since last insulin delivery)
+  drawTinyText(frame, latencyStr, x, textY, COLORS.clockTime);
 }
 
 /**
