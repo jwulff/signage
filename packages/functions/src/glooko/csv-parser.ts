@@ -508,6 +508,22 @@ function parseBasalCsv(
 }
 
 /**
+ * Format a UTC timestamp as a date string (YYYY-MM-DD) in Pacific time.
+ * This is needed because Glooko data represents Pacific time, and we need
+ * to group daily records by the Pacific date, not the UTC date.
+ */
+function formatDateInPacific(timestampMs: number): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: GLOOKO_EXPORT_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  // en-CA locale formats as YYYY-MM-DD
+  return formatter.format(new Date(timestampMs));
+}
+
+/**
  * Parse daily insulin summary CSV
  */
 function parseInsulinSummaryCsv(
@@ -531,8 +547,8 @@ function parseInsulinSummaryCsv(
     );
     if (!timestamp) continue;
 
-    const date = new Date(timestamp);
-    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    // Format date in Pacific time so daily totals align with Glooko's display
+    const dateStr = formatDateInPacific(timestamp);
 
     records.push({
       type: "daily_insulin",
