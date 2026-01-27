@@ -336,16 +336,18 @@ function renderTreatmentChart(
   // Calculate midnights for each of the last 5 days
   // We calculate each separately to handle DST transitions correctly
   const midnights: number[] = [];
-  let datePointer = new Date(now);
 
   // Get today's midnight
-  midnights.push(getMidnightTimestamp(datePointer, tz));
+  let currentMidnight = getMidnightTimestamp(new Date(now), tz);
+  midnights.push(currentMidnight);
 
-  // Go back 4 more days, calculating each midnight separately
+  // Go back 4 more days, subtracting from each midnight (not from original time)
   for (let i = 0; i < numDays - 1; i++) {
-    // Go back 30 hours (safely past one day boundary) then find that day's midnight
-    datePointer = new Date(datePointer.getTime() - 30 * 60 * 60 * 1000);
-    midnights.unshift(getMidnightTimestamp(datePointer, tz));
+    // Go back 25 hours from the midnight to safely land in the previous day
+    // (handles DST transitions where a day might be 23 or 25 hours)
+    const previousDayTime = currentMidnight - 25 * 60 * 60 * 1000;
+    currentMidnight = getMidnightTimestamp(new Date(previousDayTime), tz);
+    midnights.unshift(currentMidnight);
   }
 
   // midnights = [4 days ago, 3 days ago, 2 days ago, yesterday, today]
