@@ -160,6 +160,7 @@ function parseLocalDateTime(
   const utcGuess = Date.UTC(year, month, day, hour, minute, second);
 
   // Format utcGuess in the target timezone to see what local time it maps to
+  // Use hourCycle: 'h23' to ensure hours are 0-23 (not 24 for midnight which some envs return)
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     year: "numeric",
@@ -167,7 +168,7 @@ function parseLocalDateTime(
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    hourCycle: "h23",
   });
 
   const parts = formatter.formatToParts(new Date(utcGuess));
