@@ -20,8 +20,8 @@ const CHART_X = 1;
 const CHART_WIDTH = DISPLAY_WIDTH - 2; // Full width minus margins
 
 // Treatment chart (insulin totals with bolus/basal bars) - above glucose reading
+// Layout: rows 23-29 (5px text + 1px gap + 1px bar = 7px total)
 const TREATMENT_CHART_Y = 23;
-const TREATMENT_CHART_HEIGHT = 7; // Rows 23-29 (5px text + 1px gap + 1px bar)
 
 // Glucose reading - right above sparkline
 const TEXT_ROW = 32; // Rows 32-36
@@ -426,7 +426,6 @@ function renderTreatmentChart(
     // Draw bolus/basal ratio bar below the number
     const { total, bolus } = dayData[i];
     if (total > 0) {
-      const basal = Math.max(0, total - bolus);
       const bolusRatio = bolus / total;
 
       // Calculate pixel widths (bar is 7px wide = width of 2-digit number)
