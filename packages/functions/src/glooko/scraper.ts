@@ -807,9 +807,10 @@ export function parseCsvFiles(csvFiles: ExtractedCsv[]): GlookoTreatment[] {
       treatments.push(...parseCarbsCsv(content, fileName));
     } else if (lowerName.includes("bolus")) {
       treatments.push(...parseBolusCsv(content, fileName));
-    } else if (lowerName.includes("insulin") && !lowerName.includes("basal") && !lowerName.includes("insulin_data")) {
-      // Note: insulin_data files contain daily TOTALS, not individual doses
+    } else if (lowerName.includes("insulin") && !lowerName.includes("basal") && !lowerName.match(/insulin_data\/insulin_data_\d+\.csv/)) {
+      // Note: insulin_data/insulin_data_N.csv files contain daily TOTALS, not individual doses
       // We get individual boluses from bolus_data files instead
+      // But manual_insulin_data files ARE individual doses and should be parsed
       treatments.push(...parseInsulinCsv(content, fileName));
     }
     // Skip other files (cgm_data, bg_data, basal_data, insulin_data, etc.)
