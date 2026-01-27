@@ -305,6 +305,19 @@ function getMidnightTimestamp(date: Date, timezone: string): number {
 }
 
 /**
+ * Get date string (YYYY-MM-DD) for a timestamp in a specific timezone
+ */
+function getDateString(timestamp: number, timezone: string): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return formatter.format(new Date(timestamp));
+}
+
+/**
  * Render treatment chart showing last 4 days of insulin totals (midnight to midnight)
  */
 function renderTreatmentChart(
@@ -312,7 +325,7 @@ function renderTreatmentChart(
   treatments: TreatmentDisplayData,
   timezone?: string
 ): void {
-  const { treatments: treatmentList } = treatments;
+  const { treatments: treatmentList, dailyInsulinTotals } = treatments;
   const now = Date.now();
   const tz = timezone || "America/Los_Angeles";
 
@@ -333,14 +346,29 @@ function renderTreatmentChart(
   }
 
   // midnights = [3 days ago, 2 days ago, yesterday, today]
+  // Get date strings for each day (for looking up pre-calculated totals)
+  const dateStrings: string[] = [];
+  for (let i = 0; i < 4; i++) {
+    // Use a time in the middle of the day to get the correct date string
+    const midDayMs = midnights[i] + 12 * 60 * 60 * 1000;
+    dateStrings.push(getDateString(midDayMs, tz));
+  }
+
   // Calculate insulin totals for each day
+  // Prefer pre-calculated daily totals (includes basal) when available
   const dayTotals: number[] = [];
   for (let i = 0; i < 4; i++) {
-    const dayStart = midnights[i];
-    // Today (i=3) ends at now, other days end at next midnight
-    const dayEnd = i === 3 ? now : midnights[i + 1];
-    const total = calculateInsulinTotal(treatmentList, dayStart, dayEnd);
-    dayTotals.push(total);
+    const dateStr = dateStrings[i];
+    if (dailyInsulinTotals && dailyInsulinTotals[dateStr] !== undefined) {
+      // Use pre-calculated total from DAILY_INSULIN record (includes basal + bolus)
+      dayTotals.push(dailyInsulinTotals[dateStr]);
+    } else {
+      // Fall back to summing treatments (boluses only, no basal)
+      const dayStart = midnights[i];
+      const dayEnd = i === 3 ? now : midnights[i + 1];
+      const total = calculateInsulinTotal(treatmentList, dayStart, dayEnd);
+      dayTotals.push(total);
+    }
   }
 
   // Format numbers for display (cap at 99+ to indicate truncation)

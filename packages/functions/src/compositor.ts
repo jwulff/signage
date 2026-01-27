@@ -261,25 +261,67 @@ async function fetchWeatherData(): Promise<ClockWeatherData | null> {
 const TREATMENT_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 
 /**
+ * Fetch daily insulin totals from DAILY_INSULIN records
+ * These include both bolus and basal insulin, giving accurate daily totals
+ */
+async function fetchDailyInsulinTotals(): Promise<Record<string, number>> {
+  const dailyTotals: Record<string, number> = {};
+
+  try {
+    // Query DAILY_INSULIN records for the primary user
+    const result = await ddb.send(
+      new QueryCommand({
+        TableName: Resource.SignageTable.name,
+        IndexName: "gsi1",
+        KeyConditionExpression: "gsi1pk = :pk AND begins_with(gsi1sk, :prefix)",
+        ExpressionAttributeValues: {
+          ":pk": "USER#primary",
+          ":prefix": "DAILY_INSULIN#",
+        },
+        ScanIndexForward: false, // Most recent first
+        Limit: 10, // Last 10 days is plenty
+      })
+    );
+
+    if (result.Items) {
+      for (const item of result.Items) {
+        const data = item.data as { date?: string; totalInsulinUnits?: number };
+        if (data?.date && typeof data?.totalInsulinUnits === "number") {
+          dailyTotals[data.date] = data.totalInsulinUnits;
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Failed to fetch daily insulin totals:", error);
+  }
+
+  return dailyTotals;
+}
+
+/**
  * Fetch treatment data from DynamoDB (populated by Glooko scraper)
  */
 async function fetchTreatmentData(): Promise<TreatmentDisplayData | null> {
   try {
-    const result = await ddb.send(
-      new GetCommand({
-        TableName: Resource.SignageTable.name,
-        Key: {
-          pk: "GLOOKO#TREATMENTS",
-          sk: "DATA",
-        },
-      })
-    );
+    // Fetch treatments and daily totals in parallel
+    const [treatmentsResult, dailyInsulinTotals] = await Promise.all([
+      ddb.send(
+        new GetCommand({
+          TableName: Resource.SignageTable.name,
+          Key: {
+            pk: "GLOOKO#TREATMENTS",
+            sk: "DATA",
+          },
+        })
+      ),
+      fetchDailyInsulinTotals(),
+    ]);
 
-    if (!result.Item) {
+    if (!treatmentsResult.Item) {
       return null;
     }
 
-    const item = result.Item as GlookoTreatmentsItem;
+    const item = treatmentsResult.Item as GlookoTreatmentsItem;
     const treatments = item.treatments || [];
     const lastFetchedAt = item.lastFetchedAt || 0;
     const isStale = Date.now() - lastFetchedAt > TREATMENT_STALE_THRESHOLD_MS;
@@ -293,6 +335,7 @@ async function fetchTreatmentData(): Promise<TreatmentDisplayData | null> {
       treatments,
       lastFetchedAt,
       isStale,
+      dailyInsulinTotals,
     };
   } catch (error) {
     console.error("Failed to fetch treatment data:", error);

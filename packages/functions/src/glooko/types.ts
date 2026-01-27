@@ -30,6 +30,8 @@ export interface TreatmentDisplayData {
   lastFetchedAt: number;
   /** True if data is older than 6 hours */
   isStale: boolean;
+  /** Daily insulin totals from Glooko (includes basal + bolus), keyed by date string YYYY-MM-DD */
+  dailyInsulinTotals?: Record<string, number>;
 }
 
 /**
