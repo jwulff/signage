@@ -19,9 +19,9 @@ const TEXT_MARGIN = 1; // Left/right margin for text
 const CHART_X = 1;
 const CHART_WIDTH = DISPLAY_WIDTH - 2; // Full width minus margins
 
-// Treatment chart (insulin totals) - above glucose reading
+// Treatment chart (insulin totals with bolus/basal bars) - above glucose reading
 const TREATMENT_CHART_Y = 23;
-const TREATMENT_CHART_HEIGHT = 5; // Rows 23-27
+const TREATMENT_CHART_HEIGHT = 7; // Rows 23-29 (5px text + 1px gap + 1px bar)
 
 // Glucose reading - right above sparkline
 const TEXT_ROW = 32; // Rows 32-36
@@ -317,8 +317,11 @@ function getDateString(timestamp: number, timezone: string): string {
   return formatter.format(new Date(timestamp));
 }
 
+// Width of a 2-digit number in tiny font (3+1+3 = 7px)
+const INSULIN_BAR_WIDTH = 7;
+
 /**
- * Render treatment chart showing last 4 days of insulin totals (midnight to midnight)
+ * Render treatment chart showing last 5 days of insulin totals with bolus/basal ratio bars
  */
 function renderTreatmentChart(
   frame: Frame,
@@ -328,86 +331,68 @@ function renderTreatmentChart(
   const { treatments: treatmentList, dailyInsulinTotals } = treatments;
   const now = Date.now();
   const tz = timezone || "America/Los_Angeles";
+  const numDays = 5;
 
-  // Calculate midnights for each of the last 4 days
+  // Calculate midnights for each of the last 5 days
   // We calculate each separately to handle DST transitions correctly
-  // (a calendar day may be 23h or 25h on DST change days)
   const midnights: number[] = [];
   let datePointer = new Date(now);
 
   // Get today's midnight
   midnights.push(getMidnightTimestamp(datePointer, tz));
 
-  // Go back 3 more days, calculating each midnight separately
-  for (let i = 0; i < 3; i++) {
+  // Go back 4 more days, calculating each midnight separately
+  for (let i = 0; i < numDays - 1; i++) {
     // Go back 30 hours (safely past one day boundary) then find that day's midnight
     datePointer = new Date(datePointer.getTime() - 30 * 60 * 60 * 1000);
     midnights.unshift(getMidnightTimestamp(datePointer, tz));
   }
 
-  // midnights = [3 days ago, 2 days ago, yesterday, today]
+  // midnights = [4 days ago, 3 days ago, 2 days ago, yesterday, today]
   // Get date strings for each day (for looking up pre-calculated totals)
   const dateStrings: string[] = [];
-  for (let i = 0; i < 4; i++) {
-    // Use a time in the middle of the day to get the correct date string
+  for (let i = 0; i < numDays; i++) {
     const midDayMs = midnights[i] + 12 * 60 * 60 * 1000;
     dateStrings.push(getDateString(midDayMs, tz));
   }
 
-  // Calculate insulin totals for each day
-  // Prefer pre-calculated daily totals (includes basal) when available
-  const dayTotals: number[] = [];
-  for (let i = 0; i < 4; i++) {
+  // Calculate insulin totals and bolus amounts for each day
+  const dayData: Array<{ total: number; bolus: number }> = [];
+  for (let i = 0; i < numDays; i++) {
     const dateStr = dateStrings[i];
+    const dayStart = midnights[i];
+    const dayEnd = i === numDays - 1 ? now : midnights[i + 1];
+
+    // Calculate bolus from treatments (individual bolus records)
+    const bolusTotal = calculateInsulinTotal(treatmentList, dayStart, dayEnd);
+
+    // Get total from pre-calculated DAILY_INSULIN record (includes basal + bolus)
+    let total: number;
     if (dailyInsulinTotals && dailyInsulinTotals[dateStr] !== undefined) {
-      // Use pre-calculated total from DAILY_INSULIN record (includes basal + bolus)
-      dayTotals.push(dailyInsulinTotals[dateStr]);
+      total = dailyInsulinTotals[dateStr];
     } else {
-      // Fall back to summing treatments (boluses only, no basal)
-      const dayStart = midnights[i];
-      const dayEnd = i === 3 ? now : midnights[i + 1];
-      const total = calculateInsulinTotal(treatmentList, dayStart, dayEnd);
-      dayTotals.push(total);
+      // Fall back to bolus only if no daily total available
+      total = bolusTotal;
     }
+
+    dayData.push({ total, bolus: bolusTotal });
   }
 
-  // Format numbers for display (cap at 99+ to indicate truncation)
+  // Format numbers for display (cap at 99 to fit in 2 digits)
   const formatInsulin = (value: number): string => {
     const rounded = Math.round(value);
-    return rounded > 99 ? "99+" : String(rounded);
+    return rounded > 99 ? "99" : String(rounded);
   };
 
-  const dayStrs = dayTotals.map(formatInsulin);
+  const dayStrs = dayData.map(d => formatInsulin(d.total));
 
-  // Find the most recent insulin treatment timestamp
-  const insulinTreatments = treatmentList.filter(t => t.type === "insulin");
-  const lastInsulinTime = insulinTreatments.length > 0
-    ? Math.max(...insulinTreatments.map(t => t.timestamp))
-    : 0;
-
-  // Format latency indicator (time since last known insulin delivery)
-  const formatLatency = (lastTimestamp: number): string => {
-    if (lastTimestamp === 0) return "?";
-    const msAgo = now - lastTimestamp;
-    const minsAgo = Math.floor(msAgo / (60 * 1000));
-    if (minsAgo < 60) {
-      return `${minsAgo}m`;
-    }
-    const hoursAgo = Math.ceil(minsAgo / 60);
-    return `${hoursAgo}h`;
-  };
-  const latencyStr = formatLatency(lastInsulinTime);
-
-  // Calculate total width needed (4 day totals + latency)
+  // Calculate layout - 5 numbers evenly spaced
   const dayWidths = dayStrs.map(s => measureTinyText(s));
-  const latencyWidth = measureTinyText(latencyStr);
-  const totalTextWidth = dayWidths.reduce((a, b) => a + b, 0) + latencyWidth;
-
-  // Available width for the treatment chart
+  const totalTextWidth = dayWidths.reduce((a, b) => a + b, 0);
   const availableWidth = CHART_WIDTH;
 
-  // Calculate spacing between numbers (3 gaps between 4 day totals + 1 gap before latency)
-  const numGaps = 4; // 4 gaps total
+  // Calculate spacing between numbers (4 gaps between 5 day totals)
+  const numGaps = numDays - 1;
   const extraSpace = availableWidth - totalTextWidth;
   const spacing = Math.max(2, Math.floor(extraSpace / numGaps));
 
@@ -415,30 +400,68 @@ function renderTreatmentChart(
   const totalUsedWidth = totalTextWidth + numGaps * spacing;
   const startX = CHART_X + Math.max(0, Math.floor((availableWidth - totalUsedWidth) / 2));
 
-  // Vertical positioning - center text in chart area
-  const textY = TREATMENT_CHART_Y + Math.floor((TREATMENT_CHART_HEIGHT - 5) / 2);
+  // Vertical positioning - text at top of chart area, bar below
+  const textY = TREATMENT_CHART_Y;
+  const barY = textY + 6; // 1px gap below 5px text
 
   // Brightness gradient: oldest (dimmest) to newest (brightest)
-  const getDayColor = (index: number): RGB => {
-    // index 0 = oldest (dimmest), index 3 = newest (brightest)
-    const brightness = 0.3 + (index / 3) * 0.7; // 0.3 to 1.0
-    return {
+  const getDayBrightness = (index: number): number => {
+    // index 0 = oldest (dimmest), index 4 = newest (brightest)
+    return 0.3 + (index / (numDays - 1)) * 0.7; // 0.3 to 1.0
+  };
+
+  // Draw 5 day totals with ratio bars
+  let x = startX;
+  for (let i = 0; i < numDays; i++) {
+    const brightness = getDayBrightness(i);
+    const textColor: RGB = {
       r: Math.round(100 * brightness),
       g: Math.round(150 * brightness),
       b: Math.round(255 * brightness),
     };
-  };
 
-  // Draw 4 day totals
-  let x = startX;
-  for (let i = 0; i < 4; i++) {
-    const color = getDayColor(i);
-    drawTinyText(frame, dayStrs[i], x, textY, color);
+    // Draw the total number
+    drawTinyText(frame, dayStrs[i], x, textY, textColor);
+
+    // Draw bolus/basal ratio bar below the number
+    const { total, bolus } = dayData[i];
+    if (total > 0) {
+      const basal = Math.max(0, total - bolus);
+      const bolusRatio = bolus / total;
+
+      // Calculate pixel widths (bar is 7px wide = width of 2-digit number)
+      const bolusPixels = Math.round(bolusRatio * INSULIN_BAR_WIDTH);
+      const basalPixels = INSULIN_BAR_WIDTH - bolusPixels;
+
+      // Apply brightness to the bar colors
+      const bolusColor: RGB = {
+        r: Math.round(COLORS.insulinBolus.r * brightness),
+        g: Math.round(COLORS.insulinBolus.g * brightness),
+        b: Math.round(COLORS.insulinBolus.b * brightness),
+      };
+      const basalColor: RGB = {
+        r: Math.round(COLORS.insulinBasal.r * brightness),
+        g: Math.round(COLORS.insulinBasal.g * brightness),
+        b: Math.round(COLORS.insulinBasal.b * brightness),
+      };
+
+      // Center the bar under the number
+      const textWidth = dayWidths[i];
+      const barStartX = x + Math.floor((textWidth - INSULIN_BAR_WIDTH) / 2);
+
+      // Draw bolus pixels (left side)
+      for (let px = 0; px < bolusPixels; px++) {
+        setPixel(frame, barStartX + px, barY, bolusColor);
+      }
+
+      // Draw basal pixels (right side)
+      for (let px = 0; px < basalPixels; px++) {
+        setPixel(frame, barStartX + bolusPixels + px, barY, basalColor);
+      }
+    }
+
     x += dayWidths[i] + spacing;
   }
-
-  // Draw latency indicator (same color as clock time - white/grey)
-  drawTinyText(frame, latencyStr, x, textY, COLORS.clockTime);
 }
 
 /**

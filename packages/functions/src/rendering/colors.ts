@@ -28,6 +28,10 @@ export const COLORS = {
   readinessStale: { r: 128, g: 128, b: 128 } as RGB,    // No data: Gray
   readinessInitial: { r: 100, g: 100, b: 100 } as RGB,  // Initial letter: Dim gray
 
+  // Insulin type colors (for bolus/basal ratio bars)
+  insulinBolus: { r: 200, g: 180, b: 220 } as RGB,  // Light purple/lavender
+  insulinBasal: { r: 140, g: 90, b: 140 } as RGB,   // Darker purple/magenta
+
   // Background
   bg: { r: 0, g: 0, b: 0 } as RGB,
   separator: { r: 40, g: 40, b: 40 } as RGB,
