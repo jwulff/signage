@@ -602,7 +602,6 @@ export function renderBloodSugarRegion(
       timeMarkers,
       timezone,
     });
-    drawTinyText(frame, `${CHART_RIGHT_HOURS}h`, rightX, legendY, COLORS.veryDim);
   }
 }
 
