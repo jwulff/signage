@@ -268,18 +268,17 @@ async function fetchDailyInsulinTotals(): Promise<Record<string, number>> {
   const dailyTotals: Record<string, number> = {};
 
   try {
-    // Query DAILY_INSULIN records for the primary user
+    // Query DAILY_INSULIN records for the primary user using primary key
+    // pk = "USER#primary#DAILY_INSULIN", sk is timestamp-based
     const result = await ddb.send(
       new QueryCommand({
         TableName: Resource.SignageTable.name,
-        IndexName: "gsi1",
-        KeyConditionExpression: "gsi1pk = :pk AND begins_with(gsi1sk, :prefix)",
+        KeyConditionExpression: "pk = :pk",
         ExpressionAttributeValues: {
-          ":pk": "USER#primary",
-          ":prefix": "DAILY_INSULIN#",
+          ":pk": "USER#primary#DAILY_INSULIN",
         },
         ScanIndexForward: false, // Most recent first
-        Limit: 10, // Last 10 days is plenty
+        Limit: 20, // Last ~20 records covers multiple days with duplicates
       })
     );
 
@@ -287,10 +286,15 @@ async function fetchDailyInsulinTotals(): Promise<Record<string, number>> {
       for (const item of result.Items) {
         const data = item.data as { date?: string; totalInsulinUnits?: number };
         if (data?.date && typeof data?.totalInsulinUnits === "number") {
-          dailyTotals[data.date] = data.totalInsulinUnits;
+          // Keep the highest value for each date (handles duplicate imports)
+          if (!dailyTotals[data.date] || data.totalInsulinUnits > dailyTotals[data.date]) {
+            dailyTotals[data.date] = data.totalInsulinUnits;
+          }
         }
       }
     }
+
+    console.log(`Fetched daily insulin totals: ${JSON.stringify(dailyTotals)}`);
   } catch (error) {
     console.error("Failed to fetch daily insulin totals:", error);
   }
