@@ -341,11 +341,11 @@ function renderTreatmentChart(
   let currentMidnight = getMidnightTimestamp(new Date(now), tz);
   midnights.push(currentMidnight);
 
-  // Go back 4 more days, subtracting from each midnight (not from original time)
+  // Go back 4 more days, subtracting from each midnight
   for (let i = 0; i < numDays - 1; i++) {
-    // Go back 25 hours from the midnight to safely land in the previous day
-    // (handles DST transitions where a day might be 23 or 25 hours)
-    const previousDayTime = currentMidnight - 25 * 60 * 60 * 1000;
+    // Subtract 1 hour from midnight to land at 23:00 the previous day
+    // getMidnightTimestamp will then find that day's midnight
+    const previousDayTime = currentMidnight - 1 * 60 * 60 * 1000;
     currentMidnight = getMidnightTimestamp(new Date(previousDayTime), tz);
     midnights.unshift(currentMidnight);
   }
