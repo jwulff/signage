@@ -142,6 +142,7 @@ git -C ~/Development/signage/main worktree list
 - **MUST NOT** commit `.env`, `.env.local`, or credential files
 - **MUST NOT** commit secrets, API keys, or tokens (THIS IS A PUBLIC REPO)
 - **MUST NOT** commit personal domains, IPs, or identifying information
+- **MUST NOT** run `pnpm deploy:prod` or `sst deploy --stage prod` locally (USE GITHUB ACTIONS ONLY)
 
 ### SHOULD (Recommended)
 
@@ -177,6 +178,8 @@ These patterns cause problems. Avoid them:
 9. **Ignoring lint errors** - Fix all lint errors before committing.
 
 10. **Skipping test attestation** - Include `[tests-passed: X tests in Ys]` in commits.
+
+11. **Local production deploys** - NEVER run `pnpm deploy:prod` or `sst deploy --stage prod` locally. This corrupts SST state, breaks DNS, and takes down production. ALL production deploys go through GitHub Actions only. If you interrupt a local deploy, you'll need to run `sst unlock --stage prod` and trigger a GH Actions deploy to recover.
 
 ---
 
@@ -386,14 +389,31 @@ pnpm dev            # Start SST dev mode
 ### Deployment
 
 ```bash
-pnpm deploy         # Deploy to dev stage
-pnpm deploy:prod    # Deploy to production
+pnpm deploy         # Deploy to dev stage (OK to run locally)
 ```
+
+### Production Deployment
+
+**⛔ NEVER deploy to production locally.**
+
+Production deploys happen ONLY through GitHub Actions:
+- Merging to `main` triggers automatic deploy
+- Manual trigger: `gh workflow run Deploy --repo jwulff/signage`
+
+**Why?** Local SST deploys can corrupt Pulumi state, causing:
+- DNS records to be deleted (site goes down)
+- CloudFront distributions to lose custom domains
+- State locks that block future deploys
+
+**If you accidentally start a local prod deploy:**
+1. Kill it immediately (Ctrl+C)
+2. Run `sst unlock --stage prod`
+3. Trigger GH Actions deploy to restore state
 
 ### Stage Management
 
 - `dev` - Development (auto-remove on `sst remove`)
-- `prod` - Production (protected, retained on remove)
+- `prod` - Production (protected, retained on remove, **GH Actions only**)
 
 ---
 
