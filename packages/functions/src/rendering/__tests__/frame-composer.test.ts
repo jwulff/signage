@@ -63,11 +63,11 @@ describe("generateCompositeFrame", () => {
 
     const frame = generateCompositeFrame(data);
 
-    // Check for pixels in blood sugar region (compact layout, rows 21-63)
-    // Text row is at 22-26
+    // Check for pixels in blood sugar region
+    // Glucose reading is now at rows 32-36 (right above sparkline)
     let hasBloodSugarPixels = false;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 24); // Middle of text row (22-26)
+      const pixel = getPixel(frame, x, 34); // Middle of text row (32-36)
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
         hasBloodSugarPixels = true;
         break;
@@ -83,10 +83,11 @@ describe("generateCompositeFrame", () => {
 
     const frame = generateCompositeFrame(data);
 
-    // Should show error text in blood sugar region (starts at row 21)
+    // Should show error text in blood sugar region
+    // Glucose reading (or error) is at rows 32-36
     let hasBottomPixels = false;
     for (let x = 0; x < 64; x++) {
-      for (let y = 22; y < 28; y++) { // Check text row area (22-26)
+      for (let y = 32; y < 38; y++) { // Check text row area (32-36)
         const pixel = getPixel(frame, x, y);
         if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
           hasBottomPixels = true;
@@ -185,11 +186,11 @@ describe("generateCompositeFrame", () => {
 
     const frame = generateCompositeFrame(data);
 
-    // Treatment chart is rows 28-38
+    // Treatment chart is now at rows 23-27
     // Should have blue pixels for insulin numbers (4-day totals)
     let hasBluePixels = false;
     for (let x = 0; x < 64; x++) {
-      for (let y = 28; y < 39; y++) {
+      for (let y = 23; y < 28; y++) {
         const pixel = getPixel(frame, x, y);
         // Insulin numbers are blue (b > r)
         if (pixel && pixel.b > pixel.r && pixel.b > 30) {
@@ -226,10 +227,10 @@ describe("generateCompositeFrame", () => {
 
     const frame = generateCompositeFrame(data);
 
-    // Treatment chart should NOT have any significant pixels when stale
+    // Treatment chart (rows 23-27) should NOT have any significant pixels when stale
     let hasTreatmentPixels = false;
     for (let x = 0; x < 64; x++) {
-      for (let y = 28; y < 39; y++) {
+      for (let y = 23; y < 28; y++) {
         const pixel = getPixel(frame, x, y);
         // Check for any bright pixels (blue numbers)
         if (pixel && (pixel.b > 50 || pixel.r > 80)) {
