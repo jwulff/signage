@@ -1151,7 +1151,7 @@ function parseTimestamp(value: string): number | null {
 
   // Try YYYY-MM-DD HH:MM[:SS] format (common in Glooko CSV exports)
   // These are NAIVE timestamps (no timezone) that Glooko exports in user's local timezone.
-  const isoLikeFormat = value.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  const isoLikeFormat = value.match(/(\d{4})-(\d{2})-(\d{2})[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
   if (isoLikeFormat) {
     const [, year, month, day, hour, minute, second = "0"] = isoLikeFormat;
     const timestamp = parseLocalDateTime(
