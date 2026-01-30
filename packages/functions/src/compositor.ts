@@ -278,7 +278,7 @@ async function fetchDailyInsulinTotals(): Promise<Record<string, number>> {
           ":pk": "USER#primary#DAILY_INSULIN",
         },
         ScanIndexForward: false, // Most recent first
-        Limit: 20, // Last ~20 records covers multiple days with duplicates
+        Limit: 100, // Glooko exports running totals (~4-8 records/day), need enough for 14 days
       })
     );
 
