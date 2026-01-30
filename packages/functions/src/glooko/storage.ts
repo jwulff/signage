@@ -112,14 +112,28 @@ function generateRecordHash(record: GlookoRecord): string {
 
 /**
  * Generate DynamoDB keys for a record
+ *
+ * For daily_insulin records, we use the date string as the sort key.
+ * This ensures exactly one record per date, enabling deterministic queries.
  */
 export function generateRecordKeys(
   userId: string,
   record: GlookoRecord
 ): { pk: string; sk: string; gsi1pk: string; gsi1sk: string } {
-  const hash = generateRecordHash(record);
   const timestamp = record.timestamp.toString().padStart(15, "0");
 
+  // For daily_insulin, use date as sk to ensure one record per date
+  if (record.type === "daily_insulin") {
+    return {
+      pk: `USER#${userId}#DAILY_INSULIN`,
+      sk: record.date, // e.g., "2026-01-29"
+      gsi1pk: `USER#${userId}`,
+      gsi1sk: `DAILY_INSULIN#${record.date}`,
+    };
+  }
+
+  // For all other record types, use timestamp + hash
+  const hash = generateRecordHash(record);
   return {
     pk: `USER#${userId}#${record.type.toUpperCase()}`,
     sk: `${timestamp}#${hash}`,
@@ -191,7 +205,11 @@ export class GlookoStorage {
 
   /**
    * Batch write with duplicate detection
-   * Uses conditional writes to avoid overwriting existing records
+   * Uses conditional writes to avoid overwriting existing records.
+   *
+   * Exception: daily_insulin records use conditional upsert behavior - they
+   * overwrite existing records only if the new totalInsulinUnits value is
+   * higher, ensuring we keep the maximum value for each date.
    */
   private async batchWriteWithDedup(items: GlookoRecordItem[]): Promise<{
     written: number;
@@ -208,17 +226,42 @@ export class GlookoStorage {
 
     const writePromises = items.map(async (item) => {
       try {
-        await this.docClient.send(
-          new PutCommand({
-            TableName: this.tableName,
-            Item: item,
-            // Only write if this exact key doesn't exist
-            ConditionExpression: "attribute_not_exists(pk)",
-          })
-        );
-        return { status: "written" as const };
+        const record = item.data;
+        const isDailyInsulin = record.type === "daily_insulin";
+
+        if (isDailyInsulin) {
+          // For daily_insulin: conditional upsert - only write if new value is higher
+          await this.docClient.send(
+            new PutCommand({
+              TableName: this.tableName,
+              Item: item,
+              // Only write if record doesn't exist OR new value is higher
+              ConditionExpression:
+                "attribute_not_exists(pk) OR #data.#total < :newTotal",
+              ExpressionAttributeNames: {
+                "#data": "data",
+                "#total": "totalInsulinUnits",
+              },
+              ExpressionAttributeValues: {
+                ":newTotal": record.totalInsulinUnits,
+              },
+            })
+          );
+          return { status: "written" as const };
+        } else {
+          // For all other types: strict deduplication
+          await this.docClient.send(
+            new PutCommand({
+              TableName: this.tableName,
+              Item: item,
+              // Only write if this exact key doesn't exist
+              ConditionExpression: "attribute_not_exists(pk)",
+            })
+          );
+          return { status: "written" as const };
+        }
       } catch (error: unknown) {
-        // Check if it's a conditional check failure (duplicate)
+        // Check if it's a conditional check failure (duplicate or lower value)
         if (
           error &&
           typeof error === "object" &&
@@ -276,6 +319,46 @@ export class GlookoStorage {
     );
 
     return (result.Items || []).map((item) => item.data as GlookoRecord);
+  }
+
+  /**
+   * Query daily insulin totals by date range
+   *
+   * Unlike other record types that use timestamp-based sort keys,
+   * daily_insulin uses date strings (YYYY-MM-DD) as sort keys.
+   * This enables deterministic queries for specific date ranges.
+   *
+   * @param startDate - Start date in YYYY-MM-DD format (inclusive)
+   * @param endDate - End date in YYYY-MM-DD format (inclusive)
+   * @returns Map of date string to total insulin units
+   */
+  async queryDailyInsulinByDateRange(
+    startDate: string,
+    endDate: string
+  ): Promise<Record<string, number>> {
+    const pk = `USER#${this.userId}#DAILY_INSULIN`;
+
+    const result = await this.docClient.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        KeyConditionExpression: "pk = :pk AND sk BETWEEN :start AND :end",
+        ExpressionAttributeValues: {
+          ":pk": pk,
+          ":start": startDate,
+          ":end": endDate + "~", // ~ ensures end date is inclusive
+        },
+      })
+    );
+
+    const totals: Record<string, number> = {};
+    for (const item of result.Items || []) {
+      const data = item.data as { date?: string; totalInsulinUnits?: number };
+      if (data?.date && typeof data?.totalInsulinUnits === "number") {
+        totals[data.date] = data.totalInsulinUnits;
+      }
+    }
+
+    return totals;
   }
 
   /**
