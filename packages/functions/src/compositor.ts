@@ -261,24 +261,47 @@ async function fetchWeatherData(): Promise<ClockWeatherData | null> {
 const TREATMENT_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 
 /**
+ * Format a date as YYYY-MM-DD in Pacific timezone
+ */
+function formatDatePacific(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+/**
  * Fetch daily insulin totals from DAILY_INSULIN records
- * These include both bolus and basal insulin, giving accurate daily totals
+ * These include both bolus and basal insulin, giving accurate daily totals.
+ *
+ * Uses date-based sort keys (YYYY-MM-DD) for deterministic queries.
+ * Each date has exactly one record, so no deduplication is needed.
  */
 async function fetchDailyInsulinTotals(): Promise<Record<string, number>> {
   const dailyTotals: Record<string, number> = {};
 
   try {
-    // Query DAILY_INSULIN records for the primary user using primary key
-    // pk = "USER#primary#DAILY_INSULIN", sk is timestamp-based
+    // Calculate date range: today and previous 6 days (7 total, display shows 5)
+    const now = new Date();
+    const endDate = formatDatePacific(now);
+
+    const startDateObj = new Date(now);
+    startDateObj.setDate(startDateObj.getDate() - 6);
+    const startDate = formatDatePacific(startDateObj);
+
+    // Query DAILY_INSULIN records by date range
+    // pk = "USER#primary#DAILY_INSULIN", sk = date string (YYYY-MM-DD)
     const result = await ddb.send(
       new QueryCommand({
         TableName: Resource.SignageTable.name,
-        KeyConditionExpression: "pk = :pk",
+        KeyConditionExpression: "pk = :pk AND sk BETWEEN :start AND :end",
         ExpressionAttributeValues: {
           ":pk": "USER#primary#DAILY_INSULIN",
+          ":start": startDate,
+          ":end": endDate + "~", // ~ ensures end date is inclusive
         },
-        ScanIndexForward: false, // Most recent first
-        Limit: 100, // Glooko exports running totals (~4-8 records/day), need enough for 14 days
       })
     );
 
@@ -286,15 +309,12 @@ async function fetchDailyInsulinTotals(): Promise<Record<string, number>> {
       for (const item of result.Items) {
         const data = item.data as { date?: string; totalInsulinUnits?: number };
         if (data?.date && typeof data?.totalInsulinUnits === "number") {
-          // Keep the highest value for each date (handles duplicate imports)
-          if (!dailyTotals[data.date] || data.totalInsulinUnits > dailyTotals[data.date]) {
-            dailyTotals[data.date] = data.totalInsulinUnits;
-          }
+          dailyTotals[data.date] = data.totalInsulinUnits;
         }
       }
     }
 
-    console.log(`Fetched daily insulin totals: ${JSON.stringify(dailyTotals)}`);
+    console.log(`Fetched daily insulin totals for ${startDate} to ${endDate}: ${JSON.stringify(dailyTotals)}`);
   } catch (error) {
     console.error("Failed to fetch daily insulin totals:", error);
   }
