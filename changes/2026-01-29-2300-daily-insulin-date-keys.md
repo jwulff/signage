@@ -21,11 +21,11 @@ Changed the data model for `daily_insulin` records to use the date string (YYYY-
 **storage.ts**:
 - `generateRecordKeys()` now uses date as sk for daily_insulin records
 - Added conditional upsert logic that only writes if new value is higher
-- Added `queryDailyInsulinByDateRange()` method for clean date-range queries
+- Added `queryDailyInsulinByDateRange()` helper method (for future use)
 
 **compositor.ts**:
-- Simplified `fetchDailyInsulinTotals()` to use date-range query
-- Removed deduplication logic (no longer needed)
+- Updated `fetchDailyInsulinTotals()` to use date-range query with inline logic
+- Removed "max value per date" deduplication (no longer needed)
 
 ## Key Design Decisions
 

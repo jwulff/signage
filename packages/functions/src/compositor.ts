@@ -284,12 +284,15 @@ async function fetchDailyInsulinTotals(): Promise<Record<string, number>> {
 
   try {
     // Calculate date range: today and previous 6 days (7 total, display shows 5)
+    // Use Pacific-formatted endDate as basis for startDate calculation to avoid
+    // timezone mismatches between UTC Date arithmetic and Pacific formatting
     const now = new Date();
     const endDate = formatDatePacific(now);
 
-    const startDateObj = new Date(now);
-    startDateObj.setDate(startDateObj.getDate() - 6);
-    const startDate = formatDatePacific(startDateObj);
+    // Derive startDate from the Pacific endDate string to stay in Pacific time
+    const endDateUtc = new Date(`${endDate}T00:00:00Z`);
+    endDateUtc.setUTCDate(endDateUtc.getUTCDate() - 6);
+    const startDate = endDateUtc.toISOString().slice(0, 10);
 
     // Query DAILY_INSULIN records by date range
     // pk = "USER#primary#DAILY_INSULIN", sk = date string (YYYY-MM-DD)

@@ -207,8 +207,9 @@ export class GlookoStorage {
    * Batch write with duplicate detection
    * Uses conditional writes to avoid overwriting existing records.
    *
-   * Exception: daily_insulin records use upsert behavior - they always
-   * overwrite to ensure we have the latest (highest) value for each date.
+   * Exception: daily_insulin records use conditional upsert behavior - they
+   * overwrite existing records only if the new totalInsulinUnits value is
+   * higher, ensuring we keep the maximum value for each date.
    */
   private async batchWriteWithDedup(items: GlookoRecordItem[]): Promise<{
     written: number;
@@ -229,8 +230,7 @@ export class GlookoStorage {
         const isDailyInsulin = record.type === "daily_insulin";
 
         if (isDailyInsulin) {
-          // For daily_insulin: upsert - always write, keep highest value
-          // Use conditional write to only update if new value is higher
+          // For daily_insulin: conditional upsert - only write if new value is higher
           await this.docClient.send(
             new PutCommand({
               TableName: this.tableName,
