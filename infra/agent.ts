@@ -147,7 +147,7 @@ new aws.iam.RolePolicy("DiabetesAnalystAgentModelPolicy", {
       {
         actions: ["bedrock:InvokeModel"],
         resources: [
-          $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}::foundation-model/anthropic.claude-3-5-sonnet*`,
+          $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}::foundation-model/anthropic.claude-sonnet-4-5*`,
         ],
         effect: "Allow",
       },
@@ -161,7 +161,7 @@ new aws.iam.RolePolicy("DiabetesAnalystAgentModelPolicy", {
 
 export const agent = new aws.bedrock.AgentAgent("DiabetesAnalyst", {
   agentName: $interpolate`diabetes-analyst-${$app.stage}`,
-  foundationModel: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+  foundationModel: "anthropic.claude-sonnet-4-5-20250929-v1:0",
   agentResourceRoleArn: agentRole.arn,
   instruction: AGENT_INSTRUCTION,
   idleSessionTtlInSeconds: 3600, // 1 hour session timeout
