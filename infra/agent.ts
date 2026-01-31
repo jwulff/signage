@@ -145,7 +145,11 @@ new aws.iam.RolePolicy("DiabetesAnalystAgentModelPolicy", {
   policy: aws.iam.getPolicyDocumentOutput({
     statements: [
       {
-        actions: ["bedrock:InvokeModel"],
+        actions: [
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream",
+          "bedrock:GetInferenceProfile",
+        ],
         resources: [
           // Foundation model (for backwards compatibility)
           $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}::foundation-model/anthropic.claude-sonnet-4-5*`,
