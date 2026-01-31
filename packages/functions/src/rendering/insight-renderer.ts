@@ -27,8 +27,9 @@ export interface InsightDisplayData {
 
 /**
  * Layout constants for insight region
+ * Renders in the same area as weather band (Y=12-19)
  */
-const INSIGHT_REGION_START_Y = 7; // After date row
+const INSIGHT_REGION_START_Y = 12; // Same row as weather band
 const TEXT_PADDING_X = 2;
 
 /**

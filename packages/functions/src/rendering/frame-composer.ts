@@ -26,6 +26,7 @@ import {
   type BloodSugarHistory,
 } from "./blood-sugar-renderer.js";
 import type { TreatmentDisplayData } from "../glooko/types.js";
+import { renderInsightRegion, type InsightDisplayData } from "./insight-renderer.js";
 
 export interface CompositorData {
   bloodSugar: BloodSugarDisplayData | null;
@@ -33,6 +34,7 @@ export interface CompositorData {
   timezone?: string;
   weather?: ClockWeatherData;
   treatments?: TreatmentDisplayData | null;
+  insight?: InsightDisplayData | null;
 }
 
 /**
@@ -60,6 +62,13 @@ export function generateCompositeFrame(data: CompositorData): Frame {
   // Render clock (full width) - includes time, date, and weather band
   if (!safeRender("clock", () => renderClockRegion(frame, data.timezone, data.weather))) {
     errors.push("clock");
+  }
+
+  // Render insight overlay (replaces weather band area when insight available)
+  if (data.insight) {
+    if (!safeRender("insight", () => renderInsightRegion(frame, data.insight ?? null))) {
+      errors.push("insight");
+    }
   }
 
   // Render blood sugar in bottom region (with treatment chart and glucose chart)
