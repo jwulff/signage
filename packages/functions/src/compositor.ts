@@ -294,14 +294,15 @@ async function fetchDailyInsulinTotals(): Promise<Record<string, number>> {
     endDateUtc.setUTCDate(endDateUtc.getUTCDate() - 6);
     const startDate = endDateUtc.toISOString().slice(0, 10);
 
-    // Query DAILY_INSULIN records by date range
-    // pk = "USER#primary#DAILY_INSULIN", sk = date string (YYYY-MM-DD)
+    // Query DAILY_INSULIN records via GSI2 (new date-partitioned schema)
+    // gsi2pk = "USR#john#DAILY_INSULIN", gsi2sk = date string (YYYY-MM-DD)
     const result = await ddb.send(
       new QueryCommand({
         TableName: Resource.SignageTable.name,
-        KeyConditionExpression: "pk = :pk AND sk BETWEEN :start AND :end",
+        IndexName: "gsi2",
+        KeyConditionExpression: "gsi2pk = :pk AND gsi2sk BETWEEN :start AND :end",
         ExpressionAttributeValues: {
-          ":pk": "USER#primary#DAILY_INSULIN",
+          ":pk": "USR#john#DAILY_INSULIN",
           ":start": startDate,
           ":end": endDate + "~", // ~ ensures end date is inclusive
         },
