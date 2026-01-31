@@ -10,8 +10,6 @@ import {
   storeRecords as coreStoreRecords,
   queryByTypeAndTimeRange as coreQueryByTypeAndTimeRange,
   queryDailyInsulinByDateRange as coreQueryDailyInsulinByDateRange,
-  formatDateInTimezone,
-  DATA_TIMEZONE,
   type WriteResult,
 } from "@diabetes/core";
 import type {
