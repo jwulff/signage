@@ -4,17 +4,16 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderChart } from "./chart-renderer.js";
-import type { Frame } from "@signage/core";
-import * as core from "@signage/core";
+import type { Frame, RGB } from "@signage/core";
 
 // Mock setPixel to track what pixels are drawn
-const drawnPixels: Array<{ x: number; y: number; color: { r: number; g: number; b: number } }> = [];
+const drawnPixels: Array<{ x: number; y: number; color: RGB }> = [];
 
 vi.mock("@signage/core", async () => {
   const actual = await vi.importActual("@signage/core");
   return {
     ...actual,
-    setPixel: vi.fn((frame: Frame, x: number, y: number, color: { r: number; g: number; b: number }) => {
+    setPixel: vi.fn((_frame: Frame, x: number, y: number, color: RGB) => {
       drawnPixels.push({ x, y, color });
     }),
   };
@@ -26,7 +25,7 @@ describe("renderChart time markers", () => {
   beforeEach(() => {
     drawnPixels.length = 0;
     mockFrame = {
-      data: new Uint8Array(64 * 64 * 3),
+      pixels: new Uint8Array(64 * 64 * 3),
       width: 64,
       height: 64,
     };
