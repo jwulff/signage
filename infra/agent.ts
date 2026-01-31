@@ -99,20 +99,26 @@ export const agentRole = new aws.iam.Role("DiabetesAnalystAgentRole", {
 });
 
 // Policy for the agent to invoke Lambda action groups
+// Scoped to specific action group functions
 new aws.iam.RolePolicy("DiabetesAnalystAgentLambdaPolicy", {
   role: agentRole.id,
   policy: aws.iam.getPolicyDocumentOutput({
     statements: [
       {
         actions: ["lambda:InvokeFunction"],
-        resources: ["*"], // Will be scoped to specific functions when action groups are created
+        resources: [
+          glucoseToolsFunction.arn,
+          treatmentToolsFunction.arn,
+          analysisToolsFunction.arn,
+          insightToolsFunction.arn,
+        ],
         effect: "Allow",
       },
     ],
   }).json,
 });
 
-// Policy for the agent to access DynamoDB
+// Policy for the agent to access DynamoDB (read-only via GetItem and Query)
 new aws.iam.RolePolicy("DiabetesAnalystAgentDynamoPolicy", {
   role: agentRole.id,
   policy: aws.iam.getPolicyDocumentOutput({
@@ -121,7 +127,6 @@ new aws.iam.RolePolicy("DiabetesAnalystAgentDynamoPolicy", {
         actions: [
           "dynamodb:GetItem",
           "dynamodb:Query",
-          "dynamodb:Scan",
         ],
         resources: [
           table.arn,

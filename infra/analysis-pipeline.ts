@@ -108,14 +108,15 @@ export const hourlyAnalysisCron = new sst.aws.Cron("HourlyAnalysisCron", {
   function: hourlyAnalysisFunction,
 });
 
-// Daily analysis - 6 AM Pacific (14:00 UTC in winter, 13:00 in summer)
-// Using UTC to avoid DST issues
+// Daily analysis - 14:00 UTC (6 AM PST / 7 AM PDT)
+// Note: Fixed UTC time means this shifts by 1 hour during DST
 export const dailyAnalysisCron = new sst.aws.Cron("DailyAnalysisCron", {
   schedule: "cron(0 14 * * ? *)",
   function: dailyAnalysisFunction,
 });
 
-// Weekly analysis - Sunday 8 AM Pacific (16:00 UTC)
+// Weekly analysis - Sunday 16:00 UTC (8 AM PST / 9 AM PDT)
+// Note: Fixed UTC time means this shifts by 1 hour during DST
 export const weeklyAnalysisCron = new sst.aws.Cron("WeeklyAnalysisCron", {
   schedule: "cron(0 16 ? * SUN *)",
   function: weeklyAnalysisFunction,

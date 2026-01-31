@@ -95,38 +95,6 @@ new aws.iam.RolePolicy("DiabetesKnowledgeBaseModelPolicy", {
 });
 
 // =============================================================================
-// Bedrock Knowledge Base
-// =============================================================================
-
-export const knowledgeBase = new aws.bedrock.AgentKnowledgeBase("DiabetesGuidelines", {
-  name: $interpolate`diabetes-guidelines-${$app.stage}`,
-  description: "ADA diabetes management guidelines, insulin adjustment protocols, and best practices for Type 1 diabetes management",
-  roleArn: knowledgeBaseRole.arn,
-
-  // Use Titan embeddings for semantic search
-  knowledgeBaseConfiguration: {
-    type: "VECTOR",
-    vectorKnowledgeBaseConfiguration: {
-      embeddingModelArn: $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}::foundation-model/amazon.titan-embed-text-v2:0`,
-    },
-  },
-
-  // Use OpenSearch Serverless as the vector store
-  storageConfiguration: {
-    type: "OPENSEARCH_SERVERLESS",
-    opensearchServerlessConfiguration: {
-      collectionArn: opensearchCollection.arn,
-      vectorIndexName: "diabetes-guidelines-index",
-      fieldMapping: {
-        vectorField: "vector",
-        textField: "text",
-        metadataField: "metadata",
-      },
-    },
-  },
-});
-
-// =============================================================================
 // OpenSearch Serverless Collection
 // =============================================================================
 
@@ -212,6 +180,38 @@ const opensearchCollection = new aws.opensearchserverless.Collection(
     ],
   }
 );
+
+// =============================================================================
+// Bedrock Knowledge Base
+// =============================================================================
+
+export const knowledgeBase = new aws.bedrock.AgentKnowledgeBase("DiabetesGuidelines", {
+  name: $interpolate`diabetes-guidelines-${$app.stage}`,
+  description: "ADA diabetes management guidelines, insulin adjustment protocols, and best practices for Type 1 diabetes management",
+  roleArn: knowledgeBaseRole.arn,
+
+  // Use Titan embeddings for semantic search
+  knowledgeBaseConfiguration: {
+    type: "VECTOR",
+    vectorKnowledgeBaseConfiguration: {
+      embeddingModelArn: $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}::foundation-model/amazon.titan-embed-text-v2:0`,
+    },
+  },
+
+  // Use OpenSearch Serverless as the vector store
+  storageConfiguration: {
+    type: "OPENSEARCH_SERVERLESS",
+    opensearchServerlessConfiguration: {
+      collectionArn: opensearchCollection.arn,
+      vectorIndexName: "diabetes-guidelines-index",
+      fieldMapping: {
+        vectorField: "vector",
+        textField: "text",
+        metadataField: "metadata",
+      },
+    },
+  },
+});
 
 // =============================================================================
 // S3 Data Source
