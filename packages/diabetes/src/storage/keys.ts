@@ -34,6 +34,48 @@ export function formatDateInTimezone(timestampMs: number, timezone: string = DAT
 }
 
 /**
+ * Get the start of day timestamp (midnight) for a date string in the data timezone.
+ * This is needed because new Date("YYYY-MM-DD") interprets the date as UTC midnight,
+ * not midnight in the data timezone.
+ */
+export function getStartOfDayInTimezone(dateStr: string, timezone: string = DATA_TIMEZONE): number {
+  // Parse the date components
+  const [year, month, day] = dateStr.split("-").map(Number);
+
+  // Create a date at noon UTC on that day (to avoid DST edge cases)
+  const noonUtc = Date.UTC(year, month - 1, day, 12, 0, 0, 0);
+
+  // Format that UTC noon as a date in the target timezone to verify it's the same date
+  const targetDate = formatDateInTimezone(noonUtc, timezone);
+
+  // If the date matches, we found the right day. Now find midnight.
+  // We do this by binary searching for when the date changes.
+  // Start at noon UTC and work backwards to find midnight in target timezone.
+  if (targetDate === dateStr) {
+    // Binary search for midnight: find the earliest time that is still this date
+    let lo = noonUtc - 24 * 60 * 60 * 1000; // 24 hours before noon
+    let hi = noonUtc;
+
+    while (hi - lo > 1000) {
+      // Within 1 second
+      const mid = Math.floor((lo + hi) / 2);
+      const midDate = formatDateInTimezone(mid, timezone);
+      if (midDate === dateStr) {
+        hi = mid;
+      } else {
+        lo = mid;
+      }
+    }
+
+    // Return the first millisecond of the target date
+    return hi;
+  }
+
+  // Fallback: just use UTC interpretation (shouldn't happen for valid dates)
+  return new Date(dateStr).getTime();
+}
+
+/**
  * Generate a unique hash for deduplication
  * Uses key fields that make a record unique
  */

@@ -13,6 +13,7 @@ import {
   detectMorningHighPattern,
   detectAllPatterns,
   calculateGlucoseStats,
+  getStartOfDayInTimezone,
 } from "@diabetes/core";
 import type { CgmReading, BolusRecord } from "@diabetes/core";
 
@@ -83,7 +84,8 @@ async function getDailyAggregation(date: string): Promise<{
     mean: number;
   }>;
 }> {
-  const startTime = new Date(date).getTime();
+  // Compute daily window in data timezone (America/Los_Angeles)
+  const startTime = getStartOfDayInTimezone(date);
   const endTime = startTime + 24 * 60 * 60 * 1000;
 
   const cgmReadings = (await queryByTypeAndTimeRange(

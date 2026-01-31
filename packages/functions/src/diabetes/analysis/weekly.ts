@@ -90,6 +90,8 @@ Store the insight using the storeInsight tool with type="weekly".`;
     console.log("Weekly analysis complete");
   } catch (error) {
     console.error("Weekly analysis error:", error);
+    // Rethrow to trigger Lambda retry mechanism for transient errors
+    throw error;
   }
 };
 

@@ -94,6 +94,8 @@ Store the insight using the storeInsight tool with type="hourly".`;
     console.log("Hourly analysis complete");
   } catch (error) {
     console.error("Hourly analysis error:", error);
+    // Rethrow to trigger Lambda retry mechanism for transient errors
+    throw error;
   }
 };
 

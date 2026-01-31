@@ -93,6 +93,8 @@ Store the insight using the storeInsight tool with type="daily".`;
     console.log("Daily analysis complete");
   } catch (error) {
     console.error("Daily analysis error:", error);
+    // Rethrow to trigger Lambda retry mechanism for transient errors
+    throw error;
   }
 };
 
