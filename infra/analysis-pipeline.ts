@@ -9,48 +9,59 @@ import { table } from "./storage";
 import { agent, agentAlias } from "./agent";
 
 // =============================================================================
-// Analysis Lambda Functions
+// Shared Configuration
 // =============================================================================
 
-// Hourly analysis - triggered every hour
+// Function config for analysis handlers
+// Using inline function definitions with Cron to avoid SST function reference issues
+const analysisEnvironment = {
+  AGENT_ID: agent.agentId,
+  AGENT_ALIAS_ID: agentAlias.agentAliasId,
+};
+
+// =============================================================================
+// EventBridge Scheduled Rules with Inline Functions
+// =============================================================================
+
+// Hourly analysis - every hour
 // Analyzes recent glucose trends and generates insights
-export const hourlyAnalysisFunction = new sst.aws.Function("HourlyAnalysis", {
-  handler: "packages/functions/src/diabetes/analysis/hourly.handler",
-  link: [table],
-  timeout: "120 seconds",
-  memory: "512 MB",
-  description: "Hourly glucose trend analysis",
-  environment: {
-    AGENT_ID: agent.agentId,
-    AGENT_ALIAS_ID: agentAlias.agentAliasId,
+export const hourlyAnalysisCron = new sst.aws.Cron("HourlyAnalysisCron", {
+  schedule: "rate(1 hour)",
+  function: {
+    handler: "packages/functions/src/diabetes/analysis/hourly.handler",
+    link: [table],
+    timeout: "120 seconds",
+    memory: "512 MB",
+    description: "Hourly glucose trend analysis",
+    environment: analysisEnvironment,
   },
 });
 
-// Daily analysis - triggered at 6 AM Pacific
-// Summarizes previous day's glucose management
-export const dailyAnalysisFunction = new sst.aws.Function("DailyAnalysis", {
-  handler: "packages/functions/src/diabetes/analysis/daily.handler",
-  link: [table],
-  timeout: "180 seconds",
-  memory: "512 MB",
-  description: "Daily glucose summary analysis",
-  environment: {
-    AGENT_ID: agent.agentId,
-    AGENT_ALIAS_ID: agentAlias.agentAliasId,
+// Daily analysis - 14:00 UTC (6 AM PST / 7 AM PDT)
+// Note: Fixed UTC time means this shifts by 1 hour during DST
+export const dailyAnalysisCron = new sst.aws.Cron("DailyAnalysisCron", {
+  schedule: "cron(0 14 * * ? *)",
+  function: {
+    handler: "packages/functions/src/diabetes/analysis/daily.handler",
+    link: [table],
+    timeout: "180 seconds",
+    memory: "512 MB",
+    description: "Daily glucose summary analysis",
+    environment: analysisEnvironment,
   },
 });
 
-// Weekly analysis - triggered Sunday at 8 AM Pacific
-// Reviews weekly patterns and trends
-export const weeklyAnalysisFunction = new sst.aws.Function("WeeklyAnalysis", {
-  handler: "packages/functions/src/diabetes/analysis/weekly.handler",
-  link: [table],
-  timeout: "300 seconds",
-  memory: "1024 MB",
-  description: "Weekly pattern review analysis",
-  environment: {
-    AGENT_ID: agent.agentId,
-    AGENT_ALIAS_ID: agentAlias.agentAliasId,
+// Weekly analysis - Sunday 16:00 UTC (8 AM PST / 9 AM PDT)
+// Note: Fixed UTC time means this shifts by 1 hour during DST
+export const weeklyAnalysisCron = new sst.aws.Cron("WeeklyAnalysisCron", {
+  schedule: "cron(0 16 ? * SUN *)",
+  function: {
+    handler: "packages/functions/src/diabetes/analysis/weekly.handler",
+    link: [table],
+    timeout: "300 seconds",
+    memory: "1024 MB",
+    description: "Weekly pattern review analysis",
+    environment: analysisEnvironment,
   },
 });
 
@@ -60,7 +71,7 @@ export const weeklyAnalysisFunction = new sst.aws.Function("WeeklyAnalysis", {
 
 // Allow analysis functions to invoke the Bedrock Agent
 new aws.iam.RolePolicy("HourlyAnalysisAgentPolicy", {
-  role: hourlyAnalysisFunction.nodes.function.role,
+  role: hourlyAnalysisCron.nodes.function.role,
   policy: aws.iam.getPolicyDocumentOutput({
     statements: [
       {
@@ -73,7 +84,7 @@ new aws.iam.RolePolicy("HourlyAnalysisAgentPolicy", {
 });
 
 new aws.iam.RolePolicy("DailyAnalysisAgentPolicy", {
-  role: dailyAnalysisFunction.nodes.function.role,
+  role: dailyAnalysisCron.nodes.function.role,
   policy: aws.iam.getPolicyDocumentOutput({
     statements: [
       {
@@ -86,7 +97,7 @@ new aws.iam.RolePolicy("DailyAnalysisAgentPolicy", {
 });
 
 new aws.iam.RolePolicy("WeeklyAnalysisAgentPolicy", {
-  role: weeklyAnalysisFunction.nodes.function.role,
+  role: weeklyAnalysisCron.nodes.function.role,
   policy: aws.iam.getPolicyDocumentOutput({
     statements: [
       {
@@ -99,35 +110,11 @@ new aws.iam.RolePolicy("WeeklyAnalysisAgentPolicy", {
 });
 
 // =============================================================================
-// EventBridge Scheduled Rules
-// =============================================================================
-
-// Hourly analysis - every hour
-export const hourlyAnalysisCron = new sst.aws.Cron("HourlyAnalysisCron", {
-  schedule: "rate(1 hour)",
-  function: hourlyAnalysisFunction,
-});
-
-// Daily analysis - 14:00 UTC (6 AM PST / 7 AM PDT)
-// Note: Fixed UTC time means this shifts by 1 hour during DST
-export const dailyAnalysisCron = new sst.aws.Cron("DailyAnalysisCron", {
-  schedule: "cron(0 14 * * ? *)",
-  function: dailyAnalysisFunction,
-});
-
-// Weekly analysis - Sunday 16:00 UTC (8 AM PST / 9 AM PDT)
-// Note: Fixed UTC time means this shifts by 1 hour during DST
-export const weeklyAnalysisCron = new sst.aws.Cron("WeeklyAnalysisCron", {
-  schedule: "cron(0 16 ? * SUN *)",
-  function: weeklyAnalysisFunction,
-});
-
-// =============================================================================
 // Exports
 // =============================================================================
 
 export const outputs = {
-  hourlyAnalysisArn: hourlyAnalysisFunction.arn,
-  dailyAnalysisArn: dailyAnalysisFunction.arn,
-  weeklyAnalysisArn: weeklyAnalysisFunction.arn,
+  hourlyAnalysisArn: hourlyAnalysisCron.nodes.function.arn,
+  dailyAnalysisArn: dailyAnalysisCron.nodes.function.arn,
+  weeklyAnalysisArn: weeklyAnalysisCron.nodes.function.arn,
 };
