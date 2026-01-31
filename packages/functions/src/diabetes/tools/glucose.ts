@@ -21,7 +21,7 @@ const DEFAULT_USER_ID = "john";
 const docClient = createDocClient();
 
 /**
- * Bedrock Agent action group event structure
+ * Bedrock Agent action group event structure (OpenAPI-based)
  */
 interface BedrockAgentEvent {
   messageVersion: string;
@@ -34,7 +34,8 @@ interface BedrockAgentEvent {
   inputText: string;
   sessionId: string;
   actionGroup: string;
-  function: string;
+  apiPath: string;  // For OpenAPI-based action groups
+  httpMethod: string;
   parameters: Array<{
     name: string;
     type: string;
@@ -43,18 +44,17 @@ interface BedrockAgentEvent {
 }
 
 /**
- * Bedrock Agent action group response structure
+ * Bedrock Agent action group response structure (OpenAPI-based)
  */
 interface BedrockAgentResponse {
   messageVersion: string;
   response: {
     actionGroup: string;
-    function: string;
-    functionResponse: {
-      responseBody: {
-        TEXT: {
-          body: string;
-        };
+    apiPath: string;  // Must match input apiPath for OpenAPI-based action groups
+    httpMethod: string;
+    responseBody: {
+      "application/json": {
+        body: string;
       };
     };
   };
@@ -69,7 +69,7 @@ function getParam(event: BedrockAgentEvent, name: string): string | undefined {
 }
 
 /**
- * Format response for Bedrock Agent
+ * Format response for Bedrock Agent (OpenAPI-based action group)
  */
 function formatResponse(
   event: BedrockAgentEvent,
@@ -79,12 +79,11 @@ function formatResponse(
     messageVersion: "1.0",
     response: {
       actionGroup: event.actionGroup,
-      function: event.function,
-      functionResponse: {
-        responseBody: {
-          TEXT: {
-            body: JSON.stringify(body),
-          },
+      apiPath: event.apiPath,
+      httpMethod: event.httpMethod,
+      responseBody: {
+        "application/json": {
+          body: JSON.stringify(body),
         },
       },
     },
@@ -222,25 +221,26 @@ export async function handler(
   event: BedrockAgentEvent
 ): Promise<BedrockAgentResponse> {
   console.log("GlucoseDataTools invoked:", {
-    function: event.function,
+    apiPath: event.apiPath,
+    httpMethod: event.httpMethod,
     parameters: event.parameters,
   });
 
   try {
-    switch (event.function) {
-      case "getRecentGlucose": {
+    switch (event.apiPath) {
+      case "/getRecentGlucose": {
         const hours = parseInt(getParam(event, "hours") || "4", 10);
         const result = await getRecentGlucose(Math.min(Math.max(hours, 1), 24));
         return formatResponse(event, result);
       }
 
-      case "getGlucoseStats": {
+      case "/getGlucoseStats": {
         const period = (getParam(event, "period") || "day") as "day" | "week" | "month";
         const result = await getGlucoseStats(period);
         return formatResponse(event, result);
       }
 
-      case "getTimeInRange": {
+      case "/getTimeInRange": {
         const startDate = getParam(event, "startDate") || new Date().toISOString().split("T")[0];
         const endDate = getParam(event, "endDate") || new Date().toISOString().split("T")[0];
         const result = await getTimeInRangeForRange(startDate, endDate);
@@ -249,7 +249,7 @@ export async function handler(
 
       default:
         return formatResponse(event, {
-          error: `Unknown function: ${event.function}`,
+          error: `Unknown API path: ${event.apiPath}`,
         });
     }
   } catch (error) {

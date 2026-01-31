@@ -22,7 +22,7 @@ const DEFAULT_USER_ID = "john";
 const docClient = createDocClient();
 
 /**
- * Bedrock Agent event types
+ * Bedrock Agent event types (OpenAPI-based action groups)
  */
 interface BedrockAgentEvent {
   messageVersion: string;
@@ -30,7 +30,8 @@ interface BedrockAgentEvent {
   inputText: string;
   sessionId: string;
   actionGroup: string;
-  function: string;
+  apiPath: string;
+  httpMethod: string;
   parameters: Array<{ name: string; type: string; value: string }>;
 }
 
@@ -38,10 +39,9 @@ interface BedrockAgentResponse {
   messageVersion: string;
   response: {
     actionGroup: string;
-    function: string;
-    functionResponse: {
-      responseBody: { TEXT: { body: string } };
-    };
+    apiPath: string;
+    httpMethod: string;
+    responseBody: { "application/json": { body: string } };
   };
 }
 
@@ -54,8 +54,9 @@ function formatResponse(event: BedrockAgentEvent, body: unknown): BedrockAgentRe
     messageVersion: "1.0",
     response: {
       actionGroup: event.actionGroup,
-      function: event.function,
-      functionResponse: { responseBody: { TEXT: { body: JSON.stringify(body) } } },
+      apiPath: event.apiPath,
+      httpMethod: event.httpMethod,
+      responseBody: { "application/json": { body: JSON.stringify(body) } },
     },
   };
 }
@@ -151,13 +152,14 @@ export async function handler(
   event: BedrockAgentEvent
 ): Promise<BedrockAgentResponse> {
   console.log("InsightTools invoked:", {
-    function: event.function,
+    apiPath: event.apiPath,
+    httpMethod: event.httpMethod,
     parameters: event.parameters,
   });
 
   try {
-    switch (event.function) {
-      case "storeInsight": {
+    switch (event.apiPath) {
+      case "/storeInsight": {
         const type = (getParam(event, "type") || "hourly") as InsightType;
         const content = getParam(event, "content") || "";
 
@@ -176,19 +178,19 @@ export async function handler(
         return formatResponse(event, result);
       }
 
-      case "getCurrentInsight": {
+      case "/getCurrentInsight": {
         const result = await fetchCurrentInsight();
         return formatResponse(event, result);
       }
 
-      case "getInsightHistory": {
+      case "/getInsightHistory": {
         const days = parseInt(getParam(event, "days") || "7", 10);
         const result = await fetchInsightHistory(Math.min(Math.max(days, 1), 30));
         return formatResponse(event, result);
       }
 
       default:
-        return formatResponse(event, { error: `Unknown function: ${event.function}` });
+        return formatResponse(event, { error: `Unknown API path: ${event.apiPath}` });
     }
   } catch (error) {
     console.error("InsightTools error:", error);
