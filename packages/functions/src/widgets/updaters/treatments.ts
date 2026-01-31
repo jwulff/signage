@@ -5,7 +5,8 @@
 
 import { Resource } from "sst";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { GetCommand, QueryCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { queryDailyInsulinByDateRange } from "@diabetes/core";
 import type { WidgetUpdater } from "../types.js";
 import type {
   TreatmentDisplayData,
@@ -72,28 +73,20 @@ const DEFAULT_USER_ID = "john";
  */
 async function fetchDailyInsulinTotals(): Promise<Record<string, number>> {
   try {
-    const result = await docClient.send(
-      new QueryCommand({
-        TableName: Resource.SignageTable.name,
-        IndexName: "gsi2",
-        KeyConditionExpression: "gsi2pk = :pk",
-        ExpressionAttributeValues: {
-          ":pk": `USR#${DEFAULT_USER_ID}#DAILY_INSULIN`,
-        },
-        Limit: 7,
-        ScanIndexForward: false, // Most recent first
-      })
+    // Calculate date range: last 7 days
+    const now = new Date();
+    const endDate = now.toISOString().slice(0, 10);
+    const startDateObj = new Date(now);
+    startDateObj.setDate(startDateObj.getDate() - 6);
+    const startDate = startDateObj.toISOString().slice(0, 10);
+
+    return await queryDailyInsulinByDateRange(
+      docClient,
+      Resource.SignageTable.name,
+      DEFAULT_USER_ID,
+      startDate,
+      endDate
     );
-
-    const totals: Record<string, number> = {};
-    for (const item of result.Items || []) {
-      const data = item.data as { date?: string; totalInsulinUnits?: number };
-      if (data?.date && typeof data?.totalInsulinUnits === "number") {
-        totals[data.date] = data.totalInsulinUnits;
-      }
-    }
-
-    return totals;
   } catch (error) {
     console.error("Error fetching daily insulin totals:", error);
     return {};
