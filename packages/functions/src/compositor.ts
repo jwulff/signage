@@ -32,7 +32,8 @@ import {
 } from "./dexcom/client.js";
 import type { TreatmentDisplayData, GlookoTreatmentsItem } from "./glooko/types.js";
 import { calculateTreatmentTotals } from "./rendering/treatment-renderer.js";
-import { queryDailyInsulinByDateRange } from "@diabetes/core";
+import { queryDailyInsulinByDateRange, getCurrentInsight } from "@diabetes/core";
+import { createInsightDisplayData, type InsightDisplayData } from "./rendering/insight-renderer.js";
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
@@ -354,6 +355,22 @@ async function fetchTreatmentData(): Promise<TreatmentDisplayData | null> {
 }
 
 /**
+ * Fetch current AI-generated insight for display
+ */
+async function fetchCurrentInsight(): Promise<InsightDisplayData | null> {
+  try {
+    const insight = await getCurrentInsight(ddb, Resource.SignageTable.name, DEFAULT_USER_ID);
+    if (!insight) {
+      return null;
+    }
+    return createInsightDisplayData(insight.content, insight.type, insight.generatedAt);
+  } catch (error) {
+    console.error("Failed to fetch insight:", error);
+    return null;
+  }
+}
+
+/**
  * Get active WebSocket connections
  * Uses Query on pk="CONNECTIONS" for efficient retrieval
  */
@@ -456,11 +473,12 @@ async function updateDisplay(): Promise<{
 
   const apiClient = new ApiGatewayManagementApiClient({ endpoint });
 
-  // Fetch blood sugar, weather, and treatment data in parallel
-  const [bloodSugarResult, weatherData, treatmentData] = await Promise.all([
+  // Fetch blood sugar, weather, treatment, and insight data in parallel
+  const [bloodSugarResult, weatherData, treatmentData, insightData] = await Promise.all([
     fetchBloodSugarData(),
     fetchWeatherData(),
     fetchTreatmentData(),
+    fetchCurrentInsight(),
   ]);
 
   const { current: bloodSugarData, history } = bloodSugarResult;
@@ -485,6 +503,12 @@ async function updateDisplay(): Promise<{
     console.log("No treatment data available");
   }
 
+  if (insightData) {
+    console.log(`Insight (${insightData.type}): "${insightData.content.slice(0, 40)}..." [${insightData.status}]`);
+  } else {
+    console.log("No insight available");
+  }
+
   // Generate composite frame using shared rendering module
   const frame = generateCompositeFrame({
     bloodSugar: bloodSugarData,
@@ -492,6 +516,7 @@ async function updateDisplay(): Promise<{
     timezone: "America/Los_Angeles",
     weather: weatherData ?? undefined,
     treatments: treatmentData,
+    insight: insightData,
   });
 
   // Get current time in Pacific for logging
