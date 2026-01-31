@@ -24,7 +24,7 @@ const DEFAULT_USER_ID = "john";
 const docClient = createDocClient();
 
 /**
- * Bedrock Agent event types
+ * Bedrock Agent event types (OpenAPI-based action groups)
  */
 interface BedrockAgentEvent {
   messageVersion: string;
@@ -32,7 +32,8 @@ interface BedrockAgentEvent {
   inputText: string;
   sessionId: string;
   actionGroup: string;
-  function: string;
+  apiPath: string;
+  httpMethod: string;
   parameters: Array<{ name: string; type: string; value: string }>;
 }
 
@@ -40,10 +41,9 @@ interface BedrockAgentResponse {
   messageVersion: string;
   response: {
     actionGroup: string;
-    function: string;
-    functionResponse: {
-      responseBody: { TEXT: { body: string } };
-    };
+    apiPath: string;
+    httpMethod: string;
+    responseBody: { "application/json": { body: string } };
   };
 }
 
@@ -56,8 +56,9 @@ function formatResponse(event: BedrockAgentEvent, body: unknown): BedrockAgentRe
     messageVersion: "1.0",
     response: {
       actionGroup: event.actionGroup,
-      function: event.function,
-      functionResponse: { responseBody: { TEXT: { body: JSON.stringify(body) } } },
+      apiPath: event.apiPath,
+      httpMethod: event.httpMethod,
+      responseBody: { "application/json": { body: JSON.stringify(body) } },
     },
   };
 }
@@ -310,25 +311,26 @@ export async function handler(
   event: BedrockAgentEvent
 ): Promise<BedrockAgentResponse> {
   console.log("AnalysisTools invoked:", {
-    function: event.function,
+    apiPath: event.apiPath,
+    httpMethod: event.httpMethod,
     parameters: event.parameters,
   });
 
   try {
-    switch (event.function) {
-      case "getDailyAggregation": {
+    switch (event.apiPath) {
+      case "/getDailyAggregation": {
         const date = getParam(event, "date") || new Date().toISOString().split("T")[0];
         const result = await getDailyAggregation(date);
         return formatResponse(event, result);
       }
 
-      case "getWeeklyAggregation": {
+      case "/getWeeklyAggregation": {
         const weekOffset = parseInt(getParam(event, "weekOffset") || "0", 10);
         const result = await getWeeklyAggregation(weekOffset);
         return formatResponse(event, result);
       }
 
-      case "detectPatterns": {
+      case "/detectPatterns": {
         const patternType = (getParam(event, "type") || "all") as
           | "meal"
           | "overnight"
@@ -339,7 +341,7 @@ export async function handler(
       }
 
       default:
-        return formatResponse(event, { error: `Unknown function: ${event.function}` });
+        return formatResponse(event, { error: `Unknown API path: ${event.apiPath}` });
     }
   } catch (error) {
     console.error("AnalysisTools error:", error);

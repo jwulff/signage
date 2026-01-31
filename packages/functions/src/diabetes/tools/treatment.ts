@@ -19,7 +19,7 @@ const DEFAULT_USER_ID = "john";
 const docClient = createDocClient();
 
 /**
- * Bedrock Agent event types (shared across action groups)
+ * Bedrock Agent event types (OpenAPI-based action groups)
  */
 interface BedrockAgentEvent {
   messageVersion: string;
@@ -27,7 +27,8 @@ interface BedrockAgentEvent {
   inputText: string;
   sessionId: string;
   actionGroup: string;
-  function: string;
+  apiPath: string;
+  httpMethod: string;
   parameters: Array<{ name: string; type: string; value: string }>;
 }
 
@@ -35,10 +36,9 @@ interface BedrockAgentResponse {
   messageVersion: string;
   response: {
     actionGroup: string;
-    function: string;
-    functionResponse: {
-      responseBody: { TEXT: { body: string } };
-    };
+    apiPath: string;
+    httpMethod: string;
+    responseBody: { "application/json": { body: string } };
   };
 }
 
@@ -51,8 +51,9 @@ function formatResponse(event: BedrockAgentEvent, body: unknown): BedrockAgentRe
     messageVersion: "1.0",
     response: {
       actionGroup: event.actionGroup,
-      function: event.function,
-      functionResponse: { responseBody: { TEXT: { body: JSON.stringify(body) } } },
+      apiPath: event.apiPath,
+      httpMethod: event.httpMethod,
+      responseBody: { "application/json": { body: JSON.stringify(body) } },
     },
   };
 }
@@ -248,25 +249,26 @@ export async function handler(
   event: BedrockAgentEvent
 ): Promise<BedrockAgentResponse> {
   console.log("TreatmentDataTools invoked:", {
-    function: event.function,
+    apiPath: event.apiPath,
+    httpMethod: event.httpMethod,
     parameters: event.parameters,
   });
 
   try {
-    switch (event.function) {
-      case "getRecentTreatments": {
+    switch (event.apiPath) {
+      case "/getRecentTreatments": {
         const hours = parseInt(getParam(event, "hours") || "4", 10);
         const result = await getRecentTreatments(Math.min(Math.max(hours, 1), 24));
         return formatResponse(event, result);
       }
 
-      case "getDailyInsulinTotals": {
+      case "/getDailyInsulinTotals": {
         const days = parseInt(getParam(event, "days") || "7", 10);
         const result = await getDailyInsulinTotals(Math.min(Math.max(days, 1), 30));
         return formatResponse(event, result);
       }
 
-      case "getMealBoluses": {
+      case "/getMealBoluses": {
         const startDate = getParam(event, "startDate") || new Date().toISOString().split("T")[0];
         const endDate = getParam(event, "endDate") || new Date().toISOString().split("T")[0];
         const result = await getMealBoluses(startDate, endDate);
@@ -274,7 +276,7 @@ export async function handler(
       }
 
       default:
-        return formatResponse(event, { error: `Unknown function: ${event.function}` });
+        return formatResponse(event, { error: `Unknown API path: ${event.apiPath}` });
     }
   } catch (error) {
     console.error("TreatmentDataTools error:", error);
