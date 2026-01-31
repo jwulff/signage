@@ -51,6 +51,7 @@ export const insightToolsFunction = new sst.aws.Function("InsightTools", {
 // =============================================================================
 
 // OpenAPI schema for GlucoseDataTools
+// NOTE: Limited to 2 APIs to stay under Bedrock's 11 API limit per agent
 export const glucoseToolsSchema = `
 openapi: 3.0.0
 info:
@@ -92,29 +93,6 @@ paths:
       responses:
         '200':
           description: Glucose statistics including TIR, mean, stdDev, CV
-  /getTimeInRange:
-    post:
-      summary: Get time in range for a date range
-      description: Calculates TIR, TBR, TAR percentages for a specific date range
-      operationId: getTimeInRange
-      parameters:
-        - name: startDate
-          in: query
-          description: Start date (YYYY-MM-DD)
-          required: true
-          schema:
-            type: string
-            format: date
-        - name: endDate
-          in: query
-          description: End date (YYYY-MM-DD)
-          required: true
-          schema:
-            type: string
-            format: date
-      responses:
-        '200':
-          description: Time in range metrics for the period
 `;
 
 // OpenAPI schema for TreatmentDataTools
@@ -244,6 +222,7 @@ paths:
 `;
 
 // OpenAPI schema for InsightTools
+// NOTE: Limited to 2 APIs to stay under Bedrock's 11 API limit per agent
 export const insightToolsSchema = `
 openapi: 3.0.0
 info:
@@ -287,22 +266,4 @@ paths:
       responses:
         '200':
           description: Current insight with staleness status
-  /getInsightHistory:
-    post:
-      summary: Get insight history
-      description: Retrieves past insights for the last N days
-      operationId: getInsightHistory
-      parameters:
-        - name: days
-          in: query
-          description: Number of days to look back (1-30)
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 30
-            default: 7
-      responses:
-        '200':
-          description: List of past insights
 `;
