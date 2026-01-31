@@ -8,7 +8,6 @@ import {
   calculateTimeInRange,
   classifyGlucose,
   calculateTrend,
-  TARGET,
 } from "./glucose-stats.js";
 
 describe("calculateGlucoseStats", () => {

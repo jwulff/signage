@@ -21,9 +21,9 @@ export default $config({
     const { testApi } = await import("./infra/test-api");
     const { web } = await import("./infra/web");
     const { compositorCron, reconcileCron } = await import("./infra/widgets");
-    const { agent, agentAlias, outputs: agentOutputs } = await import("./infra/agent");
+    const { outputs: agentOutputs } = await import("./infra/agent");
     const { outputs: kbOutputs } = await import("./infra/knowledge-base");
-    const { outputs: pipelineOutputs } = await import("./infra/analysis-pipeline");
+    await import("./infra/analysis-pipeline");
 
     return {
       websocketUrl: api.url,

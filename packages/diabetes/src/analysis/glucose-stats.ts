@@ -2,7 +2,7 @@
  * Glucose statistical analysis functions
  */
 
-import type { CgmReading, BgReading, GlucoseReading } from "../models/index.js";
+import type { CgmReading, BgReading } from "../models/index.js";
 
 /**
  * Target range constants (mg/dL)

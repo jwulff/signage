@@ -6,7 +6,6 @@ import {
   DynamoDBDocumentClient,
   PutCommand,
   QueryCommand,
-  GetCommand,
 } from "@aws-sdk/lib-dynamodb";
 import type { DiabetesRecord, DiabetesRecordType } from "../models/index.js";
 import { generateRecordKeys, formatDateInTimezone, DATA_TIMEZONE } from "./keys.js";
