@@ -67,8 +67,9 @@ const currentPartition = aws.getPartition({});
 const currentRegion = aws.getRegion({});
 
 // IAM role for the Bedrock Agent
+// Name must match signage-* pattern for CI IAM permissions
 export const agentRole = new aws.iam.Role("DiabetesAnalystAgentRole", {
-  name: $interpolate`diabetes-analyst-agent-${$app.stage}`,
+  name: $interpolate`signage-diabetes-agent-${$app.stage}`,
   assumeRolePolicy: aws.iam.getPolicyDocumentOutput({
     statements: [
       {
