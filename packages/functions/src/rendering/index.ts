@@ -12,6 +12,8 @@ export * from "./chart-renderer.js";
 export * from "./ascii-renderer.js";
 export * from "./readiness-renderer.js";
 export * from "./treatment-renderer.js";
+export * from "./insight-renderer.js";
 export type { ClockWeatherData, ClockRegionBounds } from "./clock-renderer.js";
 export type { ReadinessDisplayData } from "./readiness-renderer.js";
 export type { ChartBounds } from "./treatment-renderer.js";
+export type { InsightDisplayData } from "./insight-renderer.js";

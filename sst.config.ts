@@ -21,6 +21,9 @@ export default $config({
     const { testApi } = await import("./infra/test-api");
     const { web } = await import("./infra/web");
     const { compositorCron, reconcileCron } = await import("./infra/widgets");
+    const { outputs: agentOutputs } = await import("./infra/agent");
+    const { outputs: kbOutputs } = await import("./infra/knowledge-base");
+    await import("./infra/analysis-pipeline");
 
     return {
       websocketUrl: api.url,
@@ -28,6 +31,11 @@ export default $config({
       webUrl: web.url,
       compositorCron: compositorCron.nodes.rule.name,
       reconcileCron: reconcileCron.nodes.rule.name,
+      // Diabetes AI Analyst
+      agentId: agentOutputs.agentId,
+      agentAliasId: agentOutputs.agentAliasId,
+      knowledgeBaseId: kbOutputs.knowledgeBaseId,
+      knowledgeBaseBucket: kbOutputs.bucketName,
     };
   },
 });

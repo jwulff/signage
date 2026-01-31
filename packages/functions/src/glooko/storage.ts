@@ -1,8 +1,8 @@
 /**
  * Glooko Data Storage
  *
- * DynamoDB storage layer for Glooko diabetes data.
- * Implements idempotent writes using composite keys for deduplication.
+ * @deprecated Use @diabetes/core storage functions directly.
+ * This file re-exports for backward compatibility.
  */
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
@@ -13,15 +13,16 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { createHash } from "crypto";
 import type {
-  GlookoRecord,
-  GlookoRecordItem,
-  GlookoRecordType,
-  ImportMetadata,
-  TreatmentSummary,
+  DiabetesRecord as GlookoRecord,
+  DiabetesRecordType as GlookoRecordType,
   BolusRecord,
   CarbsRecord,
   ManualInsulinRecord,
-} from "./data-model.js";
+} from "@diabetes/core";
+
+// Re-export deprecated types for compatibility
+import type { TreatmentSummary, ImportMetadata, GlookoRecordItem } from "./data-model.js";
+export type { GlookoRecordItem };
 
 // =============================================================================
 // Configuration
@@ -116,11 +117,34 @@ function generateRecordHash(record: GlookoRecord): string {
  * For daily_insulin records, we use the date string as the sort key.
  * This ensures exactly one record per date, enabling deterministic queries.
  */
+/**
+ * Format a timestamp as YYYY-MM-DD for date-based keys
+ */
+function formatDateForKey(timestampMs: number): string {
+  const date = new Date(timestampMs);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Generate DynamoDB keys for a record
+ *
+ * Key structure:
+ * - pk: USER#{userId}#{TYPE} - Partition by user and type
+ * - sk: {timestamp}#{hash} - Sort by time with dedup hash
+ * - gsi1pk: USER#{userId} - For cross-type queries
+ * - gsi1sk: {TYPE}#{timestamp} - Sort by type then time
+ * - gsi2pk: USER#{userId}#{TYPE} - For type-specific date range queries
+ * - gsi2sk: {date}#{timestamp} - Sort by date then time
+ */
 export function generateRecordKeys(
   userId: string,
   record: GlookoRecord
-): { pk: string; sk: string; gsi1pk: string; gsi1sk: string } {
+): { pk: string; sk: string; gsi1pk: string; gsi1sk: string; gsi2pk: string; gsi2sk: string } {
   const timestamp = record.timestamp.toString().padStart(15, "0");
+  const typeUpper = record.type.toUpperCase();
 
   // For daily_insulin, use date as sk to ensure one record per date
   if (record.type === "daily_insulin") {
@@ -129,16 +153,21 @@ export function generateRecordKeys(
       sk: record.date, // e.g., "2026-01-29"
       gsi1pk: `USER#${userId}`,
       gsi1sk: `DAILY_INSULIN#${record.date}`,
+      gsi2pk: `USER#${userId}#DAILY_INSULIN`,
+      gsi2sk: record.date,
     };
   }
 
   // For all other record types, use timestamp + hash
   const hash = generateRecordHash(record);
+  const dateStr = formatDateForKey(record.timestamp);
   return {
-    pk: `USER#${userId}#${record.type.toUpperCase()}`,
+    pk: `USER#${userId}#${typeUpper}`,
     sk: `${timestamp}#${hash}`,
     gsi1pk: `USER#${userId}`,
-    gsi1sk: `${record.type.toUpperCase()}#${timestamp}`,
+    gsi1sk: `${typeUpper}#${timestamp}`,
+    gsi2pk: `USER#${userId}#${typeUpper}`,
+    gsi2sk: `${dateStr}#${timestamp}`,
   };
 }
 
