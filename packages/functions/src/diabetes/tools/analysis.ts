@@ -64,6 +64,18 @@ function formatResponse(event: BedrockAgentEvent, body: unknown): BedrockAgentRe
 }
 
 /**
+ * Validate date string is in YYYY-MM-DD format
+ */
+function isValidDateString(date: string): boolean {
+  if (!date || typeof date !== "string") return false;
+  const match = date.match(/^\d{4}-\d{2}-\d{2}$/);
+  if (!match) return false;
+  // Verify it parses to a valid date
+  const parsed = new Date(date);
+  return !isNaN(parsed.getTime());
+}
+
+/**
  * Get daily aggregation for a specific date
  */
 async function getDailyAggregation(date: string): Promise<{
@@ -85,8 +97,11 @@ async function getDailyAggregation(date: string): Promise<{
     mean: number;
   }>;
 }> {
+  // Validate and default the date
+  const validDate = isValidDateString(date) ? date : new Date().toISOString().split("T")[0];
+
   // Compute daily window in data timezone (America/Los_Angeles)
-  const startTime = getStartOfDayInTimezone(date);
+  const startTime = getStartOfDayInTimezone(validDate);
   const endTime = startTime + 24 * 60 * 60 * 1000;
 
   const cgmReadings = (await queryByTypeAndTimeRange(
@@ -118,7 +133,7 @@ async function getDailyAggregation(date: string): Promise<{
     }))
     .sort((a, b) => a.hour - b.hour);
 
-  return { date, stats, hourlyBreakdown };
+  return { date: validDate, stats, hourlyBreakdown };
 }
 
 /**
