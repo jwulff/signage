@@ -41,13 +41,14 @@ describe("renderChart time markers", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-30T21:00:00.000-08:00"));
 
+    const now = Date.now();
+    // Points must be within the left chart's range (-24h to -3h)
     const points = [
-      { timestamp: Date.now() - 2 * 60 * 60 * 1000, glucose: 100 }, // 2h ago
-      { timestamp: Date.now() - 1 * 60 * 60 * 1000, glucose: 110 }, // 1h ago
+      { timestamp: now - 4 * 60 * 60 * 1000, glucose: 100 }, // 4h ago (within chart range)
+      { timestamp: now - 5 * 60 * 60 * 1000, glucose: 110 }, // 5h ago (within chart range)
     ];
 
-    // Calculate the 6pm marker timestamp (exactly 3h ago = now - 3h)
-    const now = Date.now();
+    // Calculate the 6pm marker timestamp (exactly 3h ago = now - 3h = endTime)
     const sixPmMarker = now - 3 * 60 * 60 * 1000;
 
     renderChart(mockFrame, points, {
