@@ -64,7 +64,7 @@ interface BedrockAgentResponse {
  * Get parameter value from event
  */
 function getParam(event: BedrockAgentEvent, name: string): string | undefined {
-  const param = event.parameters.find((p) => p.name === name);
+  const param = event.parameters?.find((p) => p.name === name);
   return param?.value;
 }
 
