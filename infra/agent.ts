@@ -175,16 +175,17 @@ export const agent = new aws.bedrock.AgentAgent("DiabetesAnalyst", {
     },
   ],
 
-  // Prepare the agent for use (creates a DRAFT version)
-  prepareAgent: true,
+  // Don't auto-prepare - we'll let the last action group handle it
+  // This avoids race conditions when creating multiple action groups
+  prepareAgent: false,
 });
 
 // =============================================================================
-// Action Groups
+// Action Groups (created sequentially to avoid PrepareAgent race conditions)
 // =============================================================================
 
-// GlucoseDataTools action group
-new aws.bedrock.AgentAgentActionGroup("GlucoseDataToolsActionGroup", {
+// GlucoseDataTools action group (first in chain)
+const glucoseActionGroup = new aws.bedrock.AgentAgentActionGroup("GlucoseDataToolsActionGroup", {
   agentId: agent.agentId,
   agentVersion: "DRAFT",
   actionGroupName: "GlucoseDataTools",
@@ -195,10 +196,11 @@ new aws.bedrock.AgentAgentActionGroup("GlucoseDataToolsActionGroup", {
   apiSchema: {
     payload: glucoseToolsSchema,
   },
+  skipResourceInUseCheck: true,
 });
 
-// TreatmentDataTools action group
-new aws.bedrock.AgentAgentActionGroup("TreatmentDataToolsActionGroup", {
+// TreatmentDataTools action group (depends on glucose)
+const treatmentActionGroup = new aws.bedrock.AgentAgentActionGroup("TreatmentDataToolsActionGroup", {
   agentId: agent.agentId,
   agentVersion: "DRAFT",
   actionGroupName: "TreatmentDataTools",
@@ -209,10 +211,11 @@ new aws.bedrock.AgentAgentActionGroup("TreatmentDataToolsActionGroup", {
   apiSchema: {
     payload: treatmentToolsSchema,
   },
-});
+  skipResourceInUseCheck: true,
+}, { dependsOn: [glucoseActionGroup] });
 
-// AnalysisTools action group
-new aws.bedrock.AgentAgentActionGroup("AnalysisToolsActionGroup", {
+// AnalysisTools action group (depends on treatment)
+const analysisActionGroup = new aws.bedrock.AgentAgentActionGroup("AnalysisToolsActionGroup", {
   agentId: agent.agentId,
   agentVersion: "DRAFT",
   actionGroupName: "AnalysisTools",
@@ -223,10 +226,11 @@ new aws.bedrock.AgentAgentActionGroup("AnalysisToolsActionGroup", {
   apiSchema: {
     payload: analysisToolsSchema,
   },
-});
+  skipResourceInUseCheck: true,
+}, { dependsOn: [treatmentActionGroup] });
 
-// InsightTools action group
-new aws.bedrock.AgentAgentActionGroup("InsightToolsActionGroup", {
+// InsightTools action group (last in chain - this one will prepare the agent)
+const insightActionGroup = new aws.bedrock.AgentAgentActionGroup("InsightToolsActionGroup", {
   agentId: agent.agentId,
   agentVersion: "DRAFT",
   actionGroupName: "InsightTools",
@@ -237,7 +241,8 @@ new aws.bedrock.AgentAgentActionGroup("InsightToolsActionGroup", {
   apiSchema: {
     payload: insightToolsSchema,
   },
-});
+  // Don't skip the check on the last one so it prepares the agent
+}, { dependsOn: [analysisActionGroup] });
 
 // Grant Bedrock permission to invoke the Lambda functions
 new aws.lambda.Permission("GlucoseToolsBedrockPermission", {
@@ -269,12 +274,12 @@ new aws.lambda.Permission("InsightToolsBedrockPermission", {
 });
 
 // Create an agent alias for the DRAFT version (for development)
-// In production, you'd create aliases for specific versions
+// Depends on all action groups being created first
 export const agentAlias = new aws.bedrock.AgentAgentAlias("DiabetesAnalystDraftAlias", {
   agentId: agent.agentId,
   agentAliasName: $interpolate`draft-${$app.stage}`,
   description: "Development alias pointing to DRAFT version",
-});
+}, { dependsOn: [insightActionGroup] });
 
 // =============================================================================
 // Exports
