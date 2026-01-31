@@ -5,7 +5,7 @@
 
 import { Resource } from "sst";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { GetCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, QueryCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { WidgetUpdater } from "../types.js";
 import type {
   TreatmentDisplayData,
@@ -63,6 +63,43 @@ async function fetchTreatmentData(): Promise<{
   }
 }
 
+/** Default user ID for daily insulin queries */
+const DEFAULT_USER_ID = "john";
+
+/**
+ * Fetch daily insulin totals from the new schema
+ * Returns totals for the last 7 days keyed by date string (YYYY-MM-DD)
+ */
+async function fetchDailyInsulinTotals(): Promise<Record<string, number>> {
+  try {
+    const result = await docClient.send(
+      new QueryCommand({
+        TableName: Resource.SignageTable.name,
+        IndexName: "gsi2",
+        KeyConditionExpression: "gsi2pk = :pk",
+        ExpressionAttributeValues: {
+          ":pk": `USR#${DEFAULT_USER_ID}#DAILY_INSULIN`,
+        },
+        Limit: 7,
+        ScanIndexForward: false, // Most recent first
+      })
+    );
+
+    const totals: Record<string, number> = {};
+    for (const item of result.Items || []) {
+      const data = item.data as { date?: string; totalInsulinUnits?: number };
+      if (data?.date && typeof data?.totalInsulinUnits === "number") {
+        totals[data.date] = data.totalInsulinUnits;
+      }
+    }
+
+    return totals;
+  } catch (error) {
+    console.error("Error fetching daily insulin totals:", error);
+    return {};
+  }
+}
+
 export const treatmentsUpdater: WidgetUpdater = {
   id: "treatments",
   name: "Treatments Widget",
@@ -70,7 +107,11 @@ export const treatmentsUpdater: WidgetUpdater = {
   schedule: "rate(1 minute)",
 
   async update(): Promise<TreatmentDisplayData | null> {
-    const data = await fetchTreatmentData();
+    // Fetch treatment data and daily insulin totals in parallel
+    const [data, dailyInsulinTotals] = await Promise.all([
+      fetchTreatmentData(),
+      fetchDailyInsulinTotals(),
+    ]);
 
     if (!data) {
       console.warn("No treatment data available");
@@ -86,6 +127,7 @@ export const treatmentsUpdater: WidgetUpdater = {
       treatments,
       lastFetchedAt,
       isStale: isStale(lastFetchedAt),
+      dailyInsulinTotals,
     };
   },
 };
