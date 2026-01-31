@@ -1,8 +1,8 @@
 /**
  * Glooko Data Storage
  *
- * DynamoDB storage layer for Glooko diabetes data.
- * Implements idempotent writes using composite keys for deduplication.
+ * @deprecated Use @diabetes/core storage functions directly.
+ * This file re-exports for backward compatibility.
  */
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
@@ -13,15 +13,16 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { createHash } from "crypto";
 import type {
-  GlookoRecord,
-  GlookoRecordItem,
-  GlookoRecordType,
-  ImportMetadata,
-  TreatmentSummary,
+  DiabetesRecord as GlookoRecord,
+  DiabetesRecordType as GlookoRecordType,
   BolusRecord,
   CarbsRecord,
   ManualInsulinRecord,
-} from "./data-model.js";
+} from "@diabetes/core";
+
+// Re-export deprecated types for compatibility
+import type { TreatmentSummary, ImportMetadata, GlookoRecordItem } from "./data-model.js";
+export type { GlookoRecordItem };
 
 // =============================================================================
 // Configuration
