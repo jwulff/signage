@@ -161,7 +161,8 @@ async function getGlucoseStats(
   gmi: number;
 }> {
   const now = Date.now();
-  const periodHours = { day: 24, week: 168, month: 720 }[period];
+  const periodHoursMap: Record<string, number> = { day: 24, week: 168, month: 720 };
+  const periodHours = periodHoursMap[period] ?? 24; // Default to 24 hours if invalid
   const startTime = now - periodHours * 60 * 60 * 1000;
 
   const cgmReadings = (await queryByTypeAndTimeRange(
