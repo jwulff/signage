@@ -139,7 +139,7 @@ export async function queryByTypeAndDateRange(
   const result = await docClient.send(
     new QueryCommand({
       TableName: tableName,
-      IndexName: "GSI2",
+      IndexName: "gsi2",
       KeyConditionExpression: "gsi2pk = :pk AND gsi2sk BETWEEN :start AND :end",
       ExpressionAttributeValues: {
         ":pk": `USR#${userId}#${recordType.toUpperCase()}`,
@@ -193,7 +193,7 @@ export async function queryDailyInsulinByDateRange(
   const result = await docClient.send(
     new QueryCommand({
       TableName: tableName,
-      IndexName: "GSI2",
+      IndexName: "gsi2",
       KeyConditionExpression: "gsi2pk = :pk AND gsi2sk BETWEEN :start AND :end",
       ExpressionAttributeValues: {
         ":pk": `USR#${userId}#DAILY_INSULIN`,
@@ -231,7 +231,7 @@ export async function queryAllTypesByTimeRange(
   const result = await docClient.send(
     new QueryCommand({
       TableName: tableName,
-      IndexName: "GSI1",
+      IndexName: "gsi1",
       KeyConditionExpression: "gsi1pk = :pk AND gsi1sk BETWEEN :start AND :end",
       ExpressionAttributeValues: {
         ":pk": `USR#${userId}#ALL`,
