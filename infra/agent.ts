@@ -139,7 +139,7 @@ new aws.iam.RolePolicy("DiabetesAnalystAgentDynamoPolicy", {
   }).json,
 });
 
-// Policy for the agent to use the foundation model
+// Policy for the agent to use the foundation model via inference profile
 new aws.iam.RolePolicy("DiabetesAnalystAgentModelPolicy", {
   role: agentRole.id,
   policy: aws.iam.getPolicyDocumentOutput({
@@ -147,7 +147,10 @@ new aws.iam.RolePolicy("DiabetesAnalystAgentModelPolicy", {
       {
         actions: ["bedrock:InvokeModel"],
         resources: [
+          // Foundation model (for backwards compatibility)
           $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}::foundation-model/anthropic.claude-sonnet-4-5*`,
+          // Inference profile (required for Claude 4.5)
+          $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}::inference-profile/us.anthropic.claude-sonnet-4-5*`,
         ],
         effect: "Allow",
       },
@@ -161,7 +164,8 @@ new aws.iam.RolePolicy("DiabetesAnalystAgentModelPolicy", {
 
 export const agent = new aws.bedrock.AgentAgent("DiabetesAnalyst", {
   agentName: $interpolate`diabetes-analyst-${$app.stage}`,
-  foundationModel: "anthropic.claude-sonnet-4-5-20250929-v1:0",
+  // Use inference profile ARN for Claude 4.5 (on-demand not supported for this model)
+  foundationModel: "arn:aws:bedrock:us-east-1::inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0",
   agentResourceRoleArn: agentRole.arn,
   instruction: AGENT_INSTRUCTION,
   idleSessionTtlInSeconds: 3600, // 1 hour session timeout
