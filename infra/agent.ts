@@ -6,6 +6,16 @@
  */
 
 import { table } from "./storage";
+import {
+  glucoseToolsFunction,
+  treatmentToolsFunction,
+  analysisToolsFunction,
+  insightToolsFunction,
+  glucoseToolsSchema,
+  treatmentToolsSchema,
+  analysisToolsSchema,
+  insightToolsSchema,
+} from "./agent-tools";
 
 // =============================================================================
 // Agent System Prompt
@@ -161,6 +171,95 @@ export const agent = new aws.bedrock.AgentAgent("DiabetesAnalyst", {
 
   // Prepare the agent for use (creates a DRAFT version)
   prepareAgent: true,
+});
+
+// =============================================================================
+// Action Groups
+// =============================================================================
+
+// GlucoseDataTools action group
+new aws.bedrock.AgentAgentActionGroup("GlucoseDataToolsActionGroup", {
+  agentId: agent.agentId,
+  agentVersion: "DRAFT",
+  actionGroupName: "GlucoseDataTools",
+  description: "Tools for querying glucose readings and statistics",
+  actionGroupExecutor: {
+    lambda: glucoseToolsFunction.arn,
+  },
+  apiSchema: {
+    payload: glucoseToolsSchema,
+  },
+});
+
+// TreatmentDataTools action group
+new aws.bedrock.AgentAgentActionGroup("TreatmentDataToolsActionGroup", {
+  agentId: agent.agentId,
+  agentVersion: "DRAFT",
+  actionGroupName: "TreatmentDataTools",
+  description: "Tools for querying insulin and carb data",
+  actionGroupExecutor: {
+    lambda: treatmentToolsFunction.arn,
+  },
+  apiSchema: {
+    payload: treatmentToolsSchema,
+  },
+});
+
+// AnalysisTools action group
+new aws.bedrock.AgentAgentActionGroup("AnalysisToolsActionGroup", {
+  agentId: agent.agentId,
+  agentVersion: "DRAFT",
+  actionGroupName: "AnalysisTools",
+  description: "Tools for aggregations and pattern detection",
+  actionGroupExecutor: {
+    lambda: analysisToolsFunction.arn,
+  },
+  apiSchema: {
+    payload: analysisToolsSchema,
+  },
+});
+
+// InsightTools action group
+new aws.bedrock.AgentAgentActionGroup("InsightToolsActionGroup", {
+  agentId: agent.agentId,
+  agentVersion: "DRAFT",
+  actionGroupName: "InsightTools",
+  description: "Tools for storing and retrieving AI insights",
+  actionGroupExecutor: {
+    lambda: insightToolsFunction.arn,
+  },
+  apiSchema: {
+    payload: insightToolsSchema,
+  },
+});
+
+// Grant Bedrock permission to invoke the Lambda functions
+new aws.lambda.Permission("GlucoseToolsBedrockPermission", {
+  action: "lambda:InvokeFunction",
+  function: glucoseToolsFunction.name,
+  principal: "bedrock.amazonaws.com",
+  sourceArn: agent.agentArn,
+});
+
+new aws.lambda.Permission("TreatmentToolsBedrockPermission", {
+  action: "lambda:InvokeFunction",
+  function: treatmentToolsFunction.name,
+  principal: "bedrock.amazonaws.com",
+  sourceArn: agent.agentArn,
+});
+
+new aws.lambda.Permission("AnalysisToolsBedrockPermission", {
+  action: "lambda:InvokeFunction",
+  function: analysisToolsFunction.name,
+  principal: "bedrock.amazonaws.com",
+  sourceArn: agent.agentArn,
+});
+
+new aws.lambda.Permission("InsightToolsBedrockPermission", {
+  action: "lambda:InvokeFunction",
+  function: insightToolsFunction.name,
+  principal: "bedrock.amazonaws.com",
+  sourceArn: agent.agentArn,
 });
 
 // Create an agent alias for the DRAFT version (for development)
