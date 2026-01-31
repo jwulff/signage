@@ -23,6 +23,7 @@ export default $config({
     const { compositorCron, reconcileCron } = await import("./infra/widgets");
     const { agent, agentAlias, outputs: agentOutputs } = await import("./infra/agent");
     const { outputs: kbOutputs } = await import("./infra/knowledge-base");
+    const { outputs: pipelineOutputs } = await import("./infra/analysis-pipeline");
 
     return {
       websocketUrl: api.url,
