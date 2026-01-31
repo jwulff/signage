@@ -21,6 +21,7 @@ export default $config({
     const { testApi } = await import("./infra/test-api");
     const { web } = await import("./infra/web");
     const { compositorCron, reconcileCron } = await import("./infra/widgets");
+    const { agent, agentAlias, outputs: agentOutputs } = await import("./infra/agent");
 
     return {
       websocketUrl: api.url,
@@ -28,6 +29,9 @@ export default $config({
       webUrl: web.url,
       compositorCron: compositorCron.nodes.rule.name,
       reconcileCron: reconcileCron.nodes.rule.name,
+      // Diabetes AI Analyst
+      agentId: agentOutputs.agentId,
+      agentAliasId: agentOutputs.agentAliasId,
     };
   },
 });
