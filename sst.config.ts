@@ -22,6 +22,7 @@ export default $config({
     const { web } = await import("./infra/web");
     const { compositorCron, reconcileCron } = await import("./infra/widgets");
     const { agent, agentAlias, outputs: agentOutputs } = await import("./infra/agent");
+    const { outputs: kbOutputs } = await import("./infra/knowledge-base");
 
     return {
       websocketUrl: api.url,
@@ -32,6 +33,8 @@ export default $config({
       // Diabetes AI Analyst
       agentId: agentOutputs.agentId,
       agentAliasId: agentOutputs.agentAliasId,
+      knowledgeBaseId: kbOutputs.knowledgeBaseId,
+      knowledgeBaseBucket: kbOutputs.bucketName,
     };
   },
 });
