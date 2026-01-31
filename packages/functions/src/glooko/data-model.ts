@@ -316,6 +316,10 @@ export interface GlookoRecordItem extends GlookoRecordKey {
   gsi1pk?: string; // USER#{userId}
   /** GSI1 sort key for cross-type time queries */
   gsi1sk?: string; // {type}#{timestamp}
+  /** GSI2 partition key for type-specific date range queries */
+  gsi2pk?: string; // USER#{userId}#{type}
+  /** GSI2 sort key for date-ordered queries */
+  gsi2sk?: string; // {date}#{timestamp}
 }
 
 // =============================================================================
