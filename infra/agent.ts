@@ -151,8 +151,8 @@ new aws.iam.RolePolicy("DiabetesAnalystAgentModelPolicy", {
           "bedrock:GetInferenceProfile",
         ],
         resources: [
-          // Foundation model (for backwards compatibility)
-          $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}::foundation-model/anthropic.claude-sonnet-4-5*`,
+          // Foundation model (wildcard region for inference profile routing to us-east-1/2, us-west-2)
+          $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:*::foundation-model/anthropic.claude-sonnet-4-5*`,
           // Inference profile (required for Claude 4.5)
           $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}:${callerIdentity.then((id) => id.accountId)}:inference-profile/us.anthropic.claude-sonnet-4-5*`,
         ],
