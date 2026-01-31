@@ -32,6 +32,7 @@ import {
 } from "./dexcom/client.js";
 import type { TreatmentDisplayData, GlookoTreatmentsItem } from "./glooko/types.js";
 import { calculateTreatmentTotals } from "./rendering/treatment-renderer.js";
+import { queryDailyInsulinByDateRange } from "@diabetes/core";
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
@@ -272,20 +273,17 @@ function formatDatePacific(date: Date): string {
   }).format(date);
 }
 
+/** Default user ID for daily insulin queries */
+const DEFAULT_USER_ID = "john";
+
 /**
  * Fetch daily insulin totals from DAILY_INSULIN records
- * These include both bolus and basal insulin, giving accurate daily totals.
- *
- * Uses date-based sort keys (YYYY-MM-DD) for deterministic queries.
- * Each date has exactly one record, so no deduplication is needed.
+ * Uses the shared query function from @diabetes/core.
  */
 async function fetchDailyInsulinTotals(): Promise<Record<string, number>> {
-  const dailyTotals: Record<string, number> = {};
-
   try {
     // Calculate date range: today and previous 6 days (7 total, display shows 5)
-    // Use Pacific-formatted endDate as basis for startDate calculation to avoid
-    // timezone mismatches between UTC Date arithmetic and Pacific formatting
+    // Use Pacific timezone for date boundaries
     const now = new Date();
     const endDate = formatDatePacific(now);
 
@@ -294,36 +292,20 @@ async function fetchDailyInsulinTotals(): Promise<Record<string, number>> {
     endDateUtc.setUTCDate(endDateUtc.getUTCDate() - 6);
     const startDate = endDateUtc.toISOString().slice(0, 10);
 
-    // Query DAILY_INSULIN records via GSI2 (new date-partitioned schema)
-    // gsi2pk = "USR#john#DAILY_INSULIN", gsi2sk = date string (YYYY-MM-DD)
-    const result = await ddb.send(
-      new QueryCommand({
-        TableName: Resource.SignageTable.name,
-        IndexName: "gsi2",
-        KeyConditionExpression: "gsi2pk = :pk AND gsi2sk BETWEEN :start AND :end",
-        ExpressionAttributeValues: {
-          ":pk": "USR#john#DAILY_INSULIN",
-          ":start": startDate,
-          ":end": endDate + "~", // ~ ensures end date is inclusive
-        },
-      })
+    const totals = await queryDailyInsulinByDateRange(
+      ddb,
+      Resource.SignageTable.name,
+      DEFAULT_USER_ID,
+      startDate,
+      endDate
     );
 
-    if (result.Items) {
-      for (const item of result.Items) {
-        const data = item.data as { date?: string; totalInsulinUnits?: number };
-        if (data?.date && typeof data?.totalInsulinUnits === "number") {
-          dailyTotals[data.date] = data.totalInsulinUnits;
-        }
-      }
-    }
-
-    console.log(`Fetched daily insulin totals for ${startDate} to ${endDate}: ${JSON.stringify(dailyTotals)}`);
+    console.log(`Fetched daily insulin totals for ${startDate} to ${endDate}: ${JSON.stringify(totals)}`);
+    return totals;
   } catch (error) {
     console.error("Failed to fetch daily insulin totals:", error);
+    return {};
   }
-
-  return dailyTotals;
 }
 
 /**
