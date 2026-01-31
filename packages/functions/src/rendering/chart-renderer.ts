@@ -156,8 +156,13 @@ export function renderChart(
 
   // Draw time marker vertical lines FIRST (so chart line appears on top)
   // Each marker has brightness based on sunlight percentage for that hour
+  // Use exclusive end when there's an offset to avoid double-draw at chart boundary
+  const useExclusiveEnd = offsetHours > 0;
   for (const marker of timeMarkers) {
-    if (marker >= startTime && marker <= endTime) {
+    const inRange = useExclusiveEnd
+      ? marker >= startTime && marker < endTime
+      : marker >= startTime && marker <= endTime;
+    if (inRange) {
       const timeOffset = marker - startTime;
       const markerX = x + Math.round((timeOffset / timeRange) * (width - 1));
 
