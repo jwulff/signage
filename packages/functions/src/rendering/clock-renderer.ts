@@ -124,8 +124,11 @@ export function renderClockRegion(
   drawText(frame, dateStr, dateTimeX, startY + 3, COLORS.clockSecondary, startY, endY);
   drawText(frame, timeStr, dateTimeX + dateWidth + 1, startY + 3, COLORS.clockTime, startY, endY);
 
-  // Sunlight gradient band with temperature overlay
-  renderSunlightBand(frame, currentHour24, weather, startX, endX);
+  // Only render sunlight gradient band if weather data is available
+  // This leaves the band area free for insight text when weather is disabled
+  if (weather) {
+    renderSunlightBand(frame, currentHour24, weather, startX, endX);
+  }
 }
 
 /**
