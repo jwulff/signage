@@ -26,9 +26,9 @@ const TREATMENT_CHART_Y = 23;
 // Glucose reading - right above sparkline
 const TEXT_ROW = 32; // Rows 32-36
 
-// Glucose sparkline chart
+// Glucose sparkline chart (shortened to make room for insight at bottom)
 const GLUCOSE_CHART_Y = 40;
-const GLUCOSE_CHART_HEIGHT = 23; // Rows 40-62
+const GLUCOSE_CHART_HEIGHT = 11; // Rows 40-50 (insight goes at rows 52-63)
 
 // Split chart: left half = 21h compressed, right half = 3h detailed
 const CHART_LEFT_WIDTH = Math.floor(CHART_WIDTH / 2);

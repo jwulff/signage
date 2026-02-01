@@ -1,7 +1,7 @@
 /**
  * Frame composer - combines all widgets into a single frame
  *
- * Layout (64x64) - 4 equally-spaced sections above sparkline:
+ * Layout (64x64) - insight at bottom:
  * ┌───────────────────────────────────────┐
  * │        SUN JAN 19 10:45               │  rows 3-7
  * │                                       │  gap
@@ -11,7 +11,9 @@
  * │                                       │  gap
  * │  → 142 +5 2m                          │  rows 32-36 (glucose reading)
  * │                                       │  gap
- * │     [glucose sparkline chart]         │  rows 40-62 (23px)
+ * │     [glucose sparkline chart]         │  rows 40-50 (11px)
+ * │                                       │  gap
+ * │  Avg220 238↑ grt!                     │  rows 52-63 (AI insight)
  * └───────────────────────────────────────┘
  */
 
