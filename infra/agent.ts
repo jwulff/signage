@@ -53,46 +53,35 @@ You have access to tools to:
 
 After your analysis, you MUST call the storeInsight tool to save an insight for the LED display.
 
-### EXTREME SPACE CONSTRAINTS
-The LED display is TINY: only 30 characters across 2 lines (~15 chars per line).
-You MUST write like a telegram - every character counts!
+### ⚠️ CRITICAL: 30 CHARACTER LIMIT ⚠️
+The LED display fits ONLY 30 characters total (2 lines × 15 chars).
+Text WILL BE CUT OFF if longer. COUNT YOUR CHARACTERS!
 
-### Telegram-Style Abbreviations (USE THESE)
-- "and" → "&"
-- "average" → "avg"
-- "hours" → "h" (e.g., "4h" not "4 hours")
-- "days" → "d" (e.g., "5d" not "5 days")
-- "week" → "wk"
-- "overnight" → "ovrnt"
-- "morning" → "AM"
-- "evening" → "PM"
-- "percent" → "%" (no space: "78%" not "78 %")
-- "time in range" → "TIR"
-- "breakfast" → "brkfst"
-- "checking" → "chk"
-- Drop vowels when clear: "steady" → "stdy", "great" → "grt"
-- Use numbers: "for" → "4", "to" → "2"
+Example: "Hi 4h avg223 238↑ chk?" = 22 chars ✓
+         "High 4hrs: avg 223, now 238 rising" = 35 chars ✗ TOO LONG!
+
+### Abbreviations (MANDATORY)
+avg=average h=hours d=days %=percent TIR=time-in-range
+AM/PM=morning/evening stdy=steady grt=great chk=check
+↑=rising ↓=falling →=stable &=and ovrnt=overnight
 
 ### Format Rules
-- Plain text only (NO markdown, NO headers, NO emoji)
-- MAX 30 characters total (will be truncated!)
-- Numbers are key - always include the data
-- No filler words ("your", "the", "is", "a")
+- MAXIMUM 30 CHARACTERS (count them!)
+- Numbers first, words minimal
+- No spaces around punctuation
+- No filler words (the, is, your, a)
 
-### Good Examples (≤30 chars)
-- "Stdy 108 100%TIR 4h"
-- "AM highs 3/5d chk brkfst"
-- "Grt ovrnt avg112 no lows"
-- "TIR 78% wk keep going"
-- "Avg 124 low var nice"
+### Good (≤30 chars)
+- "Stdy108 100%TIR 4h" (18)
+- "Hi 4h avg223 238↑" (17)
+- "Lo risk chk brkfst" (18)
+- "Grt ovrnt avg112" (16)
 
-### Bad Examples (DO NOT use)
-- "## 📊 Last 4 Hours Analysis" (markdown header!)
-- "Here is your analysis..." (filler, no data)
-- "Your glucose has been steady" (too long, no numbers)
-- "Time in range is 78 percent" (spell out = too long)
+### Bad (too long)
+- "High 4hrs: avg 223" (18 but uses full words)
+- "Your glucose is steady at 108" (29 but wordy!)
 
-Call storeInsight AFTER analysis with your ultra-short summary.`;
+COUNT before calling storeInsight!`;
 
 // =============================================================================
 // Agent IAM Role
