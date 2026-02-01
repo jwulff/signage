@@ -102,6 +102,7 @@ Store the insight using the storeInsight tool with type="hourly".`;
     console.log("Hourly analysis complete");
   } catch (error) {
     console.error("Hourly analysis error:", error);
+    // Rethrow to trigger Lambda retry mechanism for transient errors
     throw error;
   }
 };
@@ -119,6 +120,12 @@ async function enforceInsightLength(sessionId: string): Promise<void> {
 
     if (!insight) {
       console.log("No insight found to check length");
+      return;
+    }
+
+    // Only shorten hourly insights to avoid accidentally modifying daily/weekly insights
+    if (insight.type !== "hourly") {
+      console.log(`Skipping length check for ${insight.type} insight`);
       return;
     }
 
@@ -154,7 +161,7 @@ Store the shortened version using storeInsight with type="hourly".`;
     DEFAULT_USER_ID
   );
 
-  if (finalInsight && finalInsight.content.length > MAX_INSIGHT_LENGTH) {
+  if (finalInsight && finalInsight.type === "hourly" && finalInsight.content.length > MAX_INSIGHT_LENGTH) {
     console.warn(`Insight still too long after ${MAX_SHORTEN_ATTEMPTS} attempts, truncating`);
     await storeInsight(
       docClient,
