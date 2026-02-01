@@ -29,7 +29,58 @@ import {
   getSessionId,
   fetchGlucoseReadings,
   parseDexcomTimestamp,
+  type DexcomReading,
 } from "./dexcom/client.js";
+import { storeRecords, createDocClient } from "@diabetes/core";
+import type { CgmReading } from "@diabetes/core";
+
+/** Reusable DynamoDB document client for CGM storage */
+let cgmDocClient: DynamoDBDocumentClient | null = null;
+
+function getCgmDocClient(): DynamoDBDocumentClient {
+  if (!cgmDocClient) {
+    cgmDocClient = createDocClient();
+  }
+  return cgmDocClient;
+}
+
+/** Default user ID for CGM storage */
+const CGM_USER_ID = "john";
+
+/**
+ * Store Dexcom readings as CGM records for agent analysis (dual-write).
+ */
+async function storeCgmReadingsForAgent(readings: DexcomReading[]): Promise<void> {
+  if (readings.length === 0) return;
+
+  try {
+    const tableName = Resource.SignageTable.name;
+    const cgmRecords: CgmReading[] = readings.map((reading) => ({
+      type: "cgm",
+      timestamp: parseDexcomTimestamp(reading.WT),
+      glucoseMgDl: reading.Value,
+      importedAt: Date.now(),
+      sourceFile: "dexcom-share-api",
+    }));
+
+    const result = await storeRecords(
+      getCgmDocClient(),
+      tableName,
+      CGM_USER_ID,
+      cgmRecords
+    );
+
+    if (result.written > 0) {
+      console.log(`CGM dual-write: ${result.written} new, ${result.duplicates} duplicates`);
+    }
+
+    if (result.errors.length > 0) {
+      console.error(`CGM dual-write errors: ${result.errors.join(", ")}`);
+    }
+  } catch (error) {
+    console.error("CGM dual-write failed:", error instanceof Error ? error.message : String(error));
+  }
+}
 import type { TreatmentDisplayData, GlookoTreatmentsItem } from "./glooko/types.js";
 import { calculateTreatmentTotals } from "./rendering/treatment-renderer.js";
 import { queryDailyInsulinByDateRange, getCurrentInsight } from "@diabetes/core";
@@ -74,6 +125,10 @@ async function fetchBloodSugarData(): Promise<{
 
     // Fetch history (24 hours for split chart: 21h compressed + 3h detailed)
     const historyReadings = await fetchGlucoseReadings(sessionId, 1440, 300);
+
+    // Dual-write: store readings for agent analysis (fire-and-forget)
+    // Use historyReadings since it includes all recent data
+    void storeCgmReadingsForAgent(historyReadings || []);
 
     let current: BloodSugarDisplayData | null = null;
 
