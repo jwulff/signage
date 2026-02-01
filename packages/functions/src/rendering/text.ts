@@ -97,7 +97,11 @@ const TINY_FONT: Record<string, number[]> = {
   "?": [0b110, 0b001, 0b010, 0b000, 0b010],
   "'": [0b010, 0b010, 0b000, 0b000, 0b000],
   // Arrows for trend display
-  "→": [0b010, 0b001, 0b111, 0b001, 0b010], // Right arrow
+  "→": [0b010, 0b001, 0b111, 0b001, 0b010], // Right arrow (stable)
+  "↑": [0b010, 0b111, 0b010, 0b010, 0b010], // Up arrow (rising)
+  "↓": [0b010, 0b010, 0b010, 0b111, 0b010], // Down arrow (falling)
+  "↗": [0b011, 0b001, 0b101, 0b010, 0b000], // Up-right arrow (rising slowly)
+  "↘": [0b000, 0b010, 0b101, 0b001, 0b011], // Down-right arrow (falling slowly)
   ">": [0b100, 0b010, 0b001, 0b010, 0b100], // Greater than as arrow alternative
 };
 
