@@ -27,13 +27,14 @@ export interface InsightDisplayData {
 
 /**
  * Layout constants for insight region
- * Renders in the same area as weather band (Y=12-19)
- * Two lines of text, ~16 chars each = ~32 chars total
+ * Line 1 at Y=12, Line 2 at Y=18 (extends to ~Y=22 with 5px font)
+ * Two lines of text, ~15 chars each = ~30 chars total
  */
 const INSIGHT_LINE1_Y = 12; // First line
 const INSIGHT_LINE2_Y = 18; // Second line (6px spacing for 5px font + 1px gap)
 const TEXT_PADDING_X = 2;
-const MAX_CHARS_PER_LINE = 16; // 64px display / 4px per char = 16 chars
+// With padding=2 and 4px per char, 15 chars = 60px, fits within 64px display
+const MAX_CHARS_PER_LINE = 15;
 
 /**
  * Get color for insight based on type and staleness
@@ -62,8 +63,8 @@ function getInsightColor(data: InsightDisplayData): RGB {
  * Split text into two lines for display
  * 3x5 font = 4px per character (3px char + 1px space)
  * Display width = 64px, padding = 2px each side
- * Max chars per line = ~16 chars
- * Total = ~32 chars across 2 lines
+ * Max chars per line = 15 chars (with padding)
+ * Total = ~30 chars across 2 lines
  */
 function splitForDisplay(text: string): [string, string] {
   // Clean up the text - remove markdown, extra spaces
@@ -77,11 +78,12 @@ function splitForDisplay(text: string): [string, string] {
     return [cleaned, ""];
   }
 
-  // Try to split at a word boundary near the middle
+  // Try to split at a word boundary near the end of first line
   const maxTotal = MAX_CHARS_PER_LINE * 2;
+  const wasTruncated = cleaned.length > maxTotal;
   const textToSplit = cleaned.slice(0, maxTotal);
 
-  // Find a good split point (space near the middle of first line)
+  // Find a good split point (space near the end of first line)
   let splitPoint = MAX_CHARS_PER_LINE;
   for (let i = MAX_CHARS_PER_LINE; i >= MAX_CHARS_PER_LINE - 4; i--) {
     if (textToSplit[i] === " ") {
@@ -93,9 +95,10 @@ function splitForDisplay(text: string): [string, string] {
   const line1 = textToSplit.slice(0, splitPoint).trim();
   let line2 = textToSplit.slice(splitPoint).trim();
 
-  // Truncate line2 if too long
-  if (line2.length > MAX_CHARS_PER_LINE) {
-    line2 = line2.slice(0, MAX_CHARS_PER_LINE - 2) + "..";
+  // Truncate line2 if too long, or add truncation marker if text was cut
+  if (line2.length > MAX_CHARS_PER_LINE || wasTruncated) {
+    const maxLine2 = wasTruncated ? MAX_CHARS_PER_LINE - 2 : MAX_CHARS_PER_LINE;
+    line2 = line2.slice(0, maxLine2 - 2) + "..";
   }
 
   return [line1, line2];

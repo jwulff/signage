@@ -26,15 +26,16 @@ Updated the agent's system prompt to be explicit about how to use the storeInsig
 
 ### Insight Text Layout
 - Two lines of text at Y=12 and Y=18 (6px spacing for 5px font)
-- ~16 characters per line = ~32 characters total
-- Smart word-wrap that splits at word boundaries
+- ~15 characters per line = ~30 characters total
+- Word-wrap that prefers word boundaries but falls back to fixed character limit
 - Strips markdown formatting (headers, bold markers)
+- Adds truncation marker ".." when text exceeds available space
 
 ## Key Design Decisions
 
 - **Explicit examples in prompt**: Models learn better from examples than abstract instructions
 - **Conditional weather rendering**: Band only appears with weather data, leaving space for insights
-- **Two-line insight display**: Doubles the available text from 15 to 32 characters
+- **Two-line insight display**: Doubles the available text from 15 to 30 characters
 - **Weather preserved, not deleted**: All weather code stays in place for future displays
 - **Character limit emphasis**: Reiterated the 80-char limit from the OpenAPI schema in the prompt itself for redundancy
 - **Call order clarified**: Explicitly stated to call storeInsight AFTER analysis, not during markdown response generation

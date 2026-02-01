@@ -84,7 +84,7 @@ describe("renderClockRegion", () => {
     const weather: ClockWeatherData = { tempNow: 60 };
     renderClockRegion(frame, "America/Los_Angeles", weather);
 
-    // Sunlight band is at rows 13-20 (compact layout)
+    // Sunlight band is at rows 12-19 (compact layout)
     // Check center column for band pixels
     const bandPixel = getPixel(frame, 32, 16);
     expect(bandPixel).not.toBeNull();
