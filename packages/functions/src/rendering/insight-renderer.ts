@@ -96,9 +96,9 @@ function splitForDisplay(text: string): [string, string] {
   let line2 = textToSplit.slice(splitPoint).trim();
 
   // Truncate line2 if too long, or add truncation marker if text was cut
+  // Always use full 15 chars when adding ".." marker (13 chars + ".." = 15)
   if (line2.length > MAX_CHARS_PER_LINE || wasTruncated) {
-    const maxLine2 = wasTruncated ? MAX_CHARS_PER_LINE - 2 : MAX_CHARS_PER_LINE;
-    line2 = line2.slice(0, maxLine2 - 2) + "..";
+    line2 = line2.slice(0, MAX_CHARS_PER_LINE - 2) + "..";
   }
 
   return [line1, line2];
