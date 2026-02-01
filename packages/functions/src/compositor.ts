@@ -169,8 +169,11 @@ async function cacheWeather(data: ClockWeatherData): Promise<void> {
  * Fetch weather data from Open-Meteo API (free, no API key needed)
  * Returns temperatures, cloud cover, and precipitation for display
  * Uses DynamoDB cache to handle API flakiness
+ *
+ * NOTE: Currently disabled - insight display uses the same Y position.
+ * Exported for future use in other displays.
  */
-async function fetchWeatherData(): Promise<ClockWeatherData | null> {
+export async function fetchWeatherData(): Promise<ClockWeatherData | null> {
   // Try cache first
   const cached = await getCachedWeather();
   if (cached) {
@@ -473,10 +476,12 @@ async function updateDisplay(): Promise<{
 
   const apiClient = new ApiGatewayManagementApiClient({ endpoint });
 
-  // Fetch blood sugar, weather, treatment, and insight data in parallel
-  const [bloodSugarResult, weatherData, treatmentData, insightData] = await Promise.all([
+  // Fetch blood sugar, treatment, and insight data in parallel
+  // Note: Weather fetching disabled - insight display uses the same Y position (row 12)
+  // Weather code is preserved for future displays. Re-enable by uncommenting below.
+  const [bloodSugarResult, treatmentData, insightData] = await Promise.all([
     fetchBloodSugarData(),
-    fetchWeatherData(),
+    // fetchWeatherData(), // Disabled: overlaps with insight region
     fetchTreatmentData(),
     fetchCurrentInsight(),
   ]);
@@ -489,11 +494,12 @@ async function updateDisplay(): Promise<{
     console.log("Blood sugar data unavailable");
   }
 
-  if (weatherData) {
-    console.log(`Weather: ${weatherData.tempNow}°F now, ${weatherData.tempMinus12h}°F 12h ago, ${weatherData.tempPlus12h}°F in 12h`);
-  } else {
-    console.log("Weather data unavailable");
-  }
+  // Weather logging disabled (see comment above)
+  // if (weatherData) {
+  //   console.log(`Weather: ${weatherData.tempNow}°F now, ${weatherData.tempMinus12h}°F 12h ago, ${weatherData.tempPlus12h}°F in 12h`);
+  // } else {
+  //   console.log("Weather data unavailable");
+  // }
 
   if (treatmentData && !treatmentData.isStale) {
     console.log(`Treatments (4h): ${treatmentData.recentInsulinUnits}u insulin, ${treatmentData.recentCarbsGrams}g carbs, ${treatmentData.treatments.length} events`);
@@ -514,7 +520,7 @@ async function updateDisplay(): Promise<{
     bloodSugar: bloodSugarData,
     bloodSugarHistory: history.length > 0 ? { points: history } : undefined,
     timezone: "America/Los_Angeles",
-    weather: weatherData ?? undefined,
+    // weather: weatherData ?? undefined, // Disabled: overlaps with insight region
     treatments: treatmentData,
     insight: insightData,
   });
