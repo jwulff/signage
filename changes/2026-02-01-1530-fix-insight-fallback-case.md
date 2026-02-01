@@ -10,15 +10,18 @@ The agent was correctly storing insights via the `storeInsight` tool, but the fa
 
 ## How
 
-Changed the fallback detection from case-sensitive to case-insensitive:
+Changed the fallback detection from case-sensitive to case-insensitive in all three analysis files:
+
+- `hourly.ts` - Fixed check for "stored" and "insight"
+- `daily.ts` - Fixed check for "stored"
+- `weekly.ts` - Fixed check for "stored"
 
 ```typescript
 // Before (bug)
-if (!response.includes("stored") && !response.includes("insight"))
+if (!response.includes("stored"))
 
 // After (fix)
-const lowerResponse = response.toLowerCase();
-if (!lowerResponse.includes("stored") && !lowerResponse.includes("insight"))
+if (!response.toLowerCase().includes("stored"))
 ```
 
 ## Key Design Decisions

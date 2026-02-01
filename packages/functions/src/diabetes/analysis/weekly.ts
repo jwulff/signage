@@ -73,8 +73,8 @@ Store the insight using the storeInsight tool with type="weekly".`;
     const response = await invokeAgent(prompt);
     console.log("Agent response:", response);
 
-    // Fallback if agent didn't store insight
-    if (!response.includes("stored")) {
+    // Fallback if agent didn't store insight (case-insensitive check)
+    if (!response.toLowerCase().includes("stored")) {
       const insightText = extractInsightFromResponse(response);
       if (insightText) {
         await storeInsight(
