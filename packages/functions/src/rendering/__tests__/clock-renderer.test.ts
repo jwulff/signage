@@ -79,9 +79,10 @@ describe("renderClockRegion", () => {
     expect(foundBrightPixel).toBe(true);
   });
 
-  it("renders sunlight band", () => {
+  it("renders sunlight band when weather data is provided", () => {
     const frame = createSolidFrame(64, 64);
-    renderClockRegion(frame, "America/Los_Angeles");
+    const weather: ClockWeatherData = { tempNow: 60 };
+    renderClockRegion(frame, "America/Los_Angeles", weather);
 
     // Sunlight band is at rows 13-20 (compact layout)
     // Check center column for band pixels
@@ -91,9 +92,19 @@ describe("renderClockRegion", () => {
     expect(bandPixel!.r + bandPixel!.g + bandPixel!.b).toBeGreaterThan(0);
   });
 
-  it("renders center line (now indicator) in white", () => {
+  it("skips sunlight band when no weather data provided", () => {
     const frame = createSolidFrame(64, 64);
-    renderClockRegion(frame, "America/Los_Angeles");
+    renderClockRegion(frame, "America/Los_Angeles"); // No weather
+
+    // Band area should be black (background color)
+    const bandPixel = getPixel(frame, 32, 16);
+    expect(bandPixel).toEqual({ r: 0, g: 0, b: 0 });
+  });
+
+  it("renders center line (now indicator) in white when weather provided", () => {
+    const frame = createSolidFrame(64, 64);
+    const weather: ClockWeatherData = { tempNow: 60 };
+    renderClockRegion(frame, "America/Los_Angeles", weather);
 
     // Center line should be white at center of band
     const centerX = 32;
