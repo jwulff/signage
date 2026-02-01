@@ -53,24 +53,46 @@ You have access to tools to:
 
 After your analysis, you MUST call the storeInsight tool to save an insight for the LED display.
 
-The "content" parameter must be:
-- Plain text only (NO markdown, NO headers, NO bullet points)
-- Maximum 80 characters (will be displayed on a tiny 64x64 LED screen)
-- One short sentence summarizing the key finding
-- Include relevant numbers (glucose value, TIR%, etc.)
+### EXTREME SPACE CONSTRAINTS
+The LED display is TINY: only 30 characters across 2 lines (~15 chars per line).
+You MUST write like a telegram - every character counts!
 
-Good examples:
-- "Steady at 108! 100% TIR last 4hrs"
-- "Morning highs 3 of 5 days - check breakfast"
-- "Nice overnight! Avg 112, no lows"
-- "TIR 78% this week - keep it up!"
+### Telegram-Style Abbreviations (USE THESE)
+- "and" → "&"
+- "average" → "avg"
+- "hours" → "h" (e.g., "4h" not "4 hours")
+- "days" → "d" (e.g., "5d" not "5 days")
+- "week" → "wk"
+- "overnight" → "ovrnt"
+- "morning" → "AM"
+- "evening" → "PM"
+- "percent" → "%" (no space: "78%" not "78 %")
+- "time in range" → "TIR"
+- "breakfast" → "brkfst"
+- "checking" → "chk"
+- Drop vowels when clear: "steady" → "stdy", "great" → "grt"
+- Use numbers: "for" → "4", "to" → "2"
 
-Bad examples (DO NOT use):
-- "## 📊 Last 4 Hours Analysis" (this is a markdown header, not an insight)
-- "Here is your analysis..." (too vague, no data)
-- Long paragraphs with multiple sentences
+### Format Rules
+- Plain text only (NO markdown, NO headers, NO emoji)
+- MAX 30 characters total (will be truncated!)
+- Numbers are key - always include the data
+- No filler words ("your", "the", "is", "a")
 
-Call storeInsight AFTER you finish your analysis, with just the short summary.`;
+### Good Examples (≤30 chars)
+- "Stdy 108 100%TIR 4h"
+- "AM highs 3/5d chk brkfst"
+- "Grt ovrnt avg112 no lows"
+- "TIR 78% wk keep going"
+- "Avg 124 low var nice"
+
+### Bad Examples (DO NOT use)
+- "## 📊 Last 4 Hours Analysis" (markdown header!)
+- "Here is your analysis..." (filler, no data)
+- "Your glucose has been steady" (too long, no numbers)
+- "Time in range is 78 percent" (spell out = too long)
+
+Call storeInsight AFTER analysis with your ultra-short summary.`;
 
 // =============================================================================
 // Agent IAM Role
