@@ -209,9 +209,9 @@ export const agent = new aws.bedrock.AgentAgent("DiabetesAnalyst", {
     },
   ],
 
-  // Don't auto-prepare - we'll let the last action group handle it
-  // This avoids race conditions when creating multiple action groups
-  prepareAgent: false,
+  // Prepare agent after updates to create new versions
+  // Action groups use dependsOn chains to avoid race conditions
+  prepareAgent: true,
 });
 
 // =============================================================================
@@ -307,12 +307,12 @@ new aws.lambda.Permission("InsightToolsBedrockPermission", {
   sourceArn: agent.agentArn,
 });
 
-// Create an agent alias for the DRAFT version (for development)
+// Create an agent alias that routes to the latest prepared version
 // Depends on all action groups being created first
 export const agentAlias = new aws.bedrock.AgentAgentAlias("DiabetesAnalystDraftAlias", {
   agentId: agent.agentId,
   agentAliasName: $interpolate`draft-${$app.stage}`,
-  description: "Development alias pointing to DRAFT version",
+  description: "Alias routing to latest prepared agent version",
 }, { dependsOn: [insightActionGroup] });
 
 // =============================================================================
