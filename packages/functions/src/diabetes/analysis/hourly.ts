@@ -82,8 +82,9 @@ Store the insight using the storeInsight tool with type="hourly".`;
     console.log("Agent response:", response);
 
     // The agent should have called storeInsight via the tool
-    // If it didn't, store a fallback insight
-    if (!response.includes("stored") && !response.includes("insight")) {
+    // If it didn't, store a fallback insight (case-insensitive check)
+    const lowerResponse = response.toLowerCase();
+    if (!lowerResponse.includes("stored") && !lowerResponse.includes("insight")) {
       const insightText = extractInsightFromResponse(response);
       if (insightText) {
         await storeInsight(
