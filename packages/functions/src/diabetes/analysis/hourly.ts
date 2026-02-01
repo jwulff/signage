@@ -78,7 +78,7 @@ CRITICAL: Maximum 30 characters total. Use abbreviations: avg, h, d, %, TIR, grt
 
 Store the insight using the storeInsight tool with type="hourly".`;
 
-    let response = await invokeAgent(initialPrompt, sessionId);
+    const response = await invokeAgent(initialPrompt, sessionId);
     console.log("Agent response:", response);
 
     // The agent should have called storeInsight via the tool
