@@ -48,7 +48,7 @@ describe("generateCompositeFrame", () => {
     expect(hasClockPixels).toBe(true);
   });
 
-  it("renders blood sugar region in bottom half", () => {
+  it("renders blood sugar region near top", () => {
     const data: CompositorData = {
       bloodSugar: {
         glucose: 120,
@@ -64,10 +64,10 @@ describe("generateCompositeFrame", () => {
     const frame = generateCompositeFrame(data);
 
     // Check for pixels in blood sugar region
-    // Glucose reading is now at rows 32-36 (right above sparkline)
+    // Glucose reading is now at rows 7-11 (below date/time)
     let hasBloodSugarPixels = false;
     for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 34); // Middle of text row (32-36)
+      const pixel = getPixel(frame, x, 9); // Middle of text row (7-11)
       if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
         hasBloodSugarPixels = true;
         break;
@@ -84,22 +84,22 @@ describe("generateCompositeFrame", () => {
     const frame = generateCompositeFrame(data);
 
     // Should show error text in blood sugar region
-    // Glucose reading (or error) is at rows 32-36
-    let hasBottomPixels = false;
+    // Glucose reading (or error) is at rows 7-11
+    let hasErrorPixels = false;
     for (let x = 0; x < 64; x++) {
-      for (let y = 32; y < 38; y++) { // Check text row area (32-36)
+      for (let y = 7; y < 12; y++) { // Check text row area (7-11)
         const pixel = getPixel(frame, x, y);
         if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
-          hasBottomPixels = true;
+          hasErrorPixels = true;
           break;
         }
       }
-      if (hasBottomPixels) break;
+      if (hasErrorPixels) break;
     }
-    expect(hasBottomPixels).toBe(true);
+    expect(hasErrorPixels).toBe(true);
   });
 
-  it("includes weather data in clock region when provided", () => {
+  it("accepts weather data without errors (weather band disabled in current layout)", () => {
     const data: CompositorData = {
       bloodSugar: null,
       weather: {
@@ -109,18 +109,11 @@ describe("generateCompositeFrame", () => {
       },
     };
 
+    // Weather band is disabled in current layout to maximize chart space
+    // Just verify the frame generates without errors
     const frame = generateCompositeFrame(data);
-
-    // Weather band should have some pixels (compact layout, rows 13-20)
-    let hasWeatherPixels = false;
-    for (let x = 0; x < 64; x++) {
-      const pixel = getPixel(frame, x, 16);
-      if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
-        hasWeatherPixels = true;
-        break;
-      }
-    }
-    expect(hasWeatherPixels).toBe(true);
+    expect(frame.width).toBe(64);
+    expect(frame.height).toBe(64);
   });
 
   it("includes blood sugar history chart when provided", () => {
@@ -145,10 +138,10 @@ describe("generateCompositeFrame", () => {
 
     const frame = generateCompositeFrame(data);
 
-    // Chart should have pixels in rows 34-62 (compact layout, expanded chart)
+    // Chart should have pixels in rows 13-40 (expanded chart area)
     let hasChartPixels = false;
     for (let x = 0; x < 64; x++) {
-      for (let y = 40; y < 60; y++) {
+      for (let y = 15; y < 38; y++) {
         const pixel = getPixel(frame, x, y);
         if (pixel && (pixel.r > 0 || pixel.g > 0 || pixel.b > 0)) {
           hasChartPixels = true;
@@ -186,11 +179,11 @@ describe("generateCompositeFrame", () => {
 
     const frame = generateCompositeFrame(data);
 
-    // Treatment chart is now at rows 23-27
-    // Should have blue pixels for insulin numbers (4-day totals)
+    // Treatment chart is now at rows 42-48 (below chart)
+    // Should have blue pixels for insulin numbers (5-day totals)
     let hasBluePixels = false;
     for (let x = 0; x < 64; x++) {
-      for (let y = 23; y < 28; y++) {
+      for (let y = 42; y < 49; y++) {
         const pixel = getPixel(frame, x, y);
         // Insulin numbers are blue (b > r)
         if (pixel && pixel.b > pixel.r && pixel.b > 30) {
@@ -227,10 +220,10 @@ describe("generateCompositeFrame", () => {
 
     const frame = generateCompositeFrame(data);
 
-    // Treatment chart (rows 23-27) should NOT have any significant pixels when stale
+    // Treatment chart (rows 42-48) should NOT have any significant pixels when stale
     let hasTreatmentPixels = false;
     for (let x = 0; x < 64; x++) {
-      for (let y = 23; y < 28; y++) {
+      for (let y = 42; y < 49; y++) {
         const pixel = getPixel(frame, x, y);
         // Check for any bright pixels (blue numbers)
         if (pixel && (pixel.b > 50 || pixel.r > 80)) {
