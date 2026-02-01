@@ -30,8 +30,13 @@ Disabled weather fetching in the compositor:
   better from examples than abstract instructions
 - **Weather preserved, not deleted**: All weather code stays in place for future displays
   that may have room for both weather and insights
+- **Character limit emphasis**: Reiterated the 80-char limit from the OpenAPI schema
+  in the prompt itself for redundancy
+- **Call order clarified**: Explicitly stated to call storeInsight AFTER analysis,
+  not during markdown response generation
 
 ## What's Next
 
 - Monitor agent behavior after deployment to verify insights are properly formatted
 - Re-enable weather for future displays with different layouts
+- Consider adding insight content validation in the Lambda if prompt engineering isn't sufficient
