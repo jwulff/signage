@@ -19,6 +19,17 @@ import {
 } from "../../dexcom/client.js";
 import { storeRecords, createDocClient } from "@diabetes/core";
 import type { CgmReading } from "@diabetes/core";
+import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+
+/** Reusable DynamoDB document client (lazy-initialized) */
+let docClient: DynamoDBDocumentClient | null = null;
+
+function getDocClient(): DynamoDBDocumentClient {
+  if (!docClient) {
+    docClient = createDocClient();
+  }
+  return docClient;
+}
 
 export interface BloodSugarData {
   /** Glucose value in mg/dL */
@@ -144,8 +155,8 @@ function dexcomToCgmRecord(reading: DexcomReading): CgmReading {
   };
 }
 
-/** Default user ID for single-user system */
-const DIABETES_USER_ID = "john";
+/** Default user ID for single-user system (consistent with other tools) */
+const DEFAULT_USER_ID = "john";
 
 /**
  * Store CGM readings for agent analysis (dual-write).
@@ -156,14 +167,13 @@ async function storeCgmReadingsForAgent(readings: DexcomReading[]): Promise<void
   if (readings.length === 0) return;
 
   try {
-    const docClient = createDocClient();
     const tableName = Resource.SignageTable.name;
     const cgmRecords = readings.map(dexcomToCgmRecord);
 
     const result = await storeRecords(
-      docClient,
+      getDocClient(),
       tableName,
-      DIABETES_USER_ID,
+      DEFAULT_USER_ID,
       cgmRecords
     );
 
