@@ -1,6 +1,8 @@
 /**
  * Blood Sugar Widget Updater
  * Fetches glucose readings from Dexcom Share API.
+ *
+ * Also writes CGM records to the diabetes data store for agent analysis.
  */
 
 import { Resource } from "sst";
@@ -15,6 +17,19 @@ import {
   parseDexcomTimestamp,
   type DexcomReading,
 } from "../../dexcom/client.js";
+import { storeRecords, createDocClient } from "@diabetes/core";
+import type { CgmReading } from "@diabetes/core";
+import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+
+/** Reusable DynamoDB document client (lazy-initialized) */
+let docClient: DynamoDBDocumentClient | null = null;
+
+function getDocClient(): DynamoDBDocumentClient {
+  if (!docClient) {
+    docClient = createDocClient();
+  }
+  return docClient;
+}
 
 export interface BloodSugarData {
   /** Glucose value in mg/dL */
@@ -127,6 +142,54 @@ function readingToTimeSeriesPoint(
   };
 }
 
+/**
+ * Convert a Dexcom reading to a CGM record for agent analysis.
+ */
+function dexcomToCgmRecord(reading: DexcomReading): CgmReading {
+  return {
+    type: "cgm",
+    timestamp: parseDexcomTimestamp(reading.WT),
+    glucoseMgDl: reading.Value,
+    importedAt: Date.now(),
+    sourceFile: "dexcom-share-api",
+  };
+}
+
+/** Default user ID for single-user system (consistent with other tools) */
+const DEFAULT_USER_ID = "john";
+
+/**
+ * Store CGM readings for agent analysis (dual-write).
+ * This writes readings to the same DynamoDB table but with different keys
+ * that the Bedrock agent queries for analysis.
+ */
+async function storeCgmReadingsForAgent(readings: DexcomReading[]): Promise<void> {
+  if (readings.length === 0) return;
+
+  try {
+    const tableName = Resource.SignageTable.name;
+    const cgmRecords = readings.map(dexcomToCgmRecord);
+
+    const result = await storeRecords(
+      getDocClient(),
+      tableName,
+      DEFAULT_USER_ID,
+      cgmRecords
+    );
+
+    if (result.written > 0) {
+      console.log(`CGM dual-write: ${result.written} new, ${result.duplicates} duplicates`);
+    }
+
+    if (result.errors.length > 0) {
+      console.error(`CGM dual-write errors: ${result.errors.join(", ")}`);
+    }
+  } catch (error) {
+    // Log but don't fail the widget update - display data is more important
+    console.error("CGM dual-write failed:", error instanceof Error ? error.message : String(error));
+  }
+}
+
 export const bloodSugarUpdater: WidgetUpdaterWithHistory = {
   id: "bloodsugar",
   name: "Blood Sugar Widget",
@@ -146,6 +209,10 @@ export const bloodSugarUpdater: WidgetUpdaterWithHistory = {
     if (!readings || readings.length === 0) {
       throw new Error("No glucose readings available");
     }
+
+    // Dual-write: store readings for agent analysis (fire-and-forget)
+    // This ensures the Bedrock agent has real-time CGM data
+    void storeCgmReadingsForAgent(readings);
 
     const latest = readings[0];
     const previous = readings[1];
@@ -191,6 +258,9 @@ export const bloodSugarUpdater: WidgetUpdaterWithHistory = {
     if (!readings || readings.length === 0) {
       return [];
     }
+
+    // Dual-write: store all historical readings for agent analysis
+    void storeCgmReadingsForAgent(readings);
 
     // Convert to time-series points, filtering to requested range
     // Readings come newest-first, reverse for chronological order
