@@ -1,17 +1,14 @@
 /**
  * Frame composer - combines all widgets into a single frame
  *
- * Layout (64x64) - 4 equally-spaced sections above sparkline:
+ * Layout (64x64) - optimized for glucose monitoring:
  * ┌───────────────────────────────────────┐
- * │        SUN JAN 19 10:45               │  rows 3-7
- * │                                       │  gap
- * │      [weather/sunlight band]          │  rows 12-19
- * │                                       │  gap
- * │        12  24  36  48  5m             │  rows 23-27 (insulin totals)
- * │                                       │  gap
- * │  → 142 +5 2m                          │  rows 32-36 (glucose reading)
- * │                                       │  gap
- * │     [glucose sparkline chart]         │  rows 40-62 (23px)
+ * │        SUN FEB 1  2:53                │  rows 1-5 (date/time)
+ * │   → 281  +9  0M                       │  rows 7-11 (glucose reading)
+ * │     [glucose sparkline chart]         │  rows 13-40 (28px - expanded!)
+ * │        16  13  12   4   2   4H        │  rows 42-48 (insulin totals)
+ * │     4-HOUR GLUCOSE                    │  rows 52-57 (insight line 1)
+ * │     ANALYSIS                          │  rows 58-63 (insight line 2)
  * └───────────────────────────────────────┘
  */
 
