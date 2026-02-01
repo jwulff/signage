@@ -307,12 +307,15 @@ new aws.lambda.Permission("InsightToolsBedrockPermission", {
   sourceArn: agent.agentArn,
 });
 
-// Create an agent alias that routes to the latest prepared version
-// Depends on all action groups being created first
+// Agent alias for invoking the agent
+// NOTE: Without explicit routingConfiguration, alias defaults to DRAFT version.
+// After deploy creates a new version via prepareAgent, manually update alias
+// in AWS Console: Bedrock > Agents > diabetes-analyst > Aliases > Edit routing
+// TODO: Implement custom resource to auto-update alias to latest version
 export const agentAlias = new aws.bedrock.AgentAgentAlias("DiabetesAnalystDraftAlias", {
   agentId: agent.agentId,
   agentAliasName: $interpolate`draft-${$app.stage}`,
-  description: "Alias routing to latest prepared agent version",
+  description: "Agent alias - update routing after deploy to use latest version",
 }, { dependsOn: [insightActionGroup] });
 
 // =============================================================================
