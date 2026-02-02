@@ -89,61 +89,39 @@ export const handler: DynamoDBStreamHandler = async (event) => {
     // Prompt the agent to generate a concise insight
     const initialPrompt = `Generate a short insight for my LED display (max 30 characters).
 
-TONE: You're an encouraging diabetes coach. Be warm and supportive when things are good, direct and helpful (never judgmental) when attention is needed.
+CRITICAL - WRITE LIKE A HUMAN, NOT A ROBOT:
+- NEVER use abbreviations like "avg", "hi", "4h", "TIR", "hrs"
+- NEVER cram numbers together like "avg230" or "now241"
+- ALWAYS write natural phrases a friend would say
+- If you can't say it naturally in 30 chars, say something simpler
 
-DATA SOURCES:
-- Dexcom: Real-time CGM readings (most current)
-- Glooko: Insulin, carbs, and historical data (may be hours old)
-Consider how fresh each data source is when forming your insight.
+GOOD: "Running high for a while"
+BAD: "Hi 4h avg230 now241" ← NEVER DO THIS
 
-COLOR MARKUP (wrap the ENTIRE insight in ONE color):
-- [green]...[/] = celebrations, in-range, wins
-- [red]...[/] = urgent, lows, action needed
-- [yellow]...[/] = caution, highs, attention
-- [orange]...[/] = warnings, watch out
-- [blue]...[/] = calm observations
-- [rainbow]...[/] = big celebrations, excitement!
+TONE: Encouraging diabetes coach. Warm when good, direct (never judgmental) when attention needed.
 
-IMPORTANT: Use ONE color tag around the whole message, not mixed colors.
+COLOR (wrap ENTIRE message in ONE color):
+[green] = wins, in-range | [yellow] = caution, highs | [red] = urgent, lows
+[blue] = observations | [rainbow] = big celebrations
 
-EXAMPLES (under 30 chars, entire message wrapped in one color):
+EXAMPLES - Notice how they sound like a friend talking:
 
-Celebrating:
-- "[green]In range all day![/]"
-- "[green]Nailed it today![/]"
-- "[rainbow]Best day this week![/]"
-- "[green]Steady overnight![/]"
+"[green]In range all day![/]"
+"[green]Steady overnight![/]"
+"[yellow]Been high a few hours[/]"
+"[yellow]Creeping up, watch it[/]"
+"[red]Dropping fast, eat![/]"
+"[blue]More insulin today[/]"
+"[rainbow]Best day this week![/]"
 
-Caution (highs):
-- "[yellow]Above 200 for 3hrs[/]"
-- "[yellow]Running high, check it[/]"
-- "[yellow]Trending up, watch it[/]"
-- "[orange]Stuck above 180 2hrs[/]"
+FORBIDDEN (never write like this):
+- "Hi 4h avg230 now241" ← robotic garbage
+- "Avg 142 TIR 78%" ← unreadable
+- "Above 200 3hrs" ← say "high for a while" instead
+- Any "avg", "TIR", "hi/lo" abbreviations
 
-Action needed (lows):
-- "[red]Falling fast, grab snack[/]"
-- "[red]Going low, snack time[/]"
-- "[red]Below 70, treat now[/]"
-
-Observations:
-- "[blue]More insulin than usual[/]"
-- "[blue]Calmer than yesterday[/]"
-- "[blue]Bouncing around today[/]"
-
-Empathy:
-- "[blue]Rough patch, hang in[/]"
-- "[blue]Tomorrow's fresh[/]"
-
-BAD EXAMPLES:
-- "[yellow]Running high[/], check it" (mixed colors - wrap ALL text in one color!)
-- "Stuck at 223" (say "above 200" not "at 223" for sustained highs)
-- "Avg 142 TIR 78%" (too robotic)
-- No color at all (always use color to convey emotion)
-
-Pick ONE color that matches the overall emotion and wrap the entire message.
-
-First fetch the glucose and treatment data, then store a warm, concise insight.
-Use storeInsight with type="hourly". Must be 30 characters or less.`;
+Write something a caring friend would text you. Keep it warm and human.
+Fetch data, then store insight with storeInsight type="hourly".`;
 
     const response = await invokeAgent(initialPrompt, sessionId);
     console.log("Agent response:", response);
@@ -251,13 +229,13 @@ async function enforceInsightQuality(sessionId: string): Promise<void> {
 Current: "${insight.content}"
 Problem: ${!valid ? "Contains markdown or isn't a real insight" : `Too long (${visibleLength} visible chars, max ${MAX_INSIGHT_LENGTH})`}
 
-Try again. Wrap the ENTIRE message in ONE color:
+Try again. Write like a HUMAN, not a robot:
 - "[green]In range all day![/]"
-- "[yellow]Above 200 for 3hrs[/]"
-- "[red]Falling fast, snack now[/]"
+- "[yellow]Been high a while[/]"
+- "[red]Dropping fast, eat![/]"
 
-ONE color tag around everything. Max ${MAX_INSIGHT_LENGTH} visible chars.
-Store using storeInsight with type="hourly".`;
+NO abbreviations. NO cramming numbers. Sound like a caring friend.
+ONE color, max ${MAX_INSIGHT_LENGTH} chars. storeInsight type="hourly".`;
 
     const response = await invokeAgent(fixPrompt, sessionId);
     console.log("Fix response:", response);
