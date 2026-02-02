@@ -1,22 +1,22 @@
 /**
  * Frame composer - combines all widgets into a single frame
  *
- * Layout (64x64) - optimized for glucose monitoring:
+ * Layout (64x64) - chart at bottom for visual priority:
  * ┌───────────────────────────────────────┐
  * │        SUN FEB 1  2:53                │  rows  1-5  (date/time)
  * │                                       │  row   6    (spacer)
- * │   → 281  +9  0M                       │  rows  7-11 (glucose reading)
- * │                                       │  row  12    (spacer)
- * │     [glucose sparkline chart]         │  rows 13-40 (28px - expanded!)
- * │                                       │  row  41    (spacer)
- * │        16  13  12   4   2   4H        │  rows 42-48 (insulin totals)
- * │                                       │  rows 49-51 (spacer)
- * │     4-HOUR GLUCOSE                    │  rows 52-57 (insight line 1)
- * │     ANALYSIS                          │  rows 58-63 (insight line 2)
+ * │     4-HOUR GLUCOSE                    │  rows  7-11 (insight line 1)
+ * │     ANALYSIS                          │  rows 13-17 (insight line 2)
+ * │                                       │  row  19    (spacer)
+ * │        16  13  12   4   2   4H        │  rows 20-26 (insulin totals)
+ * │                                       │  row  27    (spacer)
+ * │   → 281  +9  0M                       │  rows 28-32 (glucose reading)
+ * │                                       │  row  33    (spacer)
+ * │     [glucose sparkline chart]         │  rows 34-63 (30px - expanded!)
  * └───────────────────────────────────────┘
  *
  * Note: Spacer rows are intentionally left blank to provide visual separation
- * between the main sections (time, glucose reading, chart, insulin, insights).
+ * between the main sections (time, insights, insulin, glucose reading, chart).
  */
 
 import type { Frame } from "@signage/core";
