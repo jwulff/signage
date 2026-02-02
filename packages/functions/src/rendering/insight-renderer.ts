@@ -6,7 +6,7 @@
  */
 
 import type { Frame, RGB } from "@signage/core";
-import { drawTinyText, measureTinyText } from "./text.js";
+import { drawTinyText, measureTinyText, DISPLAY_WIDTH } from "./text.js";
 import { COLORS } from "./colors.js";
 
 /**
@@ -135,6 +135,15 @@ function stripColorMarkup(text: string): string {
 }
 
 /**
+ * Calculate X position to center text horizontally (accounting for color markup)
+ */
+function centerTextX(textWithMarkup: string): number {
+  const visibleText = stripColorMarkup(textWithMarkup);
+  const pixelWidth = measureTinyText(visibleText);
+  return Math.floor((DISPLAY_WIDTH - pixelWidth) / 2);
+}
+
+/**
  * Insight display data
  */
 export interface InsightDisplayData {
@@ -157,9 +166,7 @@ export interface InsightDisplayData {
  */
 const INSIGHT_LINE1_Y = 7;  // First line (row 7)
 const INSIGHT_LINE2_Y = 13; // Second line (row 13, 6px spacing for 5px font + 1px gap)
-const TEXT_PADDING_X = 2;
-// With padding=2 and 4px per char, 15 chars = 60px, fits within 64px display
-const MAX_CHARS_PER_LINE = 15;
+const MAX_CHARS_PER_LINE = 15; // 15 chars × 4px = 60px, fits centered on 64px display
 
 /**
  * Get color for insight based on type and staleness
@@ -350,8 +357,9 @@ export function renderInsightRegion(
   insight: InsightDisplayData | null
 ): void {
   if (!insight || insight.status === "unavailable") {
-    // Show "Analyzing..." when no insight available
-    drawTinyText(frame, "Analyzing...", TEXT_PADDING_X, INSIGHT_LINE1_Y, COLORS.stale);
+    // Show "Analyzing..." centered when no insight available
+    const analyzingX = centerTextX("Analyzing...");
+    drawTinyText(frame, "Analyzing...", analyzingX, INSIGHT_LINE1_Y, COLORS.stale);
     return;
   }
 
@@ -361,10 +369,12 @@ export function renderInsightRegion(
   // Split content into two lines for display (preserves color markup)
   const [line1, line2] = splitForDisplay(insight.content);
 
-  // Draw both lines with color support
-  drawColoredText(frame, line1, TEXT_PADDING_X, INSIGHT_LINE1_Y, defaultColor);
+  // Draw both lines centered with color support
+  const line1X = centerTextX(line1);
+  drawColoredText(frame, line1, line1X, INSIGHT_LINE1_Y, defaultColor);
   if (line2) {
-    drawColoredText(frame, line2, TEXT_PADDING_X, INSIGHT_LINE2_Y, defaultColor);
+    const line2X = centerTextX(line2);
+    drawColoredText(frame, line2, line2X, INSIGHT_LINE2_Y, defaultColor);
   }
 }
 
