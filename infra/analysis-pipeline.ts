@@ -1,8 +1,8 @@
 /**
  * Analysis Pipeline Infrastructure
  *
- * Event-driven pipeline that triggers AI analysis at regular intervals.
- * Uses EventBridge rules to schedule analysis workflows.
+ * Event-driven pipeline that triggers AI analysis when new diabetes data arrives.
+ * Uses DynamoDB Streams for real-time analysis and EventBridge for daily/weekly summaries.
  */
 
 import { table } from "./storage";
@@ -13,29 +13,41 @@ import { agent, agentAlias } from "./agent";
 // =============================================================================
 
 // Function config for analysis handlers
-// Using inline function definitions with Cron to avoid SST function reference issues
 const analysisEnvironment = {
   AGENT_ID: agent.agentId,
   AGENT_ALIAS_ID: agentAlias.agentAliasId,
 };
 
 // =============================================================================
-// EventBridge Scheduled Rules with Inline Functions
+// DynamoDB Stream Consumer (Real-Time Analysis)
 // =============================================================================
 
-// Hourly analysis - every hour
-// Analyzes recent glucose trends and generates insights
-export const hourlyAnalysisCron = new sst.aws.Cron("HourlyAnalysisCron", {
-  schedule: "rate(1 hour)",
-  function: {
-    handler: "packages/functions/src/diabetes/analysis/hourly.handler",
+// Stream-triggered analysis - runs when new diabetes data arrives
+// Filters for CGM, BOLUS, BASAL, CARBS records and applies freshness/debounce checks
+const analysisStreamConsumer = table.subscribe(
+  "AnalysisStreamConsumer",
+  {
+    handler: "packages/functions/src/diabetes/analysis/stream-trigger.handler",
     link: [table],
     timeout: "120 seconds",
     memory: "512 MB",
-    description: "Hourly glucose trend analysis",
+    description: "Event-driven glucose analysis triggered by new diabetes data",
     environment: analysisEnvironment,
   },
-});
+  {
+    transform: {
+      eventSourceMapping: {
+        // Serial processing for batch writes (Glooko sends 285 records at once)
+        // This prevents concurrent Bedrock Agent invocations
+        parallelizationFactor: 1,
+      },
+    },
+  }
+);
+
+// =============================================================================
+// EventBridge Scheduled Rules (Periodic Summaries)
+// =============================================================================
 
 // Daily analysis - 14:00 UTC (6 AM PST / 7 AM PDT)
 // Note: Fixed UTC time means this shifts by 1 hour during DST
@@ -69,9 +81,9 @@ export const weeklyAnalysisCron = new sst.aws.Cron("WeeklyAnalysisCron", {
 // IAM Permissions for Agent Invocation
 // =============================================================================
 
-// Allow analysis functions to invoke the Bedrock Agent
-new aws.iam.RolePolicy("HourlyAnalysisAgentPolicy", {
-  role: hourlyAnalysisCron.nodes.function.role,
+// Allow stream consumer to invoke the Bedrock Agent
+new aws.iam.RolePolicy("AnalysisStreamAgentPolicy", {
+  role: analysisStreamConsumer.nodes.function.role,
   policy: aws.iam.getPolicyDocumentOutput({
     statements: [
       {
@@ -114,7 +126,7 @@ new aws.iam.RolePolicy("WeeklyAnalysisAgentPolicy", {
 // =============================================================================
 
 export const outputs = {
-  hourlyAnalysisArn: hourlyAnalysisCron.nodes.function.arn,
+  analysisStreamConsumerArn: analysisStreamConsumer.nodes.function.arn,
   dailyAnalysisArn: dailyAnalysisCron.nodes.function.arn,
   weeklyAnalysisArn: weeklyAnalysisCron.nodes.function.arn,
 };

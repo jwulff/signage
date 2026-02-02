@@ -1,14 +1,15 @@
 /**
- * Hourly Analysis Lambda
+ * Stream-Triggered Analysis Lambda
  *
- * Triggered every hour to analyze recent glucose trends and generate insights.
- * Invokes the Bedrock Agent to produce actionable insights for the display.
+ * Triggered by DynamoDB Streams when new diabetes data arrives.
+ * Filters for relevant record types, applies freshness and debounce checks,
+ * then invokes the Bedrock Agent to generate insights for the display.
  */
 
 import { BedrockAgentRuntimeClient, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
 import { Resource } from "sst";
 import { createDocClient, storeInsight, getCurrentInsight } from "@diabetes/core";
-import type { ScheduledHandler } from "aws-lambda";
+import type { DynamoDBStreamHandler } from "aws-lambda";
 
 const bedrockClient = new BedrockAgentRuntimeClient({});
 const docClient = createDocClient();
@@ -19,46 +20,62 @@ const DEFAULT_USER_ID = "john";
 const MAX_INSIGHT_LENGTH = 30;
 const MAX_SHORTEN_ATTEMPTS = 2;
 
-/**
- * Invoke the diabetes analyst agent with a prompt
- */
-async function invokeAgent(prompt: string, sessionId: string): Promise<string> {
-  const agentId = process.env.AGENT_ID;
-  const agentAliasId = process.env.AGENT_ALIAS_ID;
+// Only these record types trigger analysis (UPPERCASE - matches keys.ts)
+const TRIGGER_TYPES = new Set(["CGM", "BOLUS", "BASAL", "CARBS"]);
 
-  if (!agentId || !agentAliasId) {
-    throw new Error("AGENT_ID and AGENT_ALIAS_ID must be set");
+// Only analyze fresh data (skip historical backfills from Glooko)
+const FRESHNESS_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
+
+// Debounce: skip if last analysis was < 60 seconds ago
+const DEBOUNCE_MS = 60_000;
+
+/**
+ * Stream-triggered analysis handler
+ */
+export const handler: DynamoDBStreamHandler = async (event) => {
+  const now = Date.now();
+
+  // Filter for: INSERT + trigger type + fresh data only
+  const relevantRecords = event.Records.filter((record) => {
+    if (record.eventName !== "INSERT") return false;
+
+    const pk = record.dynamodb?.NewImage?.pk?.S;
+    if (!pk) return false;
+
+    // PK format: USR#{userId}#{TYPE}#{date}
+    const recordType = pk.split("#")[2];
+    if (!TRIGGER_TYPES.has(recordType)) return false;
+
+    // Skip historical backfills - only analyze fresh data
+    const timestamp = record.dynamodb?.NewImage?.timestamp?.N;
+    if (timestamp && now - Number(timestamp) > FRESHNESS_THRESHOLD_MS) {
+      return false;
+    }
+
+    return true;
+  });
+
+  if (relevantRecords.length === 0) {
+    console.log("No fresh relevant records, skipping");
+    return;
   }
 
-  const response = await bedrockClient.send(
-    new InvokeAgentCommand({
-      agentId,
-      agentAliasId,
-      sessionId,
-      inputText: prompt,
-    })
+  console.log(`Stream triggered with ${relevantRecords.length} relevant records`);
+
+  // Debounce: check last analysis time
+  const currentInsight = await getCurrentInsight(
+    docClient,
+    Resource.SignageTable.name,
+    DEFAULT_USER_ID
   );
 
-  // Collect response chunks
-  let responseText = "";
-  if (response.completion) {
-    for await (const chunk of response.completion) {
-      if (chunk.chunk?.bytes) {
-        responseText += new TextDecoder().decode(chunk.chunk.bytes);
-      }
-    }
+  if (currentInsight && now - currentInsight.generatedAt < DEBOUNCE_MS) {
+    console.log("Debounce: analysis ran recently, skipping");
+    return;
   }
 
-  return responseText;
-}
-
-/**
- * Hourly analysis handler
- */
-export const handler: ScheduledHandler = async () => {
-  console.log("Hourly analysis triggered");
-
-  const sessionId = `hourly-${Date.now()}`;
+  // Run comprehensive analysis for the sign's two-line insight
+  const sessionId = `stream-${now}`;
 
   try {
     // Prompt the agent to analyze recent glucose data
@@ -100,13 +117,46 @@ Store the insight using the storeInsight tool with type="hourly".`;
     // Check if the stored insight is too long and retry if needed
     await enforceInsightLength(sessionId);
 
-    console.log("Hourly analysis complete");
+    console.log("Stream-triggered analysis complete");
   } catch (error) {
-    console.error("Hourly analysis error:", error);
+    console.error("Stream-triggered analysis error:", error);
     // Rethrow to trigger Lambda retry mechanism for transient errors
     throw error;
   }
 };
+
+/**
+ * Invoke the diabetes analyst agent with a prompt
+ */
+async function invokeAgent(prompt: string, sessionId: string): Promise<string> {
+  const agentId = process.env.AGENT_ID;
+  const agentAliasId = process.env.AGENT_ALIAS_ID;
+
+  if (!agentId || !agentAliasId) {
+    throw new Error("AGENT_ID and AGENT_ALIAS_ID must be set");
+  }
+
+  const response = await bedrockClient.send(
+    new InvokeAgentCommand({
+      agentId,
+      agentAliasId,
+      sessionId,
+      inputText: prompt,
+    })
+  );
+
+  // Collect response chunks
+  let responseText = "";
+  if (response.completion) {
+    for await (const chunk of response.completion) {
+      if (chunk.chunk?.bytes) {
+        responseText += new TextDecoder().decode(chunk.chunk.bytes);
+      }
+    }
+  }
+
+  return responseText;
+}
 
 /**
  * Check the stored insight length and ask agent to shorten if needed
