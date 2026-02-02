@@ -21,4 +21,5 @@ export const table = new sst.aws.Dynamo("SignageTable", {
     gsi2: { hashKey: "gsi2pk", rangeKey: "gsi2sk" },
   },
   ttl: "ttl",
+  stream: "new-image",
 });
