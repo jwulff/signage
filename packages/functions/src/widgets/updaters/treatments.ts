@@ -6,7 +6,7 @@
 import { Resource } from "sst";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { GetCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { queryDailyInsulinByDateRange } from "@diabetes/core";
+import { queryDailyInsulinByDateRange, formatDateInTimezone, DATA_TIMEZONE } from "@diabetes/core";
 import type { WidgetUpdater } from "../types.js";
 import type {
   TreatmentDisplayData,
@@ -73,12 +73,11 @@ const DEFAULT_USER_ID = "john";
  */
 async function fetchDailyInsulinTotals(): Promise<Record<string, number>> {
   try {
-    // Calculate date range: last 7 days
-    const now = new Date();
-    const endDate = now.toISOString().slice(0, 10);
-    const startDateObj = new Date(now);
-    startDateObj.setDate(startDateObj.getDate() - 6);
-    const startDate = startDateObj.toISOString().slice(0, 10);
+    // Calculate date range in Pacific timezone (matches stored data)
+    const now = Date.now();
+    const endDate = formatDateInTimezone(now, DATA_TIMEZONE);
+    const sixDaysAgo = now - 6 * 24 * 60 * 60 * 1000;
+    const startDate = formatDateInTimezone(sixDaysAgo, DATA_TIMEZONE);
 
     return await queryDailyInsulinByDateRange(
       docClient,
