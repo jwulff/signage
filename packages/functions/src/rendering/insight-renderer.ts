@@ -14,29 +14,29 @@ import { COLORS } from "./colors.js";
  * Usage: [green]text[/] or [rainbow]text[/]
  */
 const INSIGHT_COLORS: Record<string, RGB> = {
-  green: { r: 0, g: 255, b: 0 },
-  red: { r: 255, g: 60, b: 60 },
-  yellow: { r: 255, g: 255, b: 0 },
-  orange: { r: 255, g: 165, b: 0 },
-  blue: { r: 100, g: 180, b: 255 },
-  white: { r: 255, g: 255, b: 255 },
-  gray: { r: 128, g: 128, b: 128 },
-  purple: { r: 200, g: 100, b: 255 },
-  pink: { r: 255, g: 150, b: 200 },
-  cyan: { r: 0, g: 255, b: 255 },
+  green: { r: 0, g: 170, b: 0 },
+  red: { r: 170, g: 40, b: 40 },
+  yellow: { r: 170, g: 170, b: 0 },
+  orange: { r: 170, g: 110, b: 0 },
+  blue: { r: 67, g: 120, b: 170 },
+  white: { r: 170, g: 170, b: 170 },
+  gray: { r: 85, g: 85, b: 85 },
+  purple: { r: 133, g: 67, b: 170 },
+  pink: { r: 170, g: 100, b: 133 },
+  cyan: { r: 0, g: 170, b: 170 },
 };
 
 /**
  * Rainbow color cycle for celebratory text
  */
 const RAINBOW_COLORS: RGB[] = [
-  { r: 255, g: 0, b: 0 },     // Red
-  { r: 255, g: 127, b: 0 },   // Orange
-  { r: 255, g: 255, b: 0 },   // Yellow
-  { r: 0, g: 255, b: 0 },     // Green
-  { r: 0, g: 200, b: 255 },   // Cyan
-  { r: 100, g: 100, b: 255 }, // Blue
-  { r: 200, g: 0, b: 255 },   // Purple
+  { r: 170, g: 0, b: 0 },     // Red
+  { r: 170, g: 85, b: 0 },    // Orange
+  { r: 170, g: 170, b: 0 },   // Yellow
+  { r: 0, g: 170, b: 0 },     // Green
+  { r: 0, g: 133, b: 170 },   // Cyan
+  { r: 67, g: 67, b: 170 },   // Blue
+  { r: 133, g: 0, b: 170 },   // Purple
 ];
 
 /**
