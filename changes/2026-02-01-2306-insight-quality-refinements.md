@@ -39,12 +39,21 @@ Reduced all insight colors by ~33% for subtle tints:
 - Yellow: 255,255 → 170,170
 - Rainbow colors similarly muted
 
+### Balanced Line Splitting
+
+For short text that fits in two lines, split near the middle instead of filling the first line:
+- Before: "BEEN HIGH A FEW" + "HOURS" (15+5 chars, unbalanced)
+- After: "BEEN HIGH A" + "FEW HOURS" (11+9 chars, balanced)
+
+Long text (>30 chars) still fills the first line before wrapping.
+
 ## Key Design Decisions
 
 - **Forceful prompting**: The agent needed explicit FORBIDDEN examples to stop generating abbreviations. Subtle guidance wasn't enough.
 - **Ranges over precision**: Exact numbers feel clinical; ranges feel human ("over 200" vs "241")
 - **Questions over commands**: A caring friend suggests, doesn't order. "bolus?" feels supportive, "need bolus" feels judgmental.
 - **Muted tints**: Colors should complement the display, not compete with glucose readings and charts.
+- **Balanced lines**: Evenly distributed text looks more intentional; a lone word on line 2 looks like an afterthought.
 
 ## What's Next
 
