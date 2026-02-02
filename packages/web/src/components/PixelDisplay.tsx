@@ -79,6 +79,11 @@ export function PixelDisplay({
         border: "2px solid #333",
         borderRadius: "4px",
         boxShadow: "0 0 20px rgba(0, 0, 0, 0.5)",
+        maxWidth: "calc(100vw - 32px)",
+        maxHeight: "calc(100vw - 32px)",
+        width: "auto",
+        height: "auto",
+        imageRendering: "pixelated",
       }}
     />
   );
