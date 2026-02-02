@@ -220,12 +220,40 @@ function splitForDisplay(text: string): [string, string] {
   const maxTotal = MAX_CHARS_PER_LINE * 2;
   const wasTruncated = plainText.length > maxTotal;
 
-  // Find a good split point in plain text (space near end of first line)
+  // Find a good split point in plain text
+  // For short text (fits in 2 lines), balance evenly around the middle
+  // For long text, split at max line length
   let splitPoint = MAX_CHARS_PER_LINE;
-  for (let i = Math.min(MAX_CHARS_PER_LINE, plainText.length - 1); i >= MAX_CHARS_PER_LINE - 4 && i >= 0; i--) {
-    if (plainText[i] === " ") {
-      splitPoint = i;
-      break;
+
+  if (plainText.length <= maxTotal) {
+    // Short text: find space nearest to middle for balanced lines
+    const middle = Math.floor(plainText.length / 2);
+    let bestSplit = -1;
+
+    // Search outward from middle for a space
+    for (let offset = 0; offset <= middle; offset++) {
+      // Check right of middle first (prefer slightly longer first line)
+      if (middle + offset < plainText.length && plainText[middle + offset] === " ") {
+        bestSplit = middle + offset;
+        break;
+      }
+      // Then check left of middle
+      if (middle - offset >= 0 && plainText[middle - offset] === " ") {
+        bestSplit = middle - offset;
+        break;
+      }
+    }
+
+    if (bestSplit > 0) {
+      splitPoint = bestSplit;
+    }
+  } else {
+    // Long text: find space near end of first line
+    for (let i = MAX_CHARS_PER_LINE; i >= MAX_CHARS_PER_LINE - 4 && i >= 0; i--) {
+      if (plainText[i] === " ") {
+        splitPoint = i;
+        break;
+      }
     }
   }
 
