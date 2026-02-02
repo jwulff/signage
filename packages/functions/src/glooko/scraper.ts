@@ -1261,7 +1261,8 @@ interface GlookoResource {
 }
 
 // Default user ID for single-user system
-const DEFAULT_USER_ID = "primary";
+// Must match the user ID used in treatments.ts, compositor.ts, and other query code
+const DEFAULT_USER_ID = "john";
 
 /**
  * Lambda handler for scheduled scraping
