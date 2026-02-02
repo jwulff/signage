@@ -9,26 +9,26 @@ import { COLORS, type RangeStatus } from "./colors.js";
 import { renderChart, type ChartPoint } from "./chart-renderer.js";
 import type { TreatmentDisplayData } from "../glooko/types.js";
 
-// Blood sugar region boundaries (new layout - glucose at top, chart expanded)
-const BG_REGION_START = 7;  // Glucose reading starts at row 7
+// Blood sugar region boundaries (chart at bottom layout)
+const BG_REGION_START = 28;  // Glucose reading starts at row 28
 const BG_REGION_END = 63;
 
-// Layout configuration - optimized for glucose monitoring
-// Order: date/time (1-5), glucose (7-11), chart (13-40), insulin (42-48), insight (52-63)
+// Layout configuration - chart at bottom for visual priority
+// Order: date/time (1-5), insight (7-18), insulin (20-26), glucose (28-32), chart (34-63)
 const TEXT_MARGIN = 1; // Left/right margin for text
 const CHART_X = 1;
 const CHART_WIDTH = DISPLAY_WIDTH - 2; // Full width minus margins
 
-// Glucose reading - near top, right below date/time
-const TEXT_ROW = 7; // Rows 7-11
+// Treatment chart (insulin totals with bolus/basal bars) - above glucose
+// Layout: rows 20-26 (5px text + 1px gap + 1px bar = 7px total)
+const TREATMENT_CHART_Y = 20;
 
-// Glucose sparkline chart - EXPANDED to use more vertical space
-const GLUCOSE_CHART_Y = 13;
-const GLUCOSE_CHART_HEIGHT = 28; // Rows 13-40 (expanded from 23!)
+// Glucose reading - above chart
+const TEXT_ROW = 28; // Rows 28-32
 
-// Treatment chart (insulin totals with bolus/basal bars) - below chart
-// Layout: rows 42-48 (5px text + 1px gap + 1px bar = 7px total)
-const TREATMENT_CHART_Y = 42;
+// Glucose sparkline chart - at bottom, expanded to 30 rows
+const GLUCOSE_CHART_Y = 34;
+const GLUCOSE_CHART_HEIGHT = 30; // Rows 34-63
 
 // Split chart: left half = 21h compressed, right half = 3h detailed
 const CHART_LEFT_WIDTH = Math.floor(CHART_WIDTH / 2);

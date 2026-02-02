@@ -27,11 +27,11 @@ export interface InsightDisplayData {
 
 /**
  * Layout constants for insight region
- * Positioned at very bottom of display (rows 52-63)
+ * Positioned below date/time (rows 7-18)
  * Two lines of text, ~15 chars each = ~30 chars total
  */
-const INSIGHT_LINE1_Y = 52; // First line (row 52)
-const INSIGHT_LINE2_Y = 58; // Second line (row 58, 6px spacing for 5px font + 1px gap)
+const INSIGHT_LINE1_Y = 7;  // First line (row 7)
+const INSIGHT_LINE2_Y = 13; // Second line (row 13, 6px spacing for 5px font + 1px gap)
 const TEXT_PADDING_X = 2;
 // With padding=2 and 4px per char, 15 chars = 60px, fits within 64px display
 const MAX_CHARS_PER_LINE = 15;
