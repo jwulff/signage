@@ -226,7 +226,7 @@ function splitForDisplay(text: string): [string, string] {
   const markedSplitPoint = mapPlainIndexToMarked(cleaned, splitPoint);
 
   const line1 = cleaned.slice(0, markedSplitPoint).trim();
-  let line2 = cleaned.slice(markedSplitPoint).trim();
+  const line2 = cleaned.slice(markedSplitPoint).trim();
 
   // Close any open color tags in line1 and reopen in line2
   const { closedLine1, openedLine2 } = balanceColorTags(line1, line2);
