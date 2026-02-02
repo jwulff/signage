@@ -30,6 +30,14 @@ const FRESHNESS_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
 const DEBOUNCE_MS = 60_000;
 
 /**
+ * Strip color markup from text for length/validation calculations
+ * e.g., "[green]Hello[/] world" -> "Hello world"
+ */
+function stripColorMarkup(text: string): string {
+  return text.replace(/\[(\w+)\](.*?)\[\/\]/g, "$2").replace(/\[\w+\]/g, "").replace(/\[\/\]/g, "");
+}
+
+/**
  * Stream-triggered analysis handler
  */
 export const handler: DynamoDBStreamHandler = async (event) => {
@@ -88,43 +96,48 @@ DATA SOURCES:
 - Glooko: Insulin, carbs, and historical data (may be hours old)
 Consider how fresh each data source is when forming your insight.
 
-GOOD EXAMPLES (natural language, under 30 chars):
+COLOR MARKUP (use to convey emotion):
+- [green]text[/] = celebrations, in-range, wins
+- [red]text[/] = urgent, lows, action needed
+- [yellow]text[/] = caution, highs, attention
+- [orange]text[/] = warnings, watch out
+- [blue]text[/] = calm observations
+- [rainbow]text[/] = big celebrations, excitement!
+- Plain text = neutral/default
 
-Celebrating wins:
-- "In range all day!"
-- "Steady overnight, nice!"
-- "Great morning so far"
-- "Nailed it today!"
-- "Best day this week!"
+EXAMPLES WITH COLOR (under 30 chars including markup):
+
+Celebrating:
+- "[green]In range all day![/]"
+- "[green]Nailed it[/] [rainbow]today![/]"
+- "[rainbow]Best day this week![/]"
+- "[green]Steady overnight![/]"
 
 Gentle nudges:
-- "Running high, check it"
-- "Trending up, watch it"
-- "Bit high, no worries"
-- "Creeping up slowly"
+- "[yellow]Running high[/], check it"
+- "[yellow]Trending up[/], watch it"
+- "[orange]Bit high[/], no worries"
 
 Action needed:
-- "Falling fast, grab snack"
-- "Dropping, heads up"
-- "Going low, snack time"
+- "[red]Falling fast[/], grab snack"
+- "[red]Going low[/], snack time"
+- "[red]Dropping[/], heads up"
 
 Observations:
-- "More insulin than usual"
-- "Bouncing around today"
-- "Calmer than yesterday"
-- "Steadier than usual"
+- "More [blue]insulin[/] than usual"
+- "[blue]Calmer[/] than yesterday"
+- "Bouncing around [yellow]today[/]"
 
 Empathy:
-- "Rough patch, hang in"
-- "Diabetes is hard"
-- "Tomorrow's fresh"
+- "Rough patch, [blue]hang in[/]"
+- "[blue]Tomorrow's fresh[/]"
 
 BAD EXAMPLES:
 - "Avg 142 TIR 78% grt job" (too abbreviated, robotic)
-- "**Key Findings:**" (markdown formatting)
-- "Your glucose levels have been relatively stable" (too long, clinical)
+- "**Key Findings:**" (wrong formatting - use color markup not markdown)
+- No color at all (missed opportunity to convey emotion)
 
-Numbers are welcome but not required. Natural, human language is better than compressed abbreviations.
+Match the color to the emotion! Green for wins, yellow/orange for caution, red for urgent, rainbow for big celebrations.
 
 First fetch the glucose and treatment data, then store a warm, concise insight.
 Use storeInsight with type="hourly". Must be 30 characters or less.`;
@@ -214,12 +227,14 @@ async function enforceInsightQuality(sessionId: string): Promise<void> {
       return;
     }
 
-    const contentLength = insight.content.length;
+    // Strip color markup for length calculation (markup doesn't count as visible chars)
+    const visibleContent = stripColorMarkup(insight.content);
+    const visibleLength = visibleContent.length;
     const valid = isValidInsight(insight.content);
-    console.log(`Insight check: "${insight.content}" (${contentLength} chars, valid=${valid})`);
+    console.log(`Insight check: "${insight.content}" (${visibleLength} visible chars, valid=${valid})`);
 
-    // Check both length AND quality
-    if (contentLength <= MAX_INSIGHT_LENGTH && valid) {
+    // Check both length AND quality (using visible length, not raw length)
+    if (visibleLength <= MAX_INSIGHT_LENGTH && valid) {
       console.log("Insight OK");
       return;
     }
@@ -231,14 +246,15 @@ async function enforceInsightQuality(sessionId: string): Promise<void> {
     const fixPrompt = `The insight you stored doesn't work for my LED display.
 
 Current: "${insight.content}"
-Problem: ${!valid ? "Contains markdown or isn't a real insight" : `Too long (${contentLength} chars, max ${MAX_INSIGHT_LENGTH})`}
+Problem: ${!valid ? "Contains markdown or isn't a real insight" : `Too long (${visibleLength} visible chars, max ${MAX_INSIGHT_LENGTH})`}
 
-Try again with a short, encouraging insight like:
-- "In range all day!"
-- "Steady overnight, nice!"
-- "Running high, check it"
+Try again with a short, encouraging insight WITH COLOR:
+- "[green]In range all day![/]"
+- "[green]Steady overnight![/]"
+- "[yellow]Running high[/], check it"
 
-Natural language, no markdown, max ${MAX_INSIGHT_LENGTH} characters.
+Use color markup: [green], [red], [yellow], [rainbow], etc.
+Max ${MAX_INSIGHT_LENGTH} visible characters (markup doesn't count).
 Store using storeInsight with type="hourly".`;
 
     const response = await invokeAgent(fixPrompt, sessionId);
@@ -273,21 +289,26 @@ Store using storeInsight with type="hourly".`;
 function isValidInsight(content: string): boolean {
   const trimmed = content.trim();
 
-  // Reject empty or too short
-  if (trimmed.length < 8) return false;
+  // Strip color markup for validation (e.g., [green]text[/] -> text)
+  const withoutMarkup = trimmed.replace(/\[(\w+)\](.*?)\[\/\]/g, "$2").replace(/\[\w+\]/g, "").replace(/\[\/\]/g, "");
+
+  // Reject empty or too short (after stripping markup)
+  if (withoutMarkup.length < 8) return false;
 
   // Reject markdown headers
-  if (trimmed.startsWith("#") || trimmed.startsWith("**")) return false;
+  if (withoutMarkup.startsWith("#") || withoutMarkup.startsWith("**")) return false;
 
   // Reject lines that are just labels
-  if (trimmed.endsWith(":")) return false;
+  if (withoutMarkup.endsWith(":")) return false;
 
-  // Reject JSON
-  if (trimmed.startsWith("{") || trimmed.startsWith("[")) return false;
+  // Reject JSON (but allow color markup which also starts with [)
+  // Color markup starts with [word] not [{ or ["
+  if (trimmed.startsWith("{")) return false;
+  if (trimmed.startsWith("[") && !trimmed.match(/^\[\w+\]/)) return false;
 
   // Reject obvious non-insights
-  if (trimmed.toLowerCase().includes("key findings")) return false;
-  if (trimmed.toLowerCase().includes("analysis")) return false;
+  if (withoutMarkup.toLowerCase().includes("key findings")) return false;
+  if (withoutMarkup.toLowerCase().includes("analysis")) return false;
 
   return true;
 }
