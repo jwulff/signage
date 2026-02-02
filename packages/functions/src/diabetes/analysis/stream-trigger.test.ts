@@ -297,4 +297,69 @@ describe("stream-trigger", () => {
       expect(shouldFallback).toBe(true);
     });
   });
+
+  describe("insight quality validation", () => {
+    // Replicate isValidInsight logic for testing
+    function isValidInsight(content: string): boolean {
+      const trimmed = content.trim();
+      if (trimmed.length < 10) return false;
+      if (trimmed.startsWith("#") || trimmed.startsWith("**")) return false;
+      if (trimmed.endsWith(":")) return false;
+      if (!/\d/.test(trimmed)) return false;
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) return false;
+      return true;
+    }
+
+    it("accepts valid insight with numbers", () => {
+      expect(isValidInsight("Avg 142 TIR 78% grt job")).toBe(true);
+    });
+
+    it("accepts valid insight with glucose value", () => {
+      expect(isValidInsight("Stdy at 118→ nice work")).toBe(true);
+    });
+
+    it("accepts valid insight with percentage", () => {
+      expect(isValidInsight("TIR 85% up frm 72%")).toBe(true);
+    });
+
+    it("rejects markdown headers", () => {
+      expect(isValidInsight("**Key Findings:**")).toBe(false);
+    });
+
+    it("rejects markdown h1", () => {
+      expect(isValidInsight("# 4-Hour Analysis")).toBe(false);
+    });
+
+    it("rejects markdown h2", () => {
+      expect(isValidInsight("## Current Status")).toBe(false);
+    });
+
+    it("rejects lines ending with colon", () => {
+      expect(isValidInsight("Key Findings:")).toBe(false);
+    });
+
+    it("rejects content without numbers", () => {
+      expect(isValidInsight("Your glucose is stable")).toBe(false);
+    });
+
+    it("rejects too short content", () => {
+      expect(isValidInsight("OK")).toBe(false);
+    });
+
+    it("rejects JSON objects", () => {
+      expect(isValidInsight('{"type":"hourly"}')).toBe(false);
+    });
+
+    it("rejects JSON arrays", () => {
+      expect(isValidInsight("[1, 2, 3]")).toBe(false);
+    });
+
+    it("accepts insight with arrow symbols", () => {
+      expect(isValidInsight("142↑ rising fast")).toBe(true);
+    });
+
+    it("accepts abbreviated insights", () => {
+      expect(isValidInsight("Hi avg 195 chk basal")).toBe(true);
+    });
+  });
 });

@@ -78,22 +78,30 @@ export const handler: DynamoDBStreamHandler = async (event) => {
   const sessionId = `stream-${now}`;
 
   try {
-    // Prompt the agent to analyze recent glucose data
-    const initialPrompt = `Analyze my glucose data from the last 4 hours.
+    // Prompt the agent to generate a concise insight
+    const initialPrompt = `Generate a 30-character insight for my LED display based on the last 4 hours of glucose data.
 
-Focus on:
-1. Current trend (rising, falling, stable)
-2. Time in range for this period
-3. Any concerning patterns (lows, highs, rapid changes)
+CRITICAL CONSTRAINT: The insight MUST be 30 characters or less. This is a tiny 64x64 LED screen.
 
-Generate a SHORT insight (max 30 characters) for my LED display. The insight should be:
-- Data-specific (mention actual numbers)
-- Actionable if there's something to address
-- Encouraging if things are going well
+FORMAT: Use this exact pattern:
+- Start with key metric (avg, TIR, current)
+- Include a number
+- End with trend or encouragement
+- Use abbreviations: avg, TIR, %, ↑, ↓, →, grt, stdy, hi, lo
 
-CRITICAL: Maximum 30 characters total. Use abbreviations: avg, h, d, %, TIR, grt, chk, ↑, ↓, →
+GOOD EXAMPLES (all under 30 chars):
+- "Avg 142 TIR 78% grt job"
+- "Stdy at 118→ nice work"
+- "Hi avg 195 chk basal"
+- "TIR 85% ↓ frm 72% wk"
 
-Store the insight using the storeInsight tool with type="hourly".`;
+BAD EXAMPLES (too long or not data-specific):
+- "Your glucose has been stable" (no numbers)
+- "**Key Findings:**" (markdown, not insight)
+- Any markdown formatting
+
+First get the glucose data, then store ONLY a concise insight (no analysis, no markdown).
+Use storeInsight with type="hourly" and content that is EXACTLY 30 chars or less.`;
 
     const response = await invokeAgent(initialPrompt, sessionId);
     console.log("Agent response:", response);
@@ -114,8 +122,8 @@ Store the insight using the storeInsight tool with type="hourly".`;
       }
     }
 
-    // Check if the stored insight is too long and retry if needed
-    await enforceInsightLength(sessionId);
+    // Check if the stored insight is valid (length + quality) and retry if needed
+    await enforceInsightQuality(sessionId);
 
     console.log("Stream-triggered analysis complete");
   } catch (error) {
@@ -159,9 +167,9 @@ async function invokeAgent(prompt: string, sessionId: string): Promise<string> {
 }
 
 /**
- * Check the stored insight length and ask agent to shorten if needed
+ * Check the stored insight and fix if too long or invalid
  */
-async function enforceInsightLength(sessionId: string): Promise<void> {
+async function enforceInsightQuality(sessionId: string): Promise<void> {
   for (let attempt = 0; attempt < MAX_SHORTEN_ATTEMPTS; attempt++) {
     const insight = await getCurrentInsight(
       docClient,
@@ -170,58 +178,96 @@ async function enforceInsightLength(sessionId: string): Promise<void> {
     );
 
     if (!insight) {
-      console.log("No insight found to check length");
+      console.log("No insight found to check");
       return;
     }
 
-    // Only shorten hourly insights to avoid accidentally modifying daily/weekly insights
+    // Only fix hourly insights
     if (insight.type !== "hourly") {
-      console.log(`Skipping length check for ${insight.type} insight`);
+      console.log(`Skipping quality check for ${insight.type} insight`);
       return;
     }
 
     const contentLength = insight.content.length;
-    console.log(`Insight length check: ${contentLength} chars (max ${MAX_INSIGHT_LENGTH})`);
+    const valid = isValidInsight(insight.content);
+    console.log(`Insight check: "${insight.content}" (${contentLength} chars, valid=${valid})`);
 
-    if (contentLength <= MAX_INSIGHT_LENGTH) {
-      console.log("Insight length OK");
+    // Check both length AND quality
+    if (contentLength <= MAX_INSIGHT_LENGTH && valid) {
+      console.log("Insight OK");
       return;
     }
 
-    // Insight is too long, ask agent to shorten it
-    console.log(`Insight too long (${contentLength} chars), asking agent to shorten (attempt ${attempt + 1}/${MAX_SHORTEN_ATTEMPTS})`);
+    // Insight needs fixing
+    const issue = !valid ? "INVALID (missing data or has markdown)" : "TOO LONG";
+    console.log(`Insight ${issue}, asking agent to fix (attempt ${attempt + 1}/${MAX_SHORTEN_ATTEMPTS})`);
 
-    const shortenPrompt = `The insight you just stored is TOO LONG for my LED display.
+    const fixPrompt = `The insight you stored is ${issue} for my LED display.
 
-Current insight (${contentLength} chars): "${insight.content}"
-Maximum allowed: ${MAX_INSIGHT_LENGTH} characters
+Current insight: "${insight.content}"
+Problem: ${!valid ? "Missing numbers or contains markdown formatting" : `${contentLength} chars, max is ${MAX_INSIGHT_LENGTH}`}
 
-Please SHORTEN this to ${MAX_INSIGHT_LENGTH} characters or less while keeping the key information.
-Use aggressive abbreviations: avg, h, d, %, ↑, ↓, →, grt, chk, stdy, hi, lo
+Generate a NEW insight that:
+1. Is EXACTLY ${MAX_INSIGHT_LENGTH} characters or less
+2. Contains at least one number (glucose value, TIR %, etc.)
+3. Has NO markdown (no **, no #, no :)
+4. Is meaningful and actionable
 
-Store the shortened version using storeInsight with type="hourly".`;
+Examples of GOOD insights:
+- "Avg 142 TIR 78% grt job"
+- "Stdy at 118→ nice work"
+- "Hi avg 195 chk basal"
 
-    const response = await invokeAgent(shortenPrompt, sessionId);
-    console.log("Shorten response:", response);
+Store the fixed insight using storeInsight with type="hourly".`;
+
+    const response = await invokeAgent(fixPrompt, sessionId);
+    console.log("Fix response:", response);
   }
 
-  // After max attempts, truncate manually if still too long
+  // After max attempts, generate a fallback
   const finalInsight = await getCurrentInsight(
     docClient,
     Resource.SignageTable.name,
     DEFAULT_USER_ID
   );
 
-  if (finalInsight && finalInsight.type === "hourly" && finalInsight.content.length > MAX_INSIGHT_LENGTH) {
-    console.warn(`Insight still too long after ${MAX_SHORTEN_ATTEMPTS} attempts, truncating`);
-    await storeInsight(
-      docClient,
-      Resource.SignageTable.name,
-      DEFAULT_USER_ID,
-      "hourly",
-      finalInsight.content.slice(0, MAX_INSIGHT_LENGTH)
-    );
+  if (finalInsight && finalInsight.type === "hourly") {
+    const needsFix = finalInsight.content.length > MAX_INSIGHT_LENGTH || !isValidInsight(finalInsight.content);
+    if (needsFix) {
+      console.warn(`Insight still invalid after ${MAX_SHORTEN_ATTEMPTS} attempts, using fallback`);
+      await storeInsight(
+        docClient,
+        Resource.SignageTable.name,
+        DEFAULT_USER_ID,
+        "hourly",
+        "Data updated chk app"
+      );
+    }
   }
+}
+
+/**
+ * Check if an insight is valid (has actual data, not garbage)
+ */
+function isValidInsight(content: string): boolean {
+  const trimmed = content.trim();
+
+  // Reject empty or too short
+  if (trimmed.length < 10) return false;
+
+  // Reject markdown headers
+  if (trimmed.startsWith("#") || trimmed.startsWith("**")) return false;
+
+  // Reject lines that are just labels
+  if (trimmed.endsWith(":")) return false;
+
+  // Require at least one number (data-specific)
+  if (!/\d/.test(trimmed)) return false;
+
+  // Reject JSON
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) return false;
+
+  return true;
 }
 
 /**
@@ -230,20 +276,14 @@ Store the shortened version using storeInsight with type="hourly".`;
 function extractInsightFromResponse(response: string): string | null {
   const lines = response.split("\n").filter((l) => l.trim());
 
-  // Look for a line that could be an insight (short, informative)
+  // Look for a valid insight line
   for (const line of lines) {
     const trimmed = line.trim();
-    if (trimmed.length > 10 && trimmed.length <= MAX_INSIGHT_LENGTH) {
-      if (!trimmed.includes("?") && !trimmed.startsWith("{")) {
-        return trimmed;
-      }
+    if (trimmed.length <= MAX_INSIGHT_LENGTH && isValidInsight(trimmed)) {
+      return trimmed;
     }
   }
 
-  // Fallback: take first MAX_INSIGHT_LENGTH chars
-  if (response.length > 0) {
-    return response.slice(0, MAX_INSIGHT_LENGTH).trim();
-  }
-
+  // No valid insight found
   return null;
 }

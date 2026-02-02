@@ -244,11 +244,11 @@ paths:
             enum: [hourly, daily, weekly, alert]
         - name: content
           in: query
-          description: Insight text (max 80 chars for display)
+          description: "CRITICAL: Insight text for 64x64 LED display. MUST be 30 characters or less. Use abbreviations: avg, TIR, %, ↑↓→. Example: 'Avg 142 TIR 78% grt job'"
           required: true
           schema:
             type: string
-            maxLength: 80
+            maxLength: 30
         - name: metrics
           in: query
           description: JSON object with supporting metrics (tir, avgGlucose, etc.)
