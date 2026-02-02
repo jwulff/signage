@@ -5,7 +5,7 @@
 import type { Frame, RGB } from "@signage/core";
 import { setPixel } from "@signage/core";
 import { drawText, drawTinyText, measureText, measureTinyText, DISPLAY_WIDTH } from "./text.js";
-import { COLORS, type RangeStatus } from "./colors.js";
+import { COLORS, type RangeStatus, getTrendTintedColor } from "./colors.js";
 import { renderChart, type ChartPoint } from "./chart-renderer.js";
 import type { TreatmentDisplayData } from "../glooko/types.js";
 
@@ -484,8 +484,8 @@ function renderTreatmentChart(
     x += dayWidths[i] + spacing;
   }
 
-  // Draw latency indicator (time since last insulin delivery)
-  drawTinyText(frame, latencyStr, x, textY, COLORS.clockTime);
+  // Draw latency indicator (time since last insulin delivery) in off-white
+  drawTinyText(frame, latencyStr, x, textY, COLORS.updateTime);
 }
 
 /**
@@ -550,10 +550,14 @@ export function renderBloodSugarRegion(
     textX += measureText(" ");
   }
 
-  // Draw delta and time in white
-  const secondaryColor = COLORS.clockTime; // white
-  const deltaTimeStr = useFullSpacing ? `${deltaStr} ${timeStr}` : `${deltaStr} ${timeStr}`;
-  drawText(frame, deltaTimeStr, textX, TEXT_ROW, secondaryColor, BG_REGION_START, BG_REGION_END);
+  // Draw delta in trend-tinted color (blends reading color with trend direction)
+  const deltaColor = getTrendTintedColor(valueColor, trend);
+  drawText(frame, deltaStr, textX, TEXT_ROW, deltaColor, BG_REGION_START, BG_REGION_END);
+  textX += measureText(deltaStr);
+  textX += measureText(" ");
+
+  // Draw update time in off-white (less eye-catching)
+  drawText(frame, timeStr, textX, TEXT_ROW, COLORS.updateTime, BG_REGION_START, BG_REGION_END);
 
   // Treatment chart (4-day midnight-to-midnight insulin totals)
   if (treatments && !treatments.isStale) {

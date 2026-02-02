@@ -19,6 +19,9 @@ export const COLORS = {
   stale: { r: 128, g: 128, b: 128 } as RGB,
   delta: { r: 100, g: 100, b: 100 } as RGB,
 
+  // Update timestamp color (off-white, less eye-catching)
+  updateTime: { r: 140, g: 140, b: 140 } as RGB,
+
   // Readiness score colors
   readinessOptimal: { r: 0, g: 255, b: 0 } as RGB,      // 85-100: Green
   readinessGood: { r: 128, g: 255, b: 0 } as RGB,       // 70-84: Yellow-green
@@ -64,4 +67,44 @@ export function getSleepColor(score: number | null): RGB {
   if (score >= 60) return COLORS.readinessFair;
   if (score >= 50) return COLORS.readinessLow;
   return COLORS.readinessPoor;
+}
+
+/**
+ * Get trend-tinted color for glucose delta display.
+ * Blends the reading color with red (upward trend) or blue (downward trend)
+ * to visually indicate direction at a glance.
+ *
+ * @param baseColor - The glucose reading color (based on range)
+ * @param trend - The trend direction string
+ * @returns A color that hints at the trend direction
+ */
+export function getTrendTintedColor(baseColor: RGB, trend: string): RGB {
+  const t = trend.toLowerCase();
+
+  // Upward trends: blend toward red (danger signal)
+  if (t === "doubleup" || t === "singleup" || t === "fortyfiveup") {
+    const intensity = t === "doubleup" ? 0.5 : t === "singleup" ? 0.35 : 0.2;
+    return {
+      r: Math.min(255, Math.round(baseColor.r + (255 - baseColor.r) * intensity)),
+      g: Math.round(baseColor.g * (1 - intensity * 0.6)),
+      b: Math.round(baseColor.b * (1 - intensity * 0.8)),
+    };
+  }
+
+  // Downward trends: blend toward blue (cooling/safer signal)
+  if (t === "doubledown" || t === "singledown" || t === "fortyfivedown") {
+    const intensity = t === "doubledown" ? 0.5 : t === "singledown" ? 0.35 : 0.2;
+    return {
+      r: Math.round(baseColor.r * (1 - intensity * 0.6)),
+      g: Math.round(baseColor.g * (1 - intensity * 0.3)),
+      b: Math.min(255, Math.round(baseColor.b + (255 - baseColor.b) * intensity * 0.5)),
+    };
+  }
+
+  // Flat trend: use a slightly dimmed version of the base color
+  return {
+    r: Math.round(baseColor.r * 0.7),
+    g: Math.round(baseColor.g * 0.7),
+    b: Math.round(baseColor.b * 0.7),
+  };
 }
