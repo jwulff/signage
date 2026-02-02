@@ -5,8 +5,8 @@
  * ┌───────────────────────────────────────┐
  * │        SUN FEB 1  2:53                │  rows  1-5  (date/time)
  * │                                       │  row   6    (spacer)
- * │     4-HOUR GLUCOSE                    │  rows  7-12 (insight line 1)
- * │     ANALYSIS                          │  rows 13-18 (insight line 2)
+ * │     4-HOUR GLUCOSE                    │  rows  7-11 (insight line 1)
+ * │     ANALYSIS                          │  rows 13-17 (insight line 2)
  * │                                       │  row  19    (spacer)
  * │        16  13  12   4   2   4H        │  rows 20-26 (insulin totals)
  * │                                       │  row  27    (spacer)

@@ -8,7 +8,7 @@ User preference - the chart at the bottom felt better visually. The date at top 
 ## How
 Reordered the vertical sections while keeping the same vertical sizes:
 - Date/time: rows 1-5 (unchanged)
-- Insights: rows 7-18 (moved from bottom)
+- Insights: rows 7-17 (moved from bottom)
 - Insulin: rows 20-26 (moved up)
 - Glucose reading: rows 28-32 (moved down)
 - Chart: rows 34-63 (moved to bottom, expanded to 30 rows)

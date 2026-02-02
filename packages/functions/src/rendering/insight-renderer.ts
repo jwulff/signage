@@ -27,7 +27,7 @@ export interface InsightDisplayData {
 
 /**
  * Layout constants for insight region
- * Positioned below date/time (rows 7-18)
+ * Positioned below date/time (rows 7-17)
  * Two lines of text, ~15 chars each = ~30 chars total
  */
 const INSIGHT_LINE1_Y = 7;  // First line (row 7)

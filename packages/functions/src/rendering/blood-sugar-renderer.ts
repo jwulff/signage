@@ -14,7 +14,7 @@ const BG_REGION_START = 28;  // Glucose reading starts at row 28
 const BG_REGION_END = 63;
 
 // Layout configuration - chart at bottom for visual priority
-// Order: date/time (1-5), insight (7-18), insulin (20-26), glucose (28-32), chart (34-63)
+// Order: date/time (1-5), insight (7-17), insulin (20-26), glucose (28-32), chart (34-63)
 const TEXT_MARGIN = 1; // Left/right margin for text
 const CHART_X = 1;
 const CHART_WIDTH = DISPLAY_WIDTH - 2; // Full width minus margins
