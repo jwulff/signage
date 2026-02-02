@@ -96,48 +96,51 @@ DATA SOURCES:
 - Glooko: Insulin, carbs, and historical data (may be hours old)
 Consider how fresh each data source is when forming your insight.
 
-COLOR MARKUP (use to convey emotion):
-- [green]text[/] = celebrations, in-range, wins
-- [red]text[/] = urgent, lows, action needed
-- [yellow]text[/] = caution, highs, attention
-- [orange]text[/] = warnings, watch out
-- [blue]text[/] = calm observations
-- [rainbow]text[/] = big celebrations, excitement!
-- Plain text = neutral/default
+COLOR MARKUP (wrap the ENTIRE insight in ONE color):
+- [green]...[/] = celebrations, in-range, wins
+- [red]...[/] = urgent, lows, action needed
+- [yellow]...[/] = caution, highs, attention
+- [orange]...[/] = warnings, watch out
+- [blue]...[/] = calm observations
+- [rainbow]...[/] = big celebrations, excitement!
 
-EXAMPLES WITH COLOR (under 30 chars including markup):
+IMPORTANT: Use ONE color tag around the whole message, not mixed colors.
+
+EXAMPLES (under 30 chars, entire message wrapped in one color):
 
 Celebrating:
 - "[green]In range all day![/]"
-- "[green]Nailed it[/] [rainbow]today![/]"
+- "[green]Nailed it today![/]"
 - "[rainbow]Best day this week![/]"
 - "[green]Steady overnight![/]"
 
-Gentle nudges:
-- "[yellow]Running high[/], check it"
-- "[yellow]Trending up[/], watch it"
-- "[orange]Bit high[/], no worries"
+Caution (highs):
+- "[yellow]Above 200 for 3hrs[/]"
+- "[yellow]Running high, check it[/]"
+- "[yellow]Trending up, watch it[/]"
+- "[orange]Stuck above 180 2hrs[/]"
 
-Action needed:
-- "[red]Falling fast[/], grab snack"
-- "[red]Going low[/], snack time"
-- "[red]Dropping[/], heads up"
+Action needed (lows):
+- "[red]Falling fast, grab snack[/]"
+- "[red]Going low, snack time[/]"
+- "[red]Below 70, treat now[/]"
 
 Observations:
-- "More [blue]insulin[/] than usual"
-- "[blue]Calmer[/] than yesterday"
-- "Bouncing around [yellow]today[/]"
+- "[blue]More insulin than usual[/]"
+- "[blue]Calmer than yesterday[/]"
+- "[blue]Bouncing around today[/]"
 
 Empathy:
-- "Rough patch, [blue]hang in[/]"
+- "[blue]Rough patch, hang in[/]"
 - "[blue]Tomorrow's fresh[/]"
 
 BAD EXAMPLES:
-- "Avg 142 TIR 78% grt job" (too abbreviated, robotic)
-- "**Key Findings:**" (wrong formatting - use color markup not markdown)
-- No color at all (missed opportunity to convey emotion)
+- "[yellow]Running high[/], check it" (mixed colors - wrap ALL text in one color!)
+- "Stuck at 223" (say "above 200" not "at 223" for sustained highs)
+- "Avg 142 TIR 78%" (too robotic)
+- No color at all (always use color to convey emotion)
 
-Match the color to the emotion! Green for wins, yellow/orange for caution, red for urgent, rainbow for big celebrations.
+Pick ONE color that matches the overall emotion and wrap the entire message.
 
 First fetch the glucose and treatment data, then store a warm, concise insight.
 Use storeInsight with type="hourly". Must be 30 characters or less.`;
@@ -248,13 +251,12 @@ async function enforceInsightQuality(sessionId: string): Promise<void> {
 Current: "${insight.content}"
 Problem: ${!valid ? "Contains markdown or isn't a real insight" : `Too long (${visibleLength} visible chars, max ${MAX_INSIGHT_LENGTH})`}
 
-Try again with a short, encouraging insight WITH COLOR:
+Try again. Wrap the ENTIRE message in ONE color:
 - "[green]In range all day![/]"
-- "[green]Steady overnight![/]"
-- "[yellow]Running high[/], check it"
+- "[yellow]Above 200 for 3hrs[/]"
+- "[red]Falling fast, snack now[/]"
 
-Use color markup: [green], [red], [yellow], [rainbow], etc.
-Max ${MAX_INSIGHT_LENGTH} visible characters (markup doesn't count).
+ONE color tag around everything. Max ${MAX_INSIGHT_LENGTH} visible chars.
 Store using storeInsight with type="hourly".`;
 
     const response = await invokeAgent(fixPrompt, sessionId);
