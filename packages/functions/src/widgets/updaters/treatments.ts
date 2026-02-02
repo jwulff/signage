@@ -6,7 +6,7 @@
 import { Resource } from "sst";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { GetCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { queryDailyInsulinByDateRange } from "@diabetes/core";
+import { queryDailyInsulinByDateRange, formatDateInTimezone, DATA_TIMEZONE } from "@diabetes/core";
 import type { WidgetUpdater } from "../types.js";
 import type {
   TreatmentDisplayData,
@@ -68,17 +68,26 @@ async function fetchTreatmentData(): Promise<{
 const DEFAULT_USER_ID = "john";
 
 /**
+ * Compute a date string N days before a given date string.
+ * Uses calendar-day arithmetic to handle DST transitions correctly.
+ */
+function subtractDays(dateStr: string, days: number): string {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() - days);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/**
  * Fetch daily insulin totals from the new schema
  * Returns totals for the last 7 days keyed by date string (YYYY-MM-DD)
  */
 async function fetchDailyInsulinTotals(): Promise<Record<string, number>> {
   try {
-    // Calculate date range: last 7 days
-    const now = new Date();
-    const endDate = now.toISOString().slice(0, 10);
-    const startDateObj = new Date(now);
-    startDateObj.setDate(startDateObj.getDate() - 6);
-    const startDate = startDateObj.toISOString().slice(0, 10);
+    // Calculate date range in Pacific timezone (matches stored data)
+    // Use calendar-day arithmetic to handle DST transitions correctly
+    const endDate = formatDateInTimezone(Date.now(), DATA_TIMEZONE);
+    const startDate = subtractDays(endDate, 6);
 
     return await queryDailyInsulinByDateRange(
       docClient,
