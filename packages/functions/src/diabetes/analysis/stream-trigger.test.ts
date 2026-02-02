@@ -302,27 +302,36 @@ describe("stream-trigger", () => {
     // Replicate isValidInsight logic for testing
     function isValidInsight(content: string): boolean {
       const trimmed = content.trim();
-      if (trimmed.length < 10) return false;
+      if (trimmed.length < 8) return false;
       if (trimmed.startsWith("#") || trimmed.startsWith("**")) return false;
       if (trimmed.endsWith(":")) return false;
-      if (!/\d/.test(trimmed)) return false;
       if (trimmed.startsWith("{") || trimmed.startsWith("[")) return false;
+      if (trimmed.toLowerCase().includes("key findings")) return false;
+      if (trimmed.toLowerCase().includes("analysis")) return false;
       return true;
     }
 
-    it("accepts valid insight with numbers", () => {
-      expect(isValidInsight("Avg 142 TIR 78% grt job")).toBe(true);
+    it("accepts natural language insight", () => {
+      expect(isValidInsight("In range all day!")).toBe(true);
     });
 
-    it("accepts valid insight with glucose value", () => {
-      expect(isValidInsight("Stdy at 118→ nice work")).toBe(true);
+    it("accepts encouraging insight", () => {
+      expect(isValidInsight("Steady overnight, nice!")).toBe(true);
     });
 
-    it("accepts valid insight with percentage", () => {
-      expect(isValidInsight("TIR 85% up frm 72%")).toBe(true);
+    it("accepts action-oriented insight", () => {
+      expect(isValidInsight("Falling fast, grab snack")).toBe(true);
     });
 
-    it("rejects markdown headers", () => {
+    it("accepts insight with numbers", () => {
+      expect(isValidInsight("Lowest day this week!")).toBe(true);
+    });
+
+    it("accepts insight without numbers", () => {
+      expect(isValidInsight("Great morning so far")).toBe(true);
+    });
+
+    it("rejects markdown bold", () => {
       expect(isValidInsight("**Key Findings:**")).toBe(false);
     });
 
@@ -338,8 +347,12 @@ describe("stream-trigger", () => {
       expect(isValidInsight("Key Findings:")).toBe(false);
     });
 
-    it("rejects content without numbers", () => {
-      expect(isValidInsight("Your glucose is stable")).toBe(false);
+    it("rejects 'key findings' text", () => {
+      expect(isValidInsight("Here are key findings")).toBe(false);
+    });
+
+    it("rejects 'analysis' text", () => {
+      expect(isValidInsight("4-Hour Analysis Result")).toBe(false);
     });
 
     it("rejects too short content", () => {
@@ -354,12 +367,12 @@ describe("stream-trigger", () => {
       expect(isValidInsight("[1, 2, 3]")).toBe(false);
     });
 
-    it("accepts insight with arrow symbols", () => {
-      expect(isValidInsight("142↑ rising fast")).toBe(true);
+    it("accepts insight with emoji-style arrows", () => {
+      expect(isValidInsight("Running high, check it")).toBe(true);
     });
 
-    it("accepts abbreviated insights", () => {
-      expect(isValidInsight("Hi avg 195 chk basal")).toBe(true);
+    it("accepts comparative insights", () => {
+      expect(isValidInsight("More insulin than usual")).toBe(true);
     });
   });
 });

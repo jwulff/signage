@@ -79,29 +79,55 @@ export const handler: DynamoDBStreamHandler = async (event) => {
 
   try {
     // Prompt the agent to generate a concise insight
-    const initialPrompt = `Generate a 30-character insight for my LED display based on the last 4 hours of glucose data.
+    const initialPrompt = `Generate a short insight for my LED display (max 30 characters).
 
-CRITICAL CONSTRAINT: The insight MUST be 30 characters or less. This is a tiny 64x64 LED screen.
+TONE: You're an encouraging diabetes coach. Be warm and supportive when things are good, direct and helpful (never judgmental) when attention is needed.
 
-FORMAT: Use this exact pattern:
-- Start with key metric (avg, TIR, current)
-- Include a number
-- End with trend or encouragement
-- Use abbreviations: avg, TIR, %, ↑, ↓, →, grt, stdy, hi, lo
+DATA SOURCES:
+- Dexcom: Real-time CGM readings (most current)
+- Glooko: Insulin, carbs, and historical data (may be hours old)
+Consider how fresh each data source is when forming your insight.
 
-GOOD EXAMPLES (all under 30 chars):
-- "Avg 142 TIR 78% grt job"
-- "Stdy at 118→ nice work"
-- "Hi avg 195 chk basal"
-- "TIR 85% ↓ frm 72% wk"
+GOOD EXAMPLES (natural language, under 30 chars):
 
-BAD EXAMPLES (too long or not data-specific):
-- "Your glucose has been stable" (no numbers)
-- "**Key Findings:**" (markdown, not insight)
-- Any markdown formatting
+Celebrating wins:
+- "In range all day!"
+- "Steady overnight, nice!"
+- "Great morning so far"
+- "Nailed it today!"
+- "Best day this week!"
 
-First get the glucose data, then store ONLY a concise insight (no analysis, no markdown).
-Use storeInsight with type="hourly" and content that is EXACTLY 30 chars or less.`;
+Gentle nudges:
+- "Running high, check it"
+- "Trending up, watch it"
+- "Bit high, no worries"
+- "Creeping up slowly"
+
+Action needed:
+- "Falling fast, grab snack"
+- "Dropping, heads up"
+- "Going low, snack time"
+
+Observations:
+- "More insulin than usual"
+- "Bouncing around today"
+- "Calmer than yesterday"
+- "Steadier than usual"
+
+Empathy:
+- "Rough patch, hang in"
+- "Diabetes is hard"
+- "Tomorrow's fresh"
+
+BAD EXAMPLES:
+- "Avg 142 TIR 78% grt job" (too abbreviated, robotic)
+- "**Key Findings:**" (markdown formatting)
+- "Your glucose levels have been relatively stable" (too long, clinical)
+
+Numbers are welcome but not required. Natural, human language is better than compressed abbreviations.
+
+First fetch the glucose and treatment data, then store a warm, concise insight.
+Use storeInsight with type="hourly". Must be 30 characters or less.`;
 
     const response = await invokeAgent(initialPrompt, sessionId);
     console.log("Agent response:", response);
@@ -202,23 +228,18 @@ async function enforceInsightQuality(sessionId: string): Promise<void> {
     const issue = !valid ? "INVALID (missing data or has markdown)" : "TOO LONG";
     console.log(`Insight ${issue}, asking agent to fix (attempt ${attempt + 1}/${MAX_SHORTEN_ATTEMPTS})`);
 
-    const fixPrompt = `The insight you stored is ${issue} for my LED display.
+    const fixPrompt = `The insight you stored doesn't work for my LED display.
 
-Current insight: "${insight.content}"
-Problem: ${!valid ? "Missing numbers or contains markdown formatting" : `${contentLength} chars, max is ${MAX_INSIGHT_LENGTH}`}
+Current: "${insight.content}"
+Problem: ${!valid ? "Contains markdown or isn't a real insight" : `Too long (${contentLength} chars, max ${MAX_INSIGHT_LENGTH})`}
 
-Generate a NEW insight that:
-1. Is EXACTLY ${MAX_INSIGHT_LENGTH} characters or less
-2. Contains at least one number (glucose value, TIR %, etc.)
-3. Has NO markdown (no **, no #, no :)
-4. Is meaningful and actionable
+Try again with a short, encouraging insight like:
+- "In range all day!"
+- "Steady overnight, nice!"
+- "Running high, check it"
 
-Examples of GOOD insights:
-- "Avg 142 TIR 78% grt job"
-- "Stdy at 118→ nice work"
-- "Hi avg 195 chk basal"
-
-Store the fixed insight using storeInsight with type="hourly".`;
+Natural language, no markdown, max ${MAX_INSIGHT_LENGTH} characters.
+Store using storeInsight with type="hourly".`;
 
     const response = await invokeAgent(fixPrompt, sessionId);
     console.log("Fix response:", response);
@@ -247,13 +268,13 @@ Store the fixed insight using storeInsight with type="hourly".`;
 }
 
 /**
- * Check if an insight is valid (has actual data, not garbage)
+ * Check if an insight is valid (not garbage)
  */
 function isValidInsight(content: string): boolean {
   const trimmed = content.trim();
 
   // Reject empty or too short
-  if (trimmed.length < 10) return false;
+  if (trimmed.length < 8) return false;
 
   // Reject markdown headers
   if (trimmed.startsWith("#") || trimmed.startsWith("**")) return false;
@@ -261,11 +282,12 @@ function isValidInsight(content: string): boolean {
   // Reject lines that are just labels
   if (trimmed.endsWith(":")) return false;
 
-  // Require at least one number (data-specific)
-  if (!/\d/.test(trimmed)) return false;
-
   // Reject JSON
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) return false;
+
+  // Reject obvious non-insights
+  if (trimmed.toLowerCase().includes("key findings")) return false;
+  if (trimmed.toLowerCase().includes("analysis")) return false;
 
   return true;
 }
