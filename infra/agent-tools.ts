@@ -256,8 +256,8 @@ paths:
             type: string
         - name: reasoning
           in: query
-          description: "Explain your thinking process. What data did you look at? What patterns did you notice? Why did you choose THIS insight over others? What recent insights did you avoid repeating? This helps refine future prompts."
-          required: false
+          description: "REQUIRED: Explain your thinking. What data did you look at? Why this insight over others? What recent insights did you avoid repeating?"
+          required: true
           schema:
             type: string
             maxLength: 500
