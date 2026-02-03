@@ -67,7 +67,8 @@ function formatResponse(event: BedrockAgentEvent, body: unknown): BedrockAgentRe
 async function saveInsight(
   type: InsightType,
   content: string,
-  metrics?: InsightMetrics
+  metrics?: InsightMetrics,
+  reasoning?: string
 ): Promise<{
   success: boolean;
   insightId: string;
@@ -79,7 +80,8 @@ async function saveInsight(
     DEFAULT_USER_ID,
     type,
     content,
-    metrics
+    metrics,
+    reasoning
   );
 
   return {
@@ -121,6 +123,7 @@ async function fetchInsightHistory(days: number): Promise<{
     content: string;
     generatedAt: number;
     metrics?: InsightMetrics;
+    reasoning?: string;
   }>;
   count: number;
   periodDays: number;
@@ -139,6 +142,7 @@ async function fetchInsightHistory(days: number): Promise<{
       content: i.content,
       generatedAt: i.generatedAt,
       metrics: i.metrics,
+      reasoning: i.reasoning,
     })),
     count: insights.length,
     periodDays: days,
@@ -162,6 +166,7 @@ export async function handler(
       case "/storeInsight": {
         const type = (getParam(event, "type") || "hourly") as InsightType;
         const content = getParam(event, "content") || "";
+        const reasoning = getParam(event, "reasoning");
 
         // Parse metrics from JSON string
         let metrics: InsightMetrics | undefined;
@@ -174,7 +179,7 @@ export async function handler(
           }
         }
 
-        const result = await saveInsight(type, content, metrics);
+        const result = await saveInsight(type, content, metrics, reasoning);
         return formatResponse(event, result);
       }
 

@@ -132,7 +132,13 @@ FORBIDDEN:
 - Abbreviations ("avg", "TIR", "hi/lo")
 - Commands ("need bolus") - use questions ("bolus?")
 
-After analysis, call storeInsight with type="hourly".`;
+STEP 4 - STORE WITH REASONING:
+Call storeInsight with:
+- type="hourly"
+- content="[color]Your insight text[/]" (max 30 chars)
+- reasoning="Explain your thinking: What data did you see? Why this insight? What did you avoid repeating?"
+
+The reasoning is saved for review to help improve future prompts. Be specific about what you observed and why you chose this message.`;
 
     const response = await invokeAgent(initialPrompt, sessionId);
     console.log("Agent response:", response);

@@ -21,7 +21,8 @@ export async function storeInsight(
   userId: string,
   type: InsightType,
   content: string,
-  metrics?: Insight["metrics"]
+  metrics?: Insight["metrics"],
+  reasoning?: string
 ): Promise<{ insightId: string }> {
   const now = Date.now();
   const insightId = randomUUID();
@@ -33,6 +34,7 @@ export async function storeInsight(
     type,
     generatedAt: now,
     metrics,
+    reasoning,
   };
 
   // Update current insight (singleton)
