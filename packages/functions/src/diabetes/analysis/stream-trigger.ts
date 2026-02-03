@@ -87,45 +87,52 @@ export const handler: DynamoDBStreamHandler = async (event) => {
 
   try {
     // Prompt the agent to generate a concise insight
-    const initialPrompt = `Generate a short insight for my LED display (max 30 characters).
+    const initialPrompt = `Generate a thoughtful insight for my LED display (max 30 characters).
 
-CRITICAL - WRITE LIKE A HUMAN, NOT A ROBOT:
-- NEVER use abbreviations like "avg", "hi", "4h", "TIR", "hrs"
-- NEVER cram numbers together like "avg230" or "now241"
-- NEVER say exact numbers like "241" - say "over 200" or "high for a while"
-- Phrase suggestions as questions, not commands: "bolus?" not "need bolus"
-- ALWAYS write natural phrases a friend would say
-- If you can't say it naturally in 30 chars, say something simpler
+STEP 1 - GATHER CONTEXT (do this first!):
+- Call getInsightHistory(days=2) to see recent insights - DON'T repeat them
+- Call getGlucoseStats(period="day") and getGlucoseStats(period="week") for trends
+- Call getDailyAggregation() for hourly patterns today
+- Call detectPatterns(type="all") for recurring issues
 
-GOOD: "Over 200 for a bit, bolus?"
-BAD: "241 high 3h, need bolus" ← NEVER DO THIS
+STEP 2 - THINK ABOUT WHAT'S INTERESTING:
+- How does TODAY compare to THIS WEEK? Better or worse?
+- Any time-of-day patterns? (morning highs, overnight lows, post-meal spikes)
+- Any multi-day trends? (improving control, more variability lately)
+- What would be GENUINELY USEFUL to know right now?
+- What HAVEN'T I said recently? Don't repeat recent insights!
 
-TONE: Encouraging diabetes coach. Warm when good, suggestive (not commanding) when action needed.
+STEP 3 - WRITE LIKE A HUMAN (max 30 chars):
+- NEVER use abbreviations ("avg", "hi", "TIR", "hrs")
+- NEVER use exact numbers (say "over 200" not "241")
+- Use questions, not commands ("bolus?" not "need bolus")
+- Write like a caring friend texting you
+
+VARIETY IDEAS (pick what's most relevant AND different from recent):
+- Time patterns: "Mornings are tough" / "Nights looking better"
+- Trend observations: "Steadier than yesterday" / "Best week in a while"
+- Gentle suggestions: "Big dinner, bolus?" / "Dropping, maybe eat?"
+- Celebrations: "In range all day!" / "Great overnight!"
 
 COLOR (wrap ENTIRE message in ONE color):
 [green] = wins, in-range | [yellow] = caution, highs | [red] = urgent, lows
-[blue] = observations | [rainbow] = big celebrations
+[blue] = observations/trends | [rainbow] = big celebrations
 
-EXAMPLES - Notice how they sound like a friend talking:
-
-"[green]In range all day![/]"
+EXAMPLES:
+"[green]Better than yesterday![/]"
 "[green]Steady overnight![/]"
-"[yellow]Over 200 a while, bolus?[/]"
-"[yellow]Creeping up, watch it[/]"
+"[yellow]Mornings are tricky[/]"
+"[blue]More stable this week[/]"
 "[red]Dropping fast, eat?[/]"
-"[blue]More insulin today[/]"
 "[rainbow]Best day this week![/]"
 
-FORBIDDEN (never write like this):
-- "241 high 3h, need bolus" ← exact numbers + commands = BAD
-- "Hi 4h avg230 now241" ← robotic garbage
-- "Avg 142 TIR 78%" ← unreadable
-- Any exact glucose numbers (say "over 200" not "241")
+FORBIDDEN:
+- Repeating what you said in the last 2 days
+- Exact glucose numbers (say "over 200" not "241")
+- Abbreviations ("avg", "TIR", "hi/lo")
 - Commands ("need bolus") - use questions ("bolus?")
-- Any "avg", "TIR", "hi/lo" abbreviations
 
-Write something a caring friend would text you. Keep it warm and human.
-Fetch data, then store insight with storeInsight type="hourly".`;
+After analysis, call storeInsight with type="hourly".`;
 
     const response = await invokeAgent(initialPrompt, sessionId);
     console.log("Agent response:", response);

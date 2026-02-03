@@ -184,7 +184,7 @@ export async function handler(
       }
 
       case "/getInsightHistory": {
-        const days = parseInt(getParam(event, "days") || "7", 10);
+        const days = parseInt(getParam(event, "days") || "2", 10);
         const result = await fetchInsightHistory(Math.min(Math.max(days, 1), 30));
         return formatResponse(event, result);
       }
