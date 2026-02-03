@@ -55,8 +55,41 @@ Long text (>30 chars) still fills the first line before wrapping.
 - **Muted tints**: Colors should complement the display, not compete with glucose readings and charts.
 - **Balanced lines**: Evenly distributed text looks more intentional; a lone word on line 2 looks like an afterthought.
 
+## Results (24-Hour Health Check)
+
+*Checked: 2026-02-02*
+
+### System Health
+
+| Metric | Value |
+|--------|-------|
+| Total executions | 4,987 |
+| Successful analyses | 291 |
+| Skipped (historical data) | 2,184 |
+| Debounced | 37 |
+| Errors/Timeouts | **0** |
+
+### Performance
+
+| Metric | Value |
+|--------|-------|
+| Avg duration | 2.1 sec |
+| Max duration | 29 sec |
+| Peak memory | 94 MB / 512 MB |
+
+### Insight Quality
+
+The new prompts are working well. Sample outputs:
+
+- `[green]Steady in range now![/]`
+- `[green]Coming down nicely![/]`
+- `[yellow]Over 200 a while, bolus?[/]`
+- `[red]Dropping fast, eat?[/]`
+- `[green]Came back up nicely![/]`
+
+Colors correctly match context (green=wins, yellow=caution, red=urgent). Agent occasionally still uses specific numbers but the robotic abbreviation pattern is gone.
+
 ## What's Next
 
-- Monitor agent output quality with new prompts
-- May need further prompt tuning based on edge cases
 - Consider time-based color intensity (brighter for urgent, dimmer for observations)
+- May add animation effects (pulse, blink) for urgent situations
