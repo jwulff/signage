@@ -165,16 +165,23 @@ Without reasoning, we can't improve the prompts. ALWAYS include it.`;
     // Check if the stored insight is valid (length + quality) and retry if needed
     await enforceInsightQuality(sessionId);
 
-    // Extract reasoning from agent response and update the insight
+    // Extract reasoning from agent response and update the insight (if one exists)
     const reasoning = extractReasoningFromResponse(response);
     if (reasoning) {
-      await updateCurrentInsightReasoning(
+      const existingInsight = await getCurrentInsight(
         docClient,
         Resource.SignageTable.name,
-        DEFAULT_USER_ID,
-        reasoning
+        DEFAULT_USER_ID
       );
-      console.log("Stored reasoning:", reasoning.slice(0, 100) + "...");
+      if (existingInsight) {
+        await updateCurrentInsightReasoning(
+          docClient,
+          Resource.SignageTable.name,
+          DEFAULT_USER_ID,
+          reasoning
+        );
+        console.log("Stored reasoning:", reasoning.slice(0, 100) + "...");
+      }
     }
 
     console.log("Stream-triggered analysis complete");
