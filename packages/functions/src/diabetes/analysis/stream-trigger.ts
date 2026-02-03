@@ -8,7 +8,7 @@
 
 import { BedrockAgentRuntimeClient, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
 import { Resource } from "sst";
-import { createDocClient, storeInsight, getCurrentInsight } from "@diabetes/core";
+import { createDocClient, storeInsight, getCurrentInsight, updateCurrentInsightReasoning } from "@diabetes/core";
 import type { DynamoDBStreamHandler } from "aws-lambda";
 
 const bedrockClient = new BedrockAgentRuntimeClient({});
@@ -164,6 +164,18 @@ Without reasoning, we can't improve the prompts. ALWAYS include it.`;
 
     // Check if the stored insight is valid (length + quality) and retry if needed
     await enforceInsightQuality(sessionId);
+
+    // Extract reasoning from agent response and update the insight
+    const reasoning = extractReasoningFromResponse(response);
+    if (reasoning) {
+      await updateCurrentInsightReasoning(
+        docClient,
+        Resource.SignageTable.name,
+        DEFAULT_USER_ID,
+        reasoning
+      );
+      console.log("Stored reasoning:", reasoning.slice(0, 100) + "...");
+    }
 
     console.log("Stream-triggered analysis complete");
   } catch (error) {
@@ -328,5 +340,35 @@ function extractInsightFromResponse(response: string): string | null {
   }
 
   // No valid insight found
+  return null;
+}
+
+/**
+ * Extract reasoning from agent response text
+ * The agent typically explains its reasoning in sections like "Why this insight:"
+ */
+function extractReasoningFromResponse(response: string): string | null {
+  // Look for common reasoning section headers
+  const reasoningPatterns = [
+    /\*\*Why this insight[?:]?\*\*:?\s*([\s\S]*?)(?=\n\n|\n\*\*|$)/i,
+    /Why this insight[?:]?\s*([\s\S]*?)(?=\n\n|\n\*\*|$)/i,
+    /\*\*Reasoning[?:]?\*\*:?\s*([\s\S]*?)(?=\n\n|\n\*\*|$)/i,
+  ];
+
+  for (const pattern of reasoningPatterns) {
+    const match = response.match(pattern);
+    if (match && match[1]) {
+      // Clean up the reasoning text
+      let reasoning = match[1].trim();
+      // Remove markdown formatting
+      reasoning = reasoning.replace(/\*\*/g, "").replace(/\*/g, "");
+      // Truncate to 500 chars (schema limit)
+      if (reasoning.length > 500) {
+        reasoning = reasoning.slice(0, 497) + "...";
+      }
+      return reasoning;
+    }
+  }
+
   return null;
 }

@@ -7,6 +7,7 @@ import {
   PutCommand,
   GetCommand,
   QueryCommand,
+  UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import type { Insight, StoredInsight, InsightType } from "../models/index.js";
 import { generateInsightKeys } from "./keys.js";
@@ -115,6 +116,46 @@ export async function getInsightHistory(
   );
 
   return (result.Items || []) as StoredInsight[];
+}
+
+/**
+ * Update the current insight with reasoning extracted from agent response
+ */
+export async function updateCurrentInsightReasoning(
+  docClient: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  reasoning: string
+): Promise<void> {
+  const keys = generateInsightKeys(userId, "CURRENT");
+
+  // Update current insight
+  await docClient.send(
+    new UpdateCommand({
+      TableName: tableName,
+      Key: { pk: keys.pk, sk: keys.sk },
+      UpdateExpression: "SET reasoning = :reasoning",
+      ExpressionAttributeValues: {
+        ":reasoning": reasoning,
+      },
+    })
+  );
+
+  // Also update the history record (get current first to find the timestamp)
+  const current = await getCurrentInsight(docClient, tableName, userId);
+  if (current) {
+    const historyKeys = generateInsightKeys(userId, "HISTORY", current.generatedAt);
+    await docClient.send(
+      new UpdateCommand({
+        TableName: tableName,
+        Key: { pk: historyKeys.pk, sk: historyKeys.sk },
+        UpdateExpression: "SET reasoning = :reasoning",
+        ExpressionAttributeValues: {
+          ":reasoning": reasoning,
+        },
+      })
+    );
+  }
 }
 
 /**
