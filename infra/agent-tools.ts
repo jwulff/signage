@@ -222,7 +222,6 @@ paths:
 `;
 
 // OpenAPI schema for InsightTools
-// NOTE: Limited to 2 APIs to stay under Bedrock's 11 API limit per agent
 export const insightToolsSchema = `
 openapi: 3.0.0
 info:
@@ -244,7 +243,7 @@ paths:
             enum: [hourly, daily, weekly, alert]
         - name: content
           in: query
-          description: "CRITICAL: Insight text for 64x64 LED display. MUST be 30 characters or less. Use abbreviations: avg, TIR, %, ↑↓→. Example: 'Avg 142 TIR 78% grt job'"
+          description: "CRITICAL: Insight text for 64x64 LED display. MUST be 30 characters or less. Write like a human friend, NOT a robot. NO abbreviations (never 'avg', 'TIR', 'hi'). NO exact numbers (say 'over 200' not '241'). Use questions not commands ('bolus?' not 'need bolus'). Examples: 'In range all day!' or 'Been high a while, bolus?'"
           required: true
           schema:
             type: string
@@ -266,4 +265,22 @@ paths:
       responses:
         '200':
           description: Current insight with staleness status
+  /getInsightHistory:
+    post:
+      summary: Get recent insights
+      description: Retrieves insight history for the last N days. Use this to see what insights have been shown recently to avoid repetition and provide variety.
+      operationId: getInsightHistory
+      parameters:
+        - name: days
+          in: query
+          description: Number of days to look back (1-30)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 30
+            default: 2
+      responses:
+        '200':
+          description: List of recent insights with timestamps
 `;
