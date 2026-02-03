@@ -256,10 +256,11 @@ paths:
             type: string
         - name: reasoning
           in: query
-          description: "REQUIRED: Explain your thinking process. What data did you look at? What patterns did you notice? Why did you choose THIS insight over others? What recent insights did you avoid repeating? This helps refine future prompts."
-          required: true
+          description: "Explain your thinking process. What data did you look at? What patterns did you notice? Why did you choose THIS insight over others? What recent insights did you avoid repeating? This helps refine future prompts."
+          required: false
           schema:
             type: string
+            maxLength: 500
       responses:
         '200':
           description: Confirmation with insight ID

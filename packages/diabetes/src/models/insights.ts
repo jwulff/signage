@@ -11,7 +11,7 @@ export type InsightType = "hourly" | "daily" | "weekly" | "alert";
  * An AI-generated insight about diabetes data
  */
 export interface Insight {
-  /** The insight text (max 30 chars for display) */
+  /** The insight text (hourly LED insights: max 30 chars; daily/weekly may be longer) */
   content: string;
   /** Type of analysis that generated this insight */
   type: InsightType;
