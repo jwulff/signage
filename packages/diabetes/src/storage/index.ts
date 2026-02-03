@@ -35,6 +35,7 @@ export {
   storeInsight,
   getCurrentInsight,
   getInsightHistory,
+  updateCurrentInsightReasoning,
   isInsightStale,
   getInsightStatus,
 } from "./insights.js";
