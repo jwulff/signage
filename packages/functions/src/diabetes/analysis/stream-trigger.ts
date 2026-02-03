@@ -132,13 +132,16 @@ FORBIDDEN:
 - Abbreviations ("avg", "TIR", "hi/lo")
 - Commands ("need bolus") - use questions ("bolus?")
 
-STEP 4 - STORE WITH REASONING:
-Call storeInsight with:
+STEP 4 - STORE WITH REASONING (ALL 3 PARAMETERS REQUIRED):
+Call storeInsight with ALL of these:
 - type="hourly"
 - content="[color]Your insight text[/]" (max 30 chars)
-- reasoning="Explain your thinking: What data did you see? Why this insight? What did you avoid repeating?"
+- reasoning="YOUR EXPLANATION HERE" ← DO NOT SKIP THIS
 
-The reasoning is saved for review to help improve future prompts. Be specific about what you observed and why you chose this message.`;
+The reasoning parameter is MANDATORY. Example:
+reasoning="Checked history: said 'Nights dip at 3am' 2hrs ago. Today TIR 57% vs week 65%. Morning pattern detected 7x 5-8am. Chose morning observation since it's actionable and different from recent."
+
+Without reasoning, we can't improve the prompts. ALWAYS include it.`;
 
     const response = await invokeAgent(initialPrompt, sessionId);
     console.log("Agent response:", response);
