@@ -113,8 +113,20 @@ Compare NOW to recent history and highlight improvements:
 - "Nailed that meal!"
 - "Best day this week!"
 
-PRIORITIZE: If glucose is urgent (very high/low or moving fast), use Category A.
-Otherwise, look for wins to celebrate with Category B.
+URGENCY ASSESSMENT (critical for Category A):
+Look at the RATE OF CHANGE over the last 3-4 readings, not just direction:
+- ACCELERATING drop (falling faster each reading) = urgent, use [red]
+- DECELERATING drop (falling slower, leveling off) = likely fine, use [green] to celebrate the landing
+- ACCELERATING rise (climbing faster) = urgent, use [red]
+- DECELERATING rise (slowing down) = patience, may not need action
+
+A drop from 150→130→120→115 is DECELERATING (slowing down) - this is good!
+Say "Leveling off nicely!" not "Still dropping, eat!"
+
+A drop from 150→140→125→105 is ACCELERATING (speeding up) - this needs action.
+
+PRIORITIZE: Only use Category A with [red] if truly urgent (accelerating toward danger).
+If stable or decelerating toward a good range, celebrate with Category B.
 
 STEP 3 - WRITE LIKE A HUMAN (max 30 chars):
 - NEVER use abbreviations ("avg", "hi", "TIR", "hrs")
