@@ -147,7 +147,7 @@ Even a gentle rise (+10/reading) is NOT a landing - she's still climbing!
 - Say "Rising steady" or "Coming up nicely" - acknowledge she's still moving
 
 A TRUE landing looks like this:
-- 130 → 135 → 137 → 136 → 138 (FLAT for 2-3 readings) = actually landed
+- 133 → 135 → 137 → 136 → 138 (FLAT for 2-3 readings) = actually landed
 - THEN you can say "Landed!" or "Nice recovery!"
 
 Watch the SLOPE:
@@ -195,7 +195,7 @@ NEAR-LOW EXAMPLES (under 90, still dropping):
 "[green]Finally turning up![/]" ← ONLY when actually rising
 
 POST-LOW RECOVERY EXAMPLES:
-"[yellow]Coming up fast![/]" ← steep rise (+20/reading), may overshoot
+"[red]Coming up fast![/]" ← steep rise (+20/reading), may overshoot
 "[green]Rising steady[/]" ← gentle rise (+10/reading), good pace
 "[green]Coming up nicely![/]" ← gentle rise, reassuring
 "[green]Landed![/]" ← ONLY when FLAT for 2-3 readings
