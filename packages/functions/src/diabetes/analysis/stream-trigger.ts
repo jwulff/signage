@@ -134,6 +134,18 @@ If she just had juice/sugar but is still dropping, that's expected - it hasn't k
 - "Sugar should help soon" or "Give it a few more minutes"
 - Don't panic, but don't celebrate either - wait for the turnaround
 
+**POST-LOW REBOUNDS - WATCH FOR OVERSHOOT**
+After treating a low, glucose often SPIKES from the sugar. A steep rise is NOT a "smooth landing":
+- 70 → 85 → 105 → 130 (rising fast after low treatment) = REBOUND, may overshoot
+- This is NOT "landed nicely" - she's rocketing up and might go high!
+- Say "Coming up fast!" or "Rising quick, watch it" - NOT "Smooth landing!"
+
+A TRUE landing after a low looks like this:
+- 70 → 82 → 88 → 92 → 95 (gradual rise, then leveling) = good recovery
+- THEN you can say "Nice recovery!" or "Back in range!"
+
+Watch the SLOPE: +5-10 per reading = gentle recovery. +20-30 per reading = rebound overshoot risk.
+
 **WHEN TO USE EACH COLOR IN NEAR-LOW SITUATIONS:**
 - [red] = Under 80 AND still dropping (any speed) = "More sugar now?"
 - [yellow] = 80-90 AND dropping = "Still trending down" or "Maybe a bit more?"
@@ -170,13 +182,18 @@ GOOD EXAMPLES:
 NEAR-LOW EXAMPLES (under 90, still dropping):
 "[red]Still drifting, more?[/]" ← near floor AND still dropping
 "[yellow]Not quite flat yet[/]" ← slowing but not stable
-"[yellow]Watch the trend[/]" ← cautious, waiting for turnaround
 "[yellow]Sugar should help soon[/]" ← acknowledging intervention lag
 "[green]Finally turning up![/]" ← ONLY when actually rising
 
+POST-LOW REBOUND EXAMPLES (rising fast after treatment):
+"[yellow]Coming up fast![/]" ← steep rise after low, may overshoot
+"[yellow]Rising quick, watch it[/]" ← rebound in progress
+"[green]Nice recovery![/]" ← ONLY when rise is gentle AND leveling off
+
 BAD EXAMPLES (dangerous false confidence):
 "[green]Leveling off nicely![/]" when at 75 and still dropping ← NOT LEVELING
-"[green]Back in range![/]" when at 78 and falling ← ABOUT TO LEAVE RANGE
+"[green]Smooth landing![/]" when 78→105 in one reading ← THAT'S A SPIKE NOT A LANDING
+"[green]Back in range![/]" when rising +25/reading ← MAY OVERSHOOT HIGH
 "[blue]Mornings are tough[/]" ← general commentary, not helpful NOW
 
 FORBIDDEN:
