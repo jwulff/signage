@@ -113,20 +113,39 @@ Compare NOW to recent history and highlight improvements:
 - "Nailed that meal!"
 - "Best day this week!"
 
-URGENCY ASSESSMENT (critical for Category A):
-Look at the RATE OF CHANGE over the last 3-4 readings, not just direction:
-- ACCELERATING drop (falling faster each reading) = urgent, use [red]
-- DECELERATING drop (falling slower, leveling off) = likely fine, use [green] to celebrate the landing
-- ACCELERATING rise (climbing faster) = urgent, use [red]
-- DECELERATING rise (slowing down) = patience, may not need action
+URGENCY ASSESSMENT (this is nuanced - read carefully):
 
-Example: high→less high→almost normal→normal is DECELERATING - this is good!
-Say "Leveling off nicely!" not "Still dropping, eat!"
+**TRAJECTORY MATTERS MORE THAN CURRENT VALUE**
+A reading of 80 while rising is GREAT. A reading of 80 while dropping is CONCERNING.
+Always think: "Where will she be in 10-15 minutes?"
 
-Example: high→higher→even higher→way higher is ACCELERATING - this needs action.
+**NEAR-LOW SITUATIONS (75-90 range) - BE CAREFUL WITH CELEBRATIONS**
+Even if the DROP is slowing (decelerating), if she's STILL DROPPING and NEAR THE FLOOR:
+- 85 → 80 → 77 → 75 (slowing down but STILL DROPPING toward 70)
+- This is NOT "leveling off nicely" - she's still drifting toward low!
+- Say "Still drifting down, more?" or "Watch the trend" - NOT "Leveling off!"
 
-PRIORITIZE: Only use Category A with [red] if truly urgent (accelerating toward danger).
-If stable or decelerating toward a good range, celebrate with Category B.
+Only celebrate "Leveling off!" when readings are ACTUALLY FLAT for 2-3 readings:
+- 78 → 77 → 78 → 79 = actually leveling, OK to celebrate
+- 85 → 80 → 77 → 75 = still dropping, NOT leveling off yet
+
+**INTERVENTION LAG - SUGAR TAKES 10-15 MINUTES**
+If she just had juice/sugar but is still dropping, that's expected - it hasn't kicked in yet.
+- "Sugar should help soon" or "Give it a few more minutes"
+- Don't panic, but don't celebrate either - wait for the turnaround
+
+**WHEN TO USE EACH COLOR IN NEAR-LOW SITUATIONS:**
+- [red] = Under 80 AND still dropping (any speed) = "More sugar now?"
+- [yellow] = 80-90 AND dropping = "Still trending down" or "Maybe a bit more?"
+- [green] = ONLY when actually flat or rising = "Turnaround!" or "Coming back up!"
+
+**HIGH-SIDE IS SIMPLER:**
+- ACCELERATING rise = urgent, use [red]
+- DECELERATING rise = patience, may not need action
+- High but stable = gentle suggestion [yellow]
+
+PRIORITIZE: When near the low threshold (under 85), err on the side of caution.
+Better to suggest "maybe more sugar?" than to say "looking good!" right before a low.
 
 STEP 3 - WRITE LIKE A HUMAN (max 30 chars):
 - NEVER use abbreviations ("avg", "hi", "TIR", "hrs")
@@ -148,10 +167,17 @@ GOOD EXAMPLES:
 "[yellow]High before bed, bolus?[/]"
 "[rainbow]Best week in months![/]"
 
-BAD EXAMPLES (too vague, not actionable):
+NEAR-LOW EXAMPLES (under 90, still dropping):
+"[red]Still drifting, more?[/]" ← near floor AND still dropping
+"[yellow]Not quite flat yet[/]" ← slowing but not stable
+"[yellow]Watch the trend[/]" ← cautious, waiting for turnaround
+"[yellow]Sugar should help soon[/]" ← acknowledging intervention lag
+"[green]Finally turning up![/]" ← ONLY when actually rising
+
+BAD EXAMPLES (dangerous false confidence):
+"[green]Leveling off nicely![/]" when at 75 and still dropping ← NOT LEVELING
+"[green]Back in range![/]" when at 78 and falling ← ABOUT TO LEAVE RANGE
 "[blue]Mornings are tough[/]" ← general commentary, not helpful NOW
-"[yellow]Nights dip at 3am[/]" ← observation, not actionable
-"[blue]Patterns detected[/]" ← meaningless without action
 
 FORBIDDEN:
 - General observations without action or celebration
