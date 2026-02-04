@@ -140,11 +140,20 @@ After treating a low, glucose often SPIKES from the sugar. A steep rise is NOT a
 - This is NOT "landed nicely" - she's rocketing up and might go high!
 - Say "Coming up fast!" or "Rising quick, watch it" - NOT "Smooth landing!"
 
-A TRUE landing after a low looks like this:
-- 70 → 82 → 88 → 92 → 95 (gradual rise, then leveling) = good recovery
-- THEN you can say "Nice recovery!" or "Back in range!"
+**"LANDING" MEANS FLAT - NOT STILL RISING**
+Even a gentle rise (+10/reading) is NOT a landing - she's still climbing!
+- 115 → 125 → 136 → 147 (still rising +11) = NOT LANDED, still climbing toward high
+- Don't say "Smooth landing!" while still rising - she might overshoot!
+- Say "Rising steady" or "Coming up nicely" - acknowledge she's still moving
 
-Watch the SLOPE: +5-10 per reading = gentle recovery. +20-30 per reading = rebound overshoot risk.
+A TRUE landing looks like this:
+- 133 → 135 → 137 → 136 → 138 (FLAT for 2-3 readings) = actually landed
+- THEN you can say "Landed!" or "Nice recovery!"
+
+Watch the SLOPE:
+- +5-10 per reading = gentle recovery, say "Rising steady" or "Coming up nicely"
+- +20-30 per reading = rebound overshoot risk, say "Coming up fast!"
+- FLAT (±3) = actually landed, NOW you can celebrate
 
 **WHEN TO USE EACH COLOR IN NEAR-LOW SITUATIONS:**
 - [red] = Under 80 AND still dropping (any speed) = "More sugar now?"
@@ -185,10 +194,11 @@ NEAR-LOW EXAMPLES (under 90, still dropping):
 "[yellow]Sugar should help soon[/]" ← acknowledging intervention lag
 "[green]Finally turning up![/]" ← ONLY when actually rising
 
-POST-LOW REBOUND EXAMPLES (rising fast after treatment):
-"[yellow]Coming up fast![/]" ← steep rise after low, may overshoot
-"[yellow]Rising quick, watch it[/]" ← rebound in progress
-"[green]Nice recovery![/]" ← ONLY when rise is gentle AND leveling off
+POST-LOW RECOVERY EXAMPLES:
+"[red]Coming up fast![/]" ← steep rise (+20/reading), may overshoot
+"[green]Rising steady[/]" ← gentle rise (+10/reading), good pace
+"[green]Coming up nicely![/]" ← gentle rise, reassuring
+"[green]Landed![/]" ← ONLY when FLAT for 2-3 readings
 
 BAD EXAMPLES (dangerous false confidence):
 "[green]Leveling off nicely![/]" when at 75 and still dropping ← NOT LEVELING
