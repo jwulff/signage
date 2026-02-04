@@ -120,10 +120,10 @@ Look at the RATE OF CHANGE over the last 3-4 readings, not just direction:
 - ACCELERATING rise (climbing faster) = urgent, use [red]
 - DECELERATING rise (slowing down) = patience, may not need action
 
-A drop from 150→130→120→115 is DECELERATING (slowing down) - this is good!
+Example: high→less high→almost normal→normal is DECELERATING - this is good!
 Say "Leveling off nicely!" not "Still dropping, eat!"
 
-A drop from 150→140→125→105 is ACCELERATING (speeding up) - this needs action.
+Example: high→higher→even higher→way higher is ACCELERATING - this needs action.
 
 PRIORITIZE: Only use Category A with [red] if truly urgent (accelerating toward danger).
 If stable or decelerating toward a good range, celebrate with Category B.
@@ -190,25 +190,30 @@ Without reasoning, we can't improve the prompts. ALWAYS include it.`;
     }
 
     // Check if the stored insight is valid (length + quality) and retry if needed
-    await enforceInsightQuality(sessionId);
+    const wasRewritten = await enforceInsightQuality(sessionId);
 
-    // Extract reasoning from agent response and update the insight (if one exists)
-    const reasoning = extractReasoningFromResponse(response);
-    if (reasoning) {
-      const existingInsight = await getCurrentInsight(
-        docClient,
-        Resource.SignageTable.name,
-        DEFAULT_USER_ID
-      );
-      if (existingInsight) {
-        await updateCurrentInsightReasoning(
+    // Extract reasoning from agent response and update the insight
+    // Skip if insight was rewritten (reasoning no longer matches the stored insight)
+    if (!wasRewritten) {
+      const reasoning = extractReasoningFromResponse(response);
+      if (reasoning) {
+        const existingInsight = await getCurrentInsight(
           docClient,
           Resource.SignageTable.name,
-          DEFAULT_USER_ID,
-          reasoning
+          DEFAULT_USER_ID
         );
-        console.log("Stored reasoning:", reasoning.slice(0, 100) + "...");
+        if (existingInsight) {
+          await updateCurrentInsightReasoning(
+            docClient,
+            Resource.SignageTable.name,
+            DEFAULT_USER_ID,
+            reasoning
+          );
+          console.log("Stored reasoning:", reasoning.slice(0, 100) + "...");
+        }
       }
+    } else {
+      console.log("Skipping reasoning update - insight was rewritten");
     }
 
     console.log("Stream-triggered analysis complete");
@@ -254,8 +259,9 @@ async function invokeAgent(prompt: string, sessionId: string): Promise<string> {
 
 /**
  * Check the stored insight and fix if too long or invalid
+ * Returns true if the insight was rewritten (original reasoning no longer applies)
  */
-async function enforceInsightQuality(sessionId: string): Promise<void> {
+async function enforceInsightQuality(sessionId: string): Promise<boolean> {
   for (let attempt = 0; attempt < MAX_SHORTEN_ATTEMPTS; attempt++) {
     const insight = await getCurrentInsight(
       docClient,
@@ -265,13 +271,13 @@ async function enforceInsightQuality(sessionId: string): Promise<void> {
 
     if (!insight) {
       console.log("No insight found to check");
-      return;
+      return false;
     }
 
     // Only fix hourly insights
     if (insight.type !== "hourly") {
       console.log(`Skipping quality check for ${insight.type} insight`);
-      return;
+      return false;
     }
 
     // Strip color markup for length calculation (markup doesn't count as visible chars)
@@ -283,7 +289,7 @@ async function enforceInsightQuality(sessionId: string): Promise<void> {
     // Check both length AND quality (using visible length, not raw length)
     if (visibleLength <= MAX_INSIGHT_LENGTH && valid) {
       console.log("Insight OK");
-      return;
+      return false; // Not rewritten
     }
 
     // Insight needs fixing
@@ -325,8 +331,12 @@ ONE color, max ${MAX_INSIGHT_LENGTH} chars. storeInsight type="hourly".`;
         "hourly",
         "Data updated chk app"
       );
+      return true; // Rewritten with fallback
     }
   }
+
+  // If we got here, the insight was rewritten by fix attempts
+  return true;
 }
 
 /**
