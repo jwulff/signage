@@ -9,6 +9,7 @@ import {
   createDocClient,
   queryByTypeAndTimeRange,
   queryDailyInsulinByDateRange,
+  formatDateInTimezone,
 } from "@diabetes/core";
 import type { BolusRecord, CarbsRecord, ManualInsulinRecord } from "@diabetes/core";
 
@@ -163,10 +164,9 @@ async function getDailyInsulinTotals(days: number): Promise<{
   max: number;
   daysWithData: number;
 }> {
-  const endDate = new Date().toISOString().split("T")[0];
-  const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
+  const now = Date.now();
+  const endDate = formatDateInTimezone(now);
+  const startDate = formatDateInTimezone(now - days * 24 * 60 * 60 * 1000);
 
   const dailyTotals = await queryDailyInsulinByDateRange(
     docClient,
@@ -269,8 +269,9 @@ export async function handler(
       }
 
       case "/getMealBoluses": {
-        const startDate = getParam(event, "startDate") || new Date().toISOString().split("T")[0];
-        const endDate = getParam(event, "endDate") || new Date().toISOString().split("T")[0];
+        const now = Date.now();
+        const startDate = getParam(event, "startDate") || formatDateInTimezone(now);
+        const endDate = getParam(event, "endDate") || formatDateInTimezone(now);
         const result = await getMealBoluses(startDate, endDate);
         return formatResponse(event, result);
       }

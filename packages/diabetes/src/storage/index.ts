@@ -11,6 +11,8 @@ export { createDocClient } from "./client.js";
 export {
   DATA_TIMEZONE,
   formatDateInTimezone,
+  getHourInTimezone,
+  getCurrentLocalTime,
   getStartOfDayInTimezone,
   generateRecordHash,
   generateRecordKeys,

@@ -8,7 +8,7 @@
 
 import { BedrockAgentRuntimeClient, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
 import { Resource } from "sst";
-import { createDocClient, storeInsight, getCurrentInsight, updateCurrentInsightReasoning } from "@diabetes/core";
+import { createDocClient, storeInsight, getCurrentInsight, updateCurrentInsightReasoning, getCurrentLocalTime } from "@diabetes/core";
 import type { DynamoDBStreamHandler } from "aws-lambda";
 
 const bedrockClient = new BedrockAgentRuntimeClient({});
@@ -87,7 +87,10 @@ export const handler: DynamoDBStreamHandler = async (event) => {
 
   try {
     // Prompt the agent to generate a concise insight
+    const localTime = getCurrentLocalTime();
     const initialPrompt = `Generate a thoughtful insight for my LED display (max 30 characters).
+
+CURRENT LOCAL TIME: ${localTime} (Pacific Time)
 
 STEP 1 - GATHER CONTEXT (do this first!):
 - Call getInsightHistory(days=2) to see recent insights - DON'T repeat them
