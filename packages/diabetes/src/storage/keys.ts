@@ -34,6 +34,32 @@ export function formatDateInTimezone(timestampMs: number, timezone: string = DAT
 }
 
 /**
+ * Get the hour (0-23) for a timestamp in the data timezone.
+ * Unlike Date.getHours() which returns UTC on Lambda, this returns local hours.
+ */
+export function getHourInTimezone(timestampMs: number, timezone: string = DATA_TIMEZONE): number {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    hour12: false,
+  });
+  return parseInt(formatter.format(new Date(timestampMs)), 10);
+}
+
+/**
+ * Get the current local time as a human-readable string (e.g., "Friday 2:30 PM")
+ */
+export function getCurrentLocalTime(timezone: string = DATA_TIMEZONE): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    weekday: "long",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date());
+}
+
+/**
  * Get the start of day timestamp (midnight) for a date string in the data timezone.
  * This is needed because new Date("YYYY-MM-DD") interprets the date as UTC midnight,
  * not midnight in the data timezone.
