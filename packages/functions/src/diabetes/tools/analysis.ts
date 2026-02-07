@@ -14,6 +14,8 @@ import {
   detectAllPatterns,
   calculateGlucoseStats,
   getStartOfDayInTimezone,
+  getHourInTimezone,
+  formatDateInTimezone,
 } from "@diabetes/core";
 import type { CgmReading, BolusRecord } from "@diabetes/core";
 
@@ -98,7 +100,7 @@ async function getDailyAggregation(date: string): Promise<{
   }>;
 }> {
   // Validate and default the date
-  const validDate = isValidDateString(date) ? date : new Date().toISOString().split("T")[0];
+  const validDate = isValidDateString(date) ? date : formatDateInTimezone(Date.now());
 
   // Compute daily window in data timezone (America/Los_Angeles)
   const startTime = getStartOfDayInTimezone(validDate);
@@ -115,10 +117,10 @@ async function getDailyAggregation(date: string): Promise<{
 
   const stats = calculateGlucoseStats(cgmReadings);
 
-  // Calculate hourly breakdown
+  // Calculate hourly breakdown (in local timezone, not UTC)
   const hourlyMap = new Map<number, CgmReading[]>();
   for (const reading of cgmReadings) {
-    const hour = new Date(reading.timestamp).getHours();
+    const hour = getHourInTimezone(reading.timestamp);
     if (!hourlyMap.has(hour)) hourlyMap.set(hour, []);
     hourlyMap.get(hour)!.push(reading);
   }
@@ -159,34 +161,39 @@ async function getWeeklyAggregation(weekOffset: number = 0): Promise<{
     tir: number;
   }>;
 }> {
-  // Calculate week boundaries (Monday-Sunday)
-  const now = new Date();
-  const dayOfWeek = now.getDay();
+  // Calculate week boundaries (Monday-Sunday) in local timezone
+  const todayLocal = formatDateInTimezone(Date.now());
+  const todayDate = new Date(todayLocal + "T12:00:00Z"); // noon UTC to avoid DST issues
+  const dayOfWeek = todayDate.getUTCDay();
   const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() + mondayOffset - weekOffset * 7);
-  weekStart.setHours(0, 0, 0, 0);
+  const mondayDate = new Date(todayDate);
+  mondayDate.setUTCDate(todayDate.getUTCDate() + mondayOffset - weekOffset * 7);
+  const mondayStr = mondayDate.toISOString().split("T")[0];
+  const sundayDate = new Date(mondayDate);
+  sundayDate.setUTCDate(mondayDate.getUTCDate() + 6);
+  const sundayStr = sundayDate.toISOString().split("T")[0];
 
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 7);
+  // Use timezone-aware day boundaries
+  const weekStartMs = getStartOfDayInTimezone(mondayStr);
+  const weekEndMs = getStartOfDayInTimezone(sundayStr) + 24 * 60 * 60 * 1000;
 
   const cgmReadings = (await queryByTypeAndTimeRange(
     docClient,
     Resource.SignageTable.name,
     DEFAULT_USER_ID,
     "cgm",
-    weekStart.getTime(),
-    weekEnd.getTime()
+    weekStartMs,
+    weekEndMs
   )) as CgmReading[];
 
   const stats = calculateGlucoseStats(cgmReadings);
 
-  // Calculate daily breakdown
+  // Calculate daily breakdown using local dates
   const dailyMap = new Map<string, CgmReading[]>();
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
   for (const reading of cgmReadings) {
-    const dateStr = new Date(reading.timestamp).toISOString().split("T")[0];
+    const dateStr = formatDateInTimezone(reading.timestamp);
     if (!dailyMap.has(dateStr)) dailyMap.set(dateStr, []);
     dailyMap.get(dateStr)!.push(reading);
   }
@@ -194,10 +201,10 @@ async function getWeeklyAggregation(weekOffset: number = 0): Promise<{
   const dailyBreakdown = Array.from(dailyMap.entries())
     .map(([date, readings]) => {
       const dayStats = calculateGlucoseStats(readings);
-      const d = new Date(date);
+      const d = new Date(date + "T12:00:00Z");
       return {
         date,
-        dayOfWeek: dayNames[d.getDay()],
+        dayOfWeek: dayNames[d.getUTCDay()],
         readingCount: readings.length,
         mean: dayStats.mean,
         tir: dayStats.tir,
@@ -206,8 +213,8 @@ async function getWeeklyAggregation(weekOffset: number = 0): Promise<{
     .sort((a, b) => a.date.localeCompare(b.date));
 
   return {
-    weekStart: weekStart.toISOString().split("T")[0],
-    weekEnd: new Date(weekEnd.getTime() - 1).toISOString().split("T")[0],
+    weekStart: mondayStr,
+    weekEnd: sundayStr,
     stats,
     dailyBreakdown,
   };
@@ -334,7 +341,7 @@ export async function handler(
   try {
     switch (event.apiPath) {
       case "/getDailyAggregation": {
-        const date = getParam(event, "date") || new Date().toISOString().split("T")[0];
+        const date = getParam(event, "date") || formatDateInTimezone(Date.now());
         const result = await getDailyAggregation(date);
         return formatResponse(event, result);
       }

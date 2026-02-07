@@ -11,6 +11,7 @@ import {
   queryByTypeAndTimeRange,
   calculateGlucoseStats,
   calculateTimeInRange,
+  formatDateInTimezone,
 } from "@diabetes/core";
 import type { CgmReading, BgReading } from "@diabetes/core";
 
@@ -242,8 +243,8 @@ export async function handler(
       }
 
       case "/getTimeInRange": {
-        const startDate = getParam(event, "startDate") || new Date().toISOString().split("T")[0];
-        const endDate = getParam(event, "endDate") || new Date().toISOString().split("T")[0];
+        const startDate = getParam(event, "startDate") || formatDateInTimezone(Date.now());
+        const endDate = getParam(event, "endDate") || formatDateInTimezone(Date.now());
         const result = await getTimeInRangeForRange(startDate, endDate);
         return formatResponse(event, result);
       }
