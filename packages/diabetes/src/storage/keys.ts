@@ -58,7 +58,8 @@ export function getHourInTimezone(timestampMs: number, timezone: string = DATA_T
   const formatter = getHourFormatter(timezone);
   const parts = formatter.formatToParts(new Date(timestampMs));
   const hourPart = parts.find((p) => p.type === "hour");
-  return hourPart ? parseInt(hourPart.value, 10) : 0;
+  // Some ICU builds return 24 at midnight despite hourCycle "h23"; normalize to 0-23
+  return hourPart ? parseInt(hourPart.value, 10) % 24 : 0;
 }
 
 /**
