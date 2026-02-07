@@ -164,8 +164,9 @@ async function getDailyInsulinTotals(days: number): Promise<{
   max: number;
   daysWithData: number;
 }> {
-  const endDate = formatDateInTimezone(Date.now());
-  const startDate = formatDateInTimezone(Date.now() - days * 24 * 60 * 60 * 1000);
+  const now = Date.now();
+  const endDate = formatDateInTimezone(now);
+  const startDate = formatDateInTimezone(now - days * 24 * 60 * 60 * 1000);
 
   const dailyTotals = await queryDailyInsulinByDateRange(
     docClient,
@@ -268,8 +269,9 @@ export async function handler(
       }
 
       case "/getMealBoluses": {
-        const startDate = getParam(event, "startDate") || formatDateInTimezone(Date.now());
-        const endDate = getParam(event, "endDate") || formatDateInTimezone(Date.now());
+        const now = Date.now();
+        const startDate = getParam(event, "startDate") || formatDateInTimezone(now);
+        const endDate = getParam(event, "endDate") || formatDateInTimezone(now);
         const result = await getMealBoluses(startDate, endDate);
         return formatResponse(event, result);
       }

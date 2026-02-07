@@ -172,10 +172,13 @@ async function getWeeklyAggregation(weekOffset: number = 0): Promise<{
   const sundayDate = new Date(mondayDate);
   sundayDate.setUTCDate(mondayDate.getUTCDate() + 6);
   const sundayStr = sundayDate.toISOString().split("T")[0];
+  const nextMondayDate = new Date(mondayDate);
+  nextMondayDate.setUTCDate(mondayDate.getUTCDate() + 7);
+  const nextMondayStr = nextMondayDate.toISOString().split("T")[0];
 
-  // Use timezone-aware day boundaries
+  // Use timezone-aware day boundaries (DST-safe: no fixed +24h)
   const weekStartMs = getStartOfDayInTimezone(mondayStr);
-  const weekEndMs = getStartOfDayInTimezone(sundayStr) + 24 * 60 * 60 * 1000;
+  const weekEndMs = getStartOfDayInTimezone(nextMondayStr);
 
   const cgmReadings = (await queryByTypeAndTimeRange(
     docClient,
