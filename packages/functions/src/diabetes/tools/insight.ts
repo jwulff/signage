@@ -62,13 +62,7 @@ function formatResponse(event: BedrockAgentEvent, body: unknown): BedrockAgentRe
   };
 }
 
-/**
- * Strip color markup for comparison (e.g., "[green]Hello[/]" -> "Hello")
- * Handles nested, malformed, or missing closing tags
- */
-function stripMarkup(text: string): string {
-  return text.replace(/\[(?:\/|\w+)\]/g, "").trim().toLowerCase();
-}
+import { stripMarkup } from "./insight-utils.js";
 
 /**
  * Store a new insight (with dedup — rejects if identical to recent insights)

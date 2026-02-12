@@ -10,6 +10,7 @@ import {
   queryByTypeAndTimeRange,
   queryDailyInsulinByDateRange,
   formatDateInTimezone,
+  getStartOfDayInTimezone,
 } from "@diabetes/core";
 import type { BolusRecord, CarbsRecord, ManualInsulinRecord } from "@diabetes/core";
 
@@ -193,6 +194,15 @@ async function getDailyInsulinTotals(days: number): Promise<{
 }
 
 /**
+ * Validate YYYY-MM-DD date string
+ */
+function isValidDateString(date: string): boolean {
+  if (!date || typeof date !== "string") return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  return !isNaN(new Date(date).getTime());
+}
+
+/**
  * Get meal boluses for a date range
  */
 async function getMealBoluses(
@@ -208,8 +218,10 @@ async function getMealBoluses(
   averageCarbRatio: number;
   count: number;
 }> {
-  const startTime = new Date(startDate).getTime();
-  const endTime = new Date(endDate).getTime() + 24 * 60 * 60 * 1000;
+  // queryByTypeAndTimeRange converts timestamps to date strings internally,
+  // so we just need timestamps that land on the correct calendar dates
+  const startTime = getStartOfDayInTimezone(startDate);
+  const endTime = getStartOfDayInTimezone(endDate);
 
   const allBoluses = (await queryByTypeAndTimeRange(
     docClient,
@@ -270,8 +282,10 @@ export async function handler(
 
       case "/getMealBoluses": {
         const now = Date.now();
-        const startDate = getParam(event, "startDate") || formatDateInTimezone(now);
-        const endDate = getParam(event, "endDate") || formatDateInTimezone(now);
+        const rawStart = getParam(event, "startDate");
+        const rawEnd = getParam(event, "endDate");
+        const startDate = rawStart && isValidDateString(rawStart) ? rawStart : formatDateInTimezone(now);
+        const endDate = rawEnd && isValidDateString(rawEnd) ? rawEnd : formatDateInTimezone(now);
         const result = await getMealBoluses(startDate, endDate);
         return formatResponse(event, result);
       }
