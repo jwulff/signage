@@ -9,9 +9,9 @@
 import { BedrockAgentRuntimeClient, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
-import { createDocClient, storeInsight, getCurrentInsight, updateCurrentInsightReasoning, getCurrentLocalTime, queryByTypeAndTimeRange } from "@diabetes/core";
+import { createDocClient, storeInsight, getCurrentInsight, updateCurrentInsightReasoning, getCurrentLocalTime, queryByTypeAndTimeRange, generateInsightKeys } from "@diabetes/core";
 import type { DynamoDBStreamHandler } from "aws-lambda";
-import type { CgmReading } from "@diabetes/core";
+import type { CgmReading, InsightZone } from "@diabetes/core";
 
 const bedrockClient = new BedrockAgentRuntimeClient({});
 const docClient = createDocClient();
@@ -33,8 +33,6 @@ const INSIGHT_INTERVAL_MS = 60 * 60_000; // 60 minutes between insights
 const RAPID_CHANGE_THRESHOLD = 15; // mg/dL between consecutive CGM readings
 const DRIFT_THRESHOLD = 30; // mg/dL change from last insight glucose
 const ZONE_CHANGE_COOLDOWN_MS = 15 * 60_000; // 15 min cooldown for zone-only triggers
-
-type InsightZone = "low" | "caution" | "in-range" | "high";
 
 /**
  * Classify glucose into zones for trigger evaluation
@@ -65,7 +63,7 @@ function shouldGenerateInsight(input: {
     generatedAt: number;
     type: string;
     glucoseAtGeneration?: number;
-    zoneAtGeneration?: string;
+    zoneAtGeneration?: InsightZone;
   } | null;
   now: number;
 }): TriggerResult {
@@ -162,14 +160,21 @@ export const handler: DynamoDBStreamHandler = async (event) => {
   console.log(`Stream triggered with ${relevantRecords.length} relevant records`);
 
   // Extract current glucose and timestamp from the most recent CGM record in the batch
+  // When multiple readings arrive in a single batch, pick the one with the latest timestamp
   let currentGlucose: number | null = null;
   let streamRecordTimestamp: number = now;
   for (const record of relevantRecords) {
     const glucoseVal = record.dynamodb?.NewImage?.data?.M?.glucoseMgDl?.N;
-    if (glucoseVal) {
+    const tsVal = record.dynamodb?.NewImage?.timestamp?.N;
+    if (glucoseVal && tsVal) {
+      const tsNum = Number(tsVal);
+      if (currentGlucose === null || tsNum > streamRecordTimestamp) {
+        currentGlucose = Number(glucoseVal);
+        streamRecordTimestamp = tsNum;
+      }
+    } else if (glucoseVal && currentGlucose === null) {
+      // Record with glucose but no timestamp — use as fallback only
       currentGlucose = Number(glucoseVal);
-      const ts = record.dynamodb?.NewImage?.timestamp?.N;
-      if (ts) streamRecordTimestamp = Number(ts);
     }
   }
 
@@ -346,54 +351,64 @@ The reasoning parameter is MANDATORY.`;
     // Check if the stored insight is valid (length + quality) and retry if needed
     const wasRewritten = await enforceInsightQuality(sessionId);
 
+    // Fetch the stored insight once for subsequent updates
+    const storedInsight = await getCurrentInsight(
+      docClient,
+      Resource.SignageTable.name,
+      DEFAULT_USER_ID
+    );
+
     // Extract reasoning from agent response and update the insight
     // Skip if insight was rewritten (reasoning no longer matches the stored insight)
-    if (!wasRewritten) {
+    if (!wasRewritten && storedInsight) {
       const reasoning = extractReasoningFromResponse(response);
       if (reasoning) {
-        const existingInsight = await getCurrentInsight(
+        await updateCurrentInsightReasoning(
           docClient,
           Resource.SignageTable.name,
-          DEFAULT_USER_ID
+          DEFAULT_USER_ID,
+          reasoning,
+          storedInsight.generatedAt
         );
-        if (existingInsight) {
-          await updateCurrentInsightReasoning(
-            docClient,
-            Resource.SignageTable.name,
-            DEFAULT_USER_ID,
-            reasoning
-          );
-          console.log("Stored reasoning:", reasoning.slice(0, 100) + "...");
-        }
+        console.log("Stored reasoning:", reasoning.slice(0, 100) + "...");
       }
-    } else {
+    } else if (wasRewritten) {
       console.log("Skipping reasoning update - insight was rewritten");
     }
 
-    // Set glucoseAtGeneration and zoneAtGeneration on the stored insight
+    // Set glucoseAtGeneration and zoneAtGeneration on both current and history records
     // These fields enable rate-limiting trigger evaluation for future readings
-    try {
-      const insightKeys = await getCurrentInsight(
-        docClient,
-        Resource.SignageTable.name,
-        DEFAULT_USER_ID
-      );
-      if (insightKeys) {
-        await docClient.send(
-          new UpdateCommand({
-            TableName: Resource.SignageTable.name,
-            Key: { pk: `USR#${DEFAULT_USER_ID}#INSIGHT#CURRENT`, sk: "_" },
-            UpdateExpression: "SET glucoseAtGeneration = :glucose, zoneAtGeneration = :zone",
-            ExpressionAttributeValues: {
-              ":glucose": currentGlucose,
-              ":zone": currentZone,
-            },
-          })
-        );
+    if (storedInsight) {
+      try {
+        const historyKeys = generateInsightKeys(DEFAULT_USER_ID, "HISTORY", storedInsight.generatedAt);
+        await Promise.all([
+          docClient.send(
+            new UpdateCommand({
+              TableName: Resource.SignageTable.name,
+              Key: { pk: `USR#${DEFAULT_USER_ID}#INSIGHT#CURRENT`, sk: "_" },
+              UpdateExpression: "SET glucoseAtGeneration = :glucose, zoneAtGeneration = :zone",
+              ExpressionAttributeValues: {
+                ":glucose": currentGlucose,
+                ":zone": currentZone,
+              },
+            })
+          ),
+          docClient.send(
+            new UpdateCommand({
+              TableName: Resource.SignageTable.name,
+              Key: { pk: historyKeys.pk, sk: historyKeys.sk },
+              UpdateExpression: "SET glucoseAtGeneration = :glucose, zoneAtGeneration = :zone",
+              ExpressionAttributeValues: {
+                ":glucose": currentGlucose,
+                ":zone": currentZone,
+              },
+            })
+          ),
+        ]);
+      } catch (updateError) {
+        // Non-critical: next reading will trigger cold-start path
+        console.error("Failed to set glucose/zone on insight:", updateError);
       }
-    } catch (updateError) {
-      // Non-critical: next reading will trigger cold-start path
-      console.error("Failed to set glucose/zone on insight:", updateError);
     }
 
     console.log("Stream-triggered analysis complete");

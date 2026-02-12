@@ -40,6 +40,7 @@ export { RECORD_TYPES } from "./records.js";
 // Insight types
 export type {
   InsightType,
+  InsightZone,
   Insight,
   InsightMetrics,
   StoredInsight,

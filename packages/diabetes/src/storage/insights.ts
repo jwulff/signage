@@ -9,7 +9,7 @@ import {
   QueryCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
-import type { Insight, StoredInsight, InsightType } from "../models/index.js";
+import type { Insight, StoredInsight, InsightType, InsightZone } from "../models/index.js";
 import { generateInsightKeys } from "./keys.js";
 import { randomUUID } from "crypto";
 
@@ -25,7 +25,7 @@ export async function storeInsight(
   metrics?: Insight["metrics"],
   reasoning?: string,
   glucoseAtGeneration?: number,
-  zoneAtGeneration?: string
+  zoneAtGeneration?: InsightZone
 ): Promise<{ insightId: string }> {
   const now = Date.now();
   const insightId = randomUUID();
@@ -123,13 +123,16 @@ export async function getInsightHistory(
 }
 
 /**
- * Update the current insight with reasoning extracted from agent response
+ * Update the current insight with reasoning extracted from agent response.
+ * Accepts generatedAt directly to avoid a race condition where a new insight
+ * could be stored between reading the current insight and updating history.
  */
 export async function updateCurrentInsightReasoning(
   docClient: DynamoDBDocumentClient,
   tableName: string,
   userId: string,
-  reasoning: string
+  reasoning: string,
+  generatedAt: number
 ): Promise<void> {
   const keys = generateInsightKeys(userId, "CURRENT");
 
@@ -145,21 +148,18 @@ export async function updateCurrentInsightReasoning(
     })
   );
 
-  // Also update the history record (get current first to find the timestamp)
-  const current = await getCurrentInsight(docClient, tableName, userId);
-  if (current) {
-    const historyKeys = generateInsightKeys(userId, "HISTORY", current.generatedAt);
-    await docClient.send(
-      new UpdateCommand({
-        TableName: tableName,
-        Key: { pk: historyKeys.pk, sk: historyKeys.sk },
-        UpdateExpression: "SET reasoning = :reasoning",
-        ExpressionAttributeValues: {
-          ":reasoning": reasoning,
-        },
-      })
-    );
-  }
+  // Also update the history record using the known timestamp
+  const historyKeys = generateInsightKeys(userId, "HISTORY", generatedAt);
+  await docClient.send(
+    new UpdateCommand({
+      TableName: tableName,
+      Key: { pk: historyKeys.pk, sk: historyKeys.sk },
+      UpdateExpression: "SET reasoning = :reasoning",
+      ExpressionAttributeValues: {
+        ":reasoning": reasoning,
+      },
+    })
+  );
 }
 
 /**
