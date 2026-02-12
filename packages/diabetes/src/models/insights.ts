@@ -8,6 +8,11 @@
 export type InsightType = "hourly" | "daily" | "weekly" | "alert";
 
 /**
+ * Glucose zone for trigger evaluation
+ */
+export type InsightZone = "low" | "caution" | "in-range" | "high";
+
+/**
  * An AI-generated insight about diabetes data
  */
 export interface Insight {
@@ -24,7 +29,7 @@ export interface Insight {
   /** Glucose value (mg/dL) when this insight was generated, for drift detection */
   glucoseAtGeneration?: number;
   /** Glucose zone when this insight was generated, for zone-change detection */
-  zoneAtGeneration?: string;
+  zoneAtGeneration?: InsightZone;
 }
 
 /**

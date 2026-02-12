@@ -780,6 +780,106 @@ describe("stream-trigger", () => {
     });
   });
 
+  describe("extractReasoningFromResponse", () => {
+    // Replicate extractReasoningFromResponse logic from stream-trigger.ts
+    function extractReasoningFromResponse(response: string): string | null {
+      const reasoningPatterns = [
+        /\*\*Why this insight[?:]?\*\*:?\s*([\s\S]*?)(?=\n\n|\n\*\*|$)/i,
+        /Why this insight[?:]?\s*([\s\S]*?)(?=\n\n|\n\*\*|$)/i,
+        /\*\*Reasoning[?:]?\*\*:?\s*([\s\S]*?)(?=\n\n|\n\*\*|$)/i,
+      ];
+
+      for (const pattern of reasoningPatterns) {
+        const match = response.match(pattern);
+        if (match && match[1]) {
+          let reasoning = match[1].trim();
+          reasoning = reasoning.replace(/\*\*/g, "").replace(/\*/g, "");
+          if (reasoning.length > 500) {
+            reasoning = reasoning.slice(0, 497) + "...";
+          }
+          return reasoning;
+        }
+      }
+
+      return null;
+    }
+
+    it("extracts reasoning from bold markdown header", () => {
+      const response = `I stored the insight.
+
+**Why this insight:** Glucose has been in range all afternoon, a nice streak worth celebrating.
+
+**Next steps:** Keep monitoring.`;
+      const result = extractReasoningFromResponse(response);
+      expect(result).toBe("Glucose has been in range all afternoon, a nice streak worth celebrating.");
+    });
+
+    it("extracts reasoning from bold header with question mark", () => {
+      const response = `Done!
+
+**Why this insight?** The user's glucose just spiked after lunch.`;
+      const result = extractReasoningFromResponse(response);
+      expect(result).toBe("The user's glucose just spiked after lunch.");
+    });
+
+    it("extracts reasoning from plain text header", () => {
+      const response = `Stored.
+
+Why this insight: It has been a steady morning with no drops or spikes.`;
+      const result = extractReasoningFromResponse(response);
+      expect(result).toBe("It has been a steady morning with no drops or spikes.");
+    });
+
+    it("extracts reasoning from Reasoning header", () => {
+      const response = `Insight stored.
+
+**Reasoning:** The overnight glucose was unusually flat, which is worth celebrating.`;
+      const result = extractReasoningFromResponse(response);
+      expect(result).toBe("The overnight glucose was unusually flat, which is worth celebrating.");
+    });
+
+    it("truncates reasoning longer than 500 chars", () => {
+      const longText = "A".repeat(600);
+      const response = `**Why this insight:** ${longText}`;
+      const result = extractReasoningFromResponse(response);
+      expect(result).not.toBeNull();
+      expect(result!.length).toBe(500);
+      expect(result!.endsWith("...")).toBe(true);
+    });
+
+    it("strips markdown bold from reasoning text", () => {
+      const response = `**Why this insight:** The glucose is **very stable** and *trending well*.`;
+      const result = extractReasoningFromResponse(response);
+      expect(result).toBe("The glucose is very stable and trending well.");
+    });
+
+    it("returns null when no reasoning section found", () => {
+      const response = "I stored the insight on the display.";
+      const result = extractReasoningFromResponse(response);
+      expect(result).toBeNull();
+    });
+
+    it("returns null for empty response", () => {
+      const result = extractReasoningFromResponse("");
+      expect(result).toBeNull();
+    });
+
+    it("stops at double newline", () => {
+      const response = `**Why this insight:** Short and steady.
+
+Some other content that should not be included.`;
+      const result = extractReasoningFromResponse(response);
+      expect(result).toBe("Short and steady.");
+    });
+
+    it("stops at next bold section", () => {
+      const response = `**Why this insight:** Glucose is climbing.
+**Color choice:** Yellow for caution.`;
+      const result = extractReasoningFromResponse(response);
+      expect(result).toBe("Glucose is climbing.");
+    });
+  });
+
   describe("insight dedup stripMarkup", () => {
     // Replicate stripMarkup logic for testing
     function stripMarkup(text: string): string {
