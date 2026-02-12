@@ -91,8 +91,9 @@ export const weeklyAnalysisCron = new sst.aws.Cron("WeeklyAnalysisCron", {
 const inferenceProfileArn = $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}:${callerIdentity.then((id) => id.accountId)}:inference-profile/us.anthropic.claude-sonnet-4-5*`;
 
 // Foundation model ARN — Bedrock checks IAM against both the inference profile
-// and the underlying foundation model when using InvokeModel
-const foundationModelArn = $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}::foundation-model/anthropic.claude-sonnet-4-5*`;
+// and the underlying foundation model when using InvokeModel.
+// Region is wildcarded because the us.* inference profile can route to any US region.
+const foundationModelArn = $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:*::foundation-model/anthropic.claude-sonnet-4-5*`;
 
 const invokeModelPolicy = aws.iam.getPolicyDocumentOutput({
   statements: [
