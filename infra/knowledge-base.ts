@@ -51,7 +51,7 @@ export const outputs = {
 /*
 When OpenSearch Serverless becomes available in SST/Pulumi, uncomment this code:
 
-import { agent } from "./agent";
+// Note: agent.ts was removed when switching from InvokeAgent to InvokeModel
 
 const currentPartition = aws.getPartition({});
 const currentRegion = aws.getRegion({});
