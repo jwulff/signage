@@ -33,17 +33,33 @@ export function formatDateInTimezone(timestampMs: number, timezone: string = DAT
   return formatter.format(new Date(timestampMs));
 }
 
+const hourFormatterCache = new Map<string, Intl.DateTimeFormat>();
+
+function getHourFormatter(timezone: string): Intl.DateTimeFormat {
+  let formatter = hourFormatterCache.get(timezone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      hour12: false,
+      hourCycle: "h23",
+    });
+    hourFormatterCache.set(timezone, formatter);
+  }
+  return formatter;
+}
+
 /**
  * Get the hour (0-23) for a timestamp in the data timezone.
  * Unlike Date.getHours() which returns UTC on Lambda, this returns local hours.
+ * Uses formatToParts + hourCycle "h23" to guarantee 0-23 range.
  */
 export function getHourInTimezone(timestampMs: number, timezone: string = DATA_TIMEZONE): number {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    hour: "numeric",
-    hour12: false,
-  });
-  return parseInt(formatter.format(new Date(timestampMs)), 10);
+  const formatter = getHourFormatter(timezone);
+  const parts = formatter.formatToParts(new Date(timestampMs));
+  const hourPart = parts.find((p) => p.type === "hour");
+  // Some ICU builds return 24 at midnight despite hourCycle "h23"; normalize to 0-23
+  return hourPart ? parseInt(hourPart.value, 10) % 24 : 0;
 }
 
 /**

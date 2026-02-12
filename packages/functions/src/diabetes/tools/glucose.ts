@@ -243,8 +243,9 @@ export async function handler(
       }
 
       case "/getTimeInRange": {
-        const startDate = getParam(event, "startDate") || formatDateInTimezone(Date.now());
-        const endDate = getParam(event, "endDate") || formatDateInTimezone(Date.now());
+        const now = Date.now();
+        const startDate = getParam(event, "startDate") || formatDateInTimezone(now);
+        const endDate = getParam(event, "endDate") || formatDateInTimezone(now);
         const result = await getTimeInRangeForRange(startDate, endDate);
         return formatResponse(event, result);
       }
