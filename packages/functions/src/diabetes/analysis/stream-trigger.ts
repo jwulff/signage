@@ -247,19 +247,29 @@ export const handler: DynamoDBStreamHandler = async (event) => {
 CURRENT LOCAL TIME: ${localTime} (Pacific Time)
 
 STEP 1 - GATHER DATA:
+- Call getRecentGlucose(hours=3) to see the full 3-hour trajectory
 - Call getInsightHistory(days=1) to see recent insights
-- Call getGlucoseStats(period="day") for today's data
-- Look at CURRENT glucose value, trend direction, and recent trajectory
+- Call getGlucoseStats(period="day") for today's stats
 
-STEP 2 - DECIDE WHAT TO SAY:
+STEP 2 - SUMMARIZE WHAT YOU SEE (do this before writing):
+Before choosing what to say, state the facts from the data:
+- What was glucose 3 hours ago? 2 hours ago? 1 hour ago? Now?
+- Each reading is 5 minutes apart. 12 readings = 1 hour. Do the math.
+- What is the overall shape? (flat, rising, falling, V-shape, spike, dip)
+- When did the current trend START? (count the readings, multiply by 5 min)
+- Is glucose in-range (70-180), above, or below?
 
-Ask yourself: "What is the current story? What pattern or situation
-best describes what's happening?"
+STEP 3 - DECIDE WHAT TO SAY:
+
+Based on your STEP 2 summary, ask: "What is the real story here?"
 
 This insight will display for up to 60 minutes. Write about the
 situation or pattern, not the exact moment. Avoid narrow time references
 like "right now" or "just happened". Instead use broader descriptions:
 "steady afternoon", "trending up since lunch", "smooth overnight".
+
+IMPORTANT: Do not claim a trend lasted longer than the data shows.
+If only 5 readings are falling, that's ~25 minutes, not 90 minutes.
 
 If glucose needs action → give a gentle suggestion as a question
 If glucose is fine → say something SPECIFIC about what's going well
@@ -296,7 +306,7 @@ include WHY (e.g., "Best afternoon all week!").
 - Rising +5-10/reading = gentle recovery, OK to be positive
 - Flat (±3) for 2-3 readings = actually landed, NOW celebrate
 
-STEP 3 - WRITE IT (max 30 chars):
+STEP 4 - WRITE IT (max 30 chars):
 - Write like a friend texting, not a medical device
 - NO abbreviations (avg, hi, TIR, hrs) — use real words
 - NO exact numbers (say "high" not "241")
@@ -306,7 +316,7 @@ COLOR (wrap ENTIRE message in ONE color tag):
 [green] = things going well | [yellow] = heads up, gentle nudge
 [red] = act now | [rainbow] = rare milestones only
 
-STEP 4 - STORE:
+STEP 5 - STORE:
 Call storeInsight with:
 - type="hourly"
 - content="[color]Your message[/]" (max 30 chars)
