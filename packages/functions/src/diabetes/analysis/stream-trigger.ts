@@ -161,12 +161,15 @@ export const handler: DynamoDBStreamHandler = async (event) => {
 
   console.log(`Stream triggered with ${relevantRecords.length} relevant records`);
 
-  // Extract current glucose from the most recent CGM record in the batch
+  // Extract current glucose and timestamp from the most recent CGM record in the batch
   let currentGlucose: number | null = null;
+  let streamRecordTimestamp: number = now;
   for (const record of relevantRecords) {
     const glucoseVal = record.dynamodb?.NewImage?.data?.M?.glucoseMgDl?.N;
     if (glucoseVal) {
       currentGlucose = Number(glucoseVal);
+      const ts = record.dynamodb?.NewImage?.timestamp?.N;
+      if (ts) streamRecordTimestamp = Number(ts);
     }
   }
 
@@ -183,6 +186,8 @@ export const handler: DynamoDBStreamHandler = async (event) => {
   );
 
   // Query previous CGM reading for consecutive delta
+  // Use stream record timestamp as upper bound so we get the reading
+  // immediately before this one, not the one we just inserted
   let previousGlucose: number | null = null;
   try {
     const recentReadings = await queryByTypeAndTimeRange(
@@ -190,13 +195,12 @@ export const handler: DynamoDBStreamHandler = async (event) => {
       Resource.SignageTable.name,
       DEFAULT_USER_ID,
       "cgm",
-      now - 60 * 60_000, // look back 1 hour
-      now,
-      2 // get 2 most recent
+      streamRecordTimestamp - 60 * 60_000, // look back 1 hour
+      streamRecordTimestamp - 1, // exclude current reading
+      1 // only need the most recent prior reading
     );
-    // The most recent is the one we just inserted, so take the second
-    if (recentReadings.length >= 2) {
-      const prev = recentReadings[1] as CgmReading;
+    if (recentReadings.length >= 1) {
+      const prev = recentReadings[0] as CgmReading;
       previousGlucose = prev.glucoseMgDl;
     }
   } catch {
