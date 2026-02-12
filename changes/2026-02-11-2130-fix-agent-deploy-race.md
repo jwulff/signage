@@ -34,6 +34,6 @@ Two changes to `infra/agent.ts`:
 
 ## What's Next
 
-- Automate alias version management (the TODO at line 280 of agent.ts)
+- Automate alias version management (see existing TODO in infra/agent.ts)
 - Once the alias reliably routes to the latest version, remove Sonnet from
   the model policy
