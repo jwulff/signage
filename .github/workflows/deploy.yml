@@ -65,6 +65,23 @@ jobs:
         env:
           SIGNAGE_DOMAIN: ${{ secrets.SIGNAGE_DOMAIN }}
 
+      - name: Trigger fresh insight
+        run: |
+          # Reset the insight timer so the next CGM reading generates a fresh insight.
+          # This ensures new prompt/model changes take effect immediately.
+          TABLE=$(aws dynamodb list-tables --query 'TableNames[?contains(@, `prod`) && contains(@, `SignageTable`)]' --output text)
+          if [ -n "$TABLE" ]; then
+            OLD_TS=$(python3 -c "import time; print(int((time.time() - 3700) * 1000))")
+            aws dynamodb update-item \
+              --table-name "$TABLE" \
+              --key '{"pk": {"S": "USR#john#INSIGHT#CURRENT"}, "sk": {"S": "_"}}' \
+              --update-expression "SET generatedAt = :ts" \
+              --expression-attribute-values "{\":ts\": {\"N\": \"$OLD_TS\"}}"
+            echo "Insight timer reset — next CGM reading will generate a fresh insight"
+          else
+            echo "Warning: Could not find SignageTable, skipping insight trigger"
+          fi
+
       - name: Output URLs
         run: |
           echo "Deployment complete!"
