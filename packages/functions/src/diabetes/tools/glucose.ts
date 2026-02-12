@@ -180,6 +180,15 @@ async function getGlucoseStats(
 }
 
 /**
+ * Validate YYYY-MM-DD date string
+ */
+function isValidDateString(date: string): boolean {
+  if (!date || typeof date !== "string") return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  return !isNaN(new Date(date).getTime());
+}
+
+/**
  * Get time in range for a date range
  */
 async function getTimeInRangeForRange(
@@ -192,9 +201,10 @@ async function getTimeInRangeForRange(
   readingCount: number;
   periodDays: number;
 }> {
-  // Parse dates as local timezone midnight (not UTC midnight)
+  // queryByTypeAndTimeRange converts timestamps to date strings internally,
+  // so we just need timestamps that land on the correct calendar dates
   const startTime = getStartOfDayInTimezone(startDate);
-  const endTime = getStartOfDayInTimezone(endDate) + 24 * 60 * 60 * 1000; // End of day
+  const endTime = getStartOfDayInTimezone(endDate);
 
   const cgmReadings = (await queryByTypeAndTimeRange(
     docClient,
@@ -208,12 +218,18 @@ async function getTimeInRangeForRange(
   const tir = calculateTimeInRange(cgmReadings);
   const stats = calculateGlucoseStats(cgmReadings);
 
+  // Compute period from calendar day difference (inclusive)
+  const dayDiff = Math.round(
+    (new Date(endDate).getTime() - new Date(startDate).getTime()) /
+      (24 * 60 * 60 * 1000)
+  );
+
   return {
     tir,
     tbr: stats.tbr,
     tar: stats.tar,
     readingCount: cgmReadings.length,
-    periodDays: Math.ceil((endTime - startTime) / (24 * 60 * 60 * 1000)),
+    periodDays: dayDiff + 1,
   };
 }
 
@@ -245,8 +261,10 @@ export async function handler(
 
       case "/getTimeInRange": {
         const now = Date.now();
-        const startDate = getParam(event, "startDate") || formatDateInTimezone(now);
-        const endDate = getParam(event, "endDate") || formatDateInTimezone(now);
+        const rawStart = getParam(event, "startDate");
+        const rawEnd = getParam(event, "endDate");
+        const startDate = rawStart && isValidDateString(rawStart) ? rawStart : formatDateInTimezone(now);
+        const endDate = rawEnd && isValidDateString(rawEnd) ? rawEnd : formatDateInTimezone(now);
         const result = await getTimeInRangeForRange(startDate, endDate);
         return formatResponse(event, result);
       }

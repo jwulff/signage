@@ -3,11 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-
-// stripMarkup is not exported, so we extract and test the same logic inline
-function stripMarkup(text: string): string {
-  return text.replace(/\[(?:\/|\w+)\]/g, "").trim().toLowerCase();
-}
+import { stripMarkup } from "./insight-utils.js";
 
 describe("stripMarkup", () => {
   it("strips simple color tags", () => {
