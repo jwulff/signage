@@ -7,9 +7,11 @@
  */
 
 import { BedrockAgentRuntimeClient, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
-import { createDocClient, storeInsight, getCurrentInsight, updateCurrentInsightReasoning, getCurrentLocalTime } from "@diabetes/core";
+import { createDocClient, storeInsight, getCurrentInsight, updateCurrentInsightReasoning, getCurrentLocalTime, queryByTypeAndTimeRange } from "@diabetes/core";
 import type { DynamoDBStreamHandler } from "aws-lambda";
+import type { CgmReading } from "@diabetes/core";
 
 const bedrockClient = new BedrockAgentRuntimeClient({});
 const docClient = createDocClient();
@@ -20,15 +22,103 @@ const DEFAULT_USER_ID = "john";
 const MAX_INSIGHT_LENGTH = 30;
 const MAX_SHORTEN_ATTEMPTS = 2;
 
-// Only these record types trigger analysis (UPPERCASE - matches keys.ts)
-const TRIGGER_TYPES = new Set(["CGM", "BOLUS", "BASAL", "CARBS"]);
+// Only CGM records trigger analysis — other types lack glucose values
+const TRIGGER_TYPES = new Set(["CGM"]);
 
 // Only analyze fresh data (skip historical backfills from Glooko)
 const FRESHNESS_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
 
-// Debounce: skip if last analysis was < 5 minutes ago
-// CGM sends data every 5 minutes — no point re-analyzing before new data arrives
-const DEBOUNCE_MS = 5 * 60_000;
+// Rate limiting: generate a new insight only when conditions are met
+const INSIGHT_INTERVAL_MS = 60 * 60_000; // 60 minutes between insights
+const RAPID_CHANGE_THRESHOLD = 15; // mg/dL between consecutive CGM readings
+const DRIFT_THRESHOLD = 30; // mg/dL change from last insight glucose
+const ZONE_CHANGE_COOLDOWN_MS = 15 * 60_000; // 15 min cooldown for zone-only triggers
+
+type InsightZone = "low" | "caution" | "in-range" | "high";
+
+/**
+ * Classify glucose into zones for trigger evaluation
+ */
+function getInsightZone(glucose: number): InsightZone {
+  if (glucose < 70) return "low";
+  if (glucose < 85) return "caution";
+  if (glucose <= 180) return "in-range";
+  return "high";
+}
+
+interface TriggerResult {
+  shouldGenerate: boolean;
+  reasons: string[];
+}
+
+/**
+ * Evaluate whether a new insight should be generated based on four trigger conditions:
+ * 1. Time elapsed >= 60 min since last hourly insight
+ * 2. Rapid change >= 15 mg/dL between consecutive CGM readings
+ * 3. Gradual drift >= 30 mg/dL from last insight glucose
+ * 4. Zone change (current zone differs from last insight zone)
+ */
+function shouldGenerateInsight(input: {
+  currentGlucose: number;
+  previousGlucose: number | null;
+  lastInsight: {
+    generatedAt: number;
+    type: string;
+    glucoseAtGeneration?: number;
+    zoneAtGeneration?: string;
+  } | null;
+  now: number;
+}): TriggerResult {
+  const { currentGlucose, previousGlucose, lastInsight, now } = input;
+  const reasons: string[] = [];
+
+  // Cold start: no previous hourly insight or missing glucose data
+  if (
+    !lastInsight ||
+    lastInsight.type !== "hourly" ||
+    lastInsight.glucoseAtGeneration === undefined
+  ) {
+    return { shouldGenerate: true, reasons: ["first-hourly"] };
+  }
+
+  const elapsed = now - lastInsight.generatedAt;
+
+  // Trigger 1: Time elapsed >= 60 min
+  if (elapsed >= INSIGHT_INTERVAL_MS) {
+    reasons.push("time-elapsed");
+  }
+
+  // Trigger 2: Rapid change >= 15 mg/dL between consecutive readings
+  if (previousGlucose !== null) {
+    const delta = Math.abs(currentGlucose - previousGlucose);
+    if (delta >= RAPID_CHANGE_THRESHOLD) {
+      reasons.push("rapid-change");
+    }
+  }
+
+  // Trigger 3: Gradual drift >= 30 mg/dL from last insight glucose
+  const drift = Math.abs(currentGlucose - lastInsight.glucoseAtGeneration);
+  if (drift >= DRIFT_THRESHOLD) {
+    reasons.push("drift");
+  }
+
+  // Trigger 4: Zone change
+  const currentZone = getInsightZone(currentGlucose);
+  if (lastInsight.zoneAtGeneration && currentZone !== lastInsight.zoneAtGeneration) {
+    reasons.push("zone-change");
+  }
+
+  // Zone oscillation cooldown: if ONLY zone-change triggered and elapsed < 15 min, skip
+  if (
+    reasons.length === 1 &&
+    reasons[0] === "zone-change" &&
+    elapsed < ZONE_CHANGE_COOLDOWN_MS
+  ) {
+    return { shouldGenerate: false, reasons: [] };
+  }
+
+  return { shouldGenerate: reasons.length > 0, reasons };
+}
 
 /**
  * Strip color markup from text for length/validation calculations
@@ -71,17 +161,76 @@ export const handler: DynamoDBStreamHandler = async (event) => {
 
   console.log(`Stream triggered with ${relevantRecords.length} relevant records`);
 
-  // Debounce: check last analysis time
+  // Extract current glucose from the most recent CGM record in the batch
+  let currentGlucose: number | null = null;
+  for (const record of relevantRecords) {
+    const glucoseVal = record.dynamodb?.NewImage?.data?.M?.glucoseMgDl?.N;
+    if (glucoseVal) {
+      currentGlucose = Number(glucoseVal);
+    }
+  }
+
+  if (currentGlucose === null) {
+    console.log("No glucose value in stream records, skipping");
+    return;
+  }
+
+  // Get current insight for trigger evaluation
   const currentInsight = await getCurrentInsight(
     docClient,
     Resource.SignageTable.name,
     DEFAULT_USER_ID
   );
 
-  if (currentInsight && now - currentInsight.generatedAt < DEBOUNCE_MS) {
-    console.log("Debounce: analysis ran recently, skipping");
+  // Query previous CGM reading for consecutive delta
+  let previousGlucose: number | null = null;
+  try {
+    const recentReadings = await queryByTypeAndTimeRange(
+      docClient,
+      Resource.SignageTable.name,
+      DEFAULT_USER_ID,
+      "cgm",
+      now - 60 * 60_000, // look back 1 hour
+      now,
+      2 // get 2 most recent
+    );
+    // The most recent is the one we just inserted, so take the second
+    if (recentReadings.length >= 2) {
+      const prev = recentReadings[1] as CgmReading;
+      previousGlucose = prev.glucoseMgDl;
+    }
+  } catch {
+    // Non-critical: proceed without previous reading
+    console.log("Could not query previous CGM reading");
+  }
+
+  // Evaluate trigger conditions
+  const currentZone = getInsightZone(currentGlucose);
+  const elapsed = currentInsight ? now - currentInsight.generatedAt : 0;
+  const drift = currentInsight?.glucoseAtGeneration !== undefined
+    ? Math.abs(currentGlucose - currentInsight.glucoseAtGeneration)
+    : 0;
+  const delta = previousGlucose !== null
+    ? currentGlucose - previousGlucose
+    : 0;
+
+  const triggerResult = shouldGenerateInsight({
+    currentGlucose,
+    previousGlucose,
+    lastInsight: currentInsight,
+    now,
+  });
+
+  if (!triggerResult.shouldGenerate) {
+    console.log(
+      `Insight skipped: glucose=${currentGlucose} zone=${currentZone} elapsed=${Math.round(elapsed / 60_000)}min delta=${delta > 0 ? "+" : ""}${delta} drift=${drift}`
+    );
     return;
   }
+
+  console.log(
+    `Insight triggered: ${triggerResult.reasons.join(",")} | glucose=${currentGlucose} zone=${currentZone} elapsed=${Math.round(elapsed / 60_000)}min delta=${delta > 0 ? "+" : ""}${delta} drift=${drift}`
+  );
 
   // Run comprehensive analysis for the sign's two-line insight
   const sessionId = `stream-${now}`;
@@ -100,8 +249,13 @@ STEP 1 - GATHER DATA:
 
 STEP 2 - DECIDE WHAT TO SAY:
 
-You must say something SPECIFIC to RIGHT NOW. Ask yourself:
-"What is the ONE thing that matters most in the next 30 minutes?"
+Ask yourself: "What is the current story? What pattern or situation
+best describes what's happening?"
+
+This insight will display for up to 60 minutes. Write about the
+situation or pattern, not the exact moment. Avoid narrow time references
+like "right now" or "just happened". Instead use broader descriptions:
+"steady afternoon", "trending up since lunch", "smooth overnight".
 
 If glucose needs action → give a gentle suggestion as a question
 If glucose is fine → say something SPECIFIC about what's going well
@@ -113,11 +267,11 @@ in the last 6 hours, you MUST say something different. The system will
 reject exact duplicates, but YOU should also avoid near-duplicates.
 
 **BE SPECIFIC, NOT GENERIC.** Every insight must reference something
-concrete about RIGHT NOW:
+concrete about the current situation:
 - Time of day ("afternoon" "evening" "overnight")
-- What just happened ("after lunch" "post-correction")
+- What's been happening ("after lunch" "post-correction")
 - A comparison ("vs yesterday" "vs this morning")
-- A trend ("for 2 hours" "since dinner")
+- A pattern ("for 2 hours" "since dinner" "all afternoon")
 
 Generic praise like "Great job!" or "Best day!" is BANNED unless you
 include WHY (e.g., "Best afternoon all week!").
@@ -200,6 +354,32 @@ The reasoning parameter is MANDATORY.`;
       }
     } else {
       console.log("Skipping reasoning update - insight was rewritten");
+    }
+
+    // Set glucoseAtGeneration and zoneAtGeneration on the stored insight
+    // These fields enable rate-limiting trigger evaluation for future readings
+    try {
+      const insightKeys = await getCurrentInsight(
+        docClient,
+        Resource.SignageTable.name,
+        DEFAULT_USER_ID
+      );
+      if (insightKeys) {
+        await docClient.send(
+          new UpdateCommand({
+            TableName: Resource.SignageTable.name,
+            Key: { pk: `USR#${DEFAULT_USER_ID}#INSIGHT#CURRENT`, sk: "_" },
+            UpdateExpression: "SET glucoseAtGeneration = :glucose, zoneAtGeneration = :zone",
+            ExpressionAttributeValues: {
+              ":glucose": currentGlucose,
+              ":zone": currentZone,
+            },
+          })
+        );
+      }
+    } catch (updateError) {
+      // Non-critical: next reading will trigger cold-start path
+      console.error("Failed to set glucose/zone on insight:", updateError);
     }
 
     console.log("Stream-triggered analysis complete");

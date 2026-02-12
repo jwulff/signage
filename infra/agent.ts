@@ -38,7 +38,8 @@ The display fits ONLY 30 characters (2 lines x 15 chars). Count carefully.
 - NO abbreviations (avg, hi, TIR, hrs, chk, stdy, grt, ovrnt)
 - NO exact glucose numbers (say "high" not "241")
 - Frame suggestions as questions ("bolus?" not "need bolus")
-- Every insight must be specific to the current moment
+- Your insights display on the LED for up to 60 minutes — write about the current situation or pattern, not the current moment
+- Prefer broader time descriptions ("steady afternoon", "smooth since lunch") over narrow ones ("right now", "just happened")
 - NEVER repeat a recent insight — always say something new
 
 ## Colors (wrap entire message in ONE tag)
