@@ -375,4 +375,57 @@ describe("stream-trigger", () => {
       expect(isValidInsight("More insulin than usual")).toBe(true);
     });
   });
+
+  describe("insight dedup stripMarkup", () => {
+    // Replicate stripMarkup logic for testing
+    function stripMarkup(text: string): string {
+      return text.replace(/\[(?:\/|\w+)\]/g, "").trim().toLowerCase();
+    }
+
+    it("strips simple color tags", () => {
+      expect(stripMarkup("[green]Hello world![/]")).toBe("hello world!");
+    });
+
+    it("strips multiple tags", () => {
+      expect(stripMarkup("[yellow]Watch it[/]")).toBe("watch it");
+    });
+
+    it("handles text without tags", () => {
+      expect(stripMarkup("No tags here")).toBe("no tags here");
+    });
+
+    it("handles nested tags", () => {
+      expect(stripMarkup("[green][yellow]text[/][/]")).toBe("text");
+    });
+
+    it("handles malformed unclosed tags", () => {
+      expect(stripMarkup("[green]text")).toBe("text");
+    });
+
+    it("handles orphan closing tags", () => {
+      expect(stripMarkup("text[/]")).toBe("text");
+    });
+
+    it("normalizes case for comparison", () => {
+      const a = stripMarkup("[green]Best Day This Week![/]");
+      const b = stripMarkup("[yellow]best day this week![/]");
+      expect(a).toBe(b);
+    });
+
+    it("matches same text with different colors", () => {
+      const a = stripMarkup("[green]Coming down nicely![/]");
+      const b = stripMarkup("[red]Coming down nicely![/]");
+      expect(a).toBe(b);
+    });
+
+    it("does not match different text", () => {
+      const a = stripMarkup("[green]Great morning![/]");
+      const b = stripMarkup("[green]Great afternoon![/]");
+      expect(a).not.toBe(b);
+    });
+
+    it("handles rainbow tag", () => {
+      expect(stripMarkup("[rainbow]Big milestone![/]")).toBe("big milestone!");
+    });
+  });
 });

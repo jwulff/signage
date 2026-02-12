@@ -64,9 +64,10 @@ function formatResponse(event: BedrockAgentEvent, body: unknown): BedrockAgentRe
 
 /**
  * Strip color markup for comparison (e.g., "[green]Hello[/]" -> "Hello")
+ * Handles nested, malformed, or missing closing tags
  */
 function stripMarkup(text: string): string {
-  return text.replace(/\[(\w+)\](.*?)\[\/\]/g, "$2").replace(/\[\w+\]/g, "").replace(/\[\/\]/g, "").trim().toLowerCase();
+  return text.replace(/\[(?:\/|\w+)\]/g, "").trim().toLowerCase();
 }
 
 /**
@@ -84,25 +85,30 @@ async function saveInsight(
   deduplicated?: boolean;
 }> {
   // Dedup: reject if this exact message was sent in the last 6 hours
+  // Wrapped in try-catch so a transient DynamoDB error doesn't block insight storage
   if (type === "hourly") {
-    const recentContents = await getRecentInsightContents(
-      docClient,
-      Resource.SignageTable.name,
-      DEFAULT_USER_ID,
-      6 // hours
-    );
+    try {
+      const recentContents = await getRecentInsightContents(
+        docClient,
+        Resource.SignageTable.name,
+        DEFAULT_USER_ID,
+        6 // hours
+      );
 
-    const normalizedNew = stripMarkup(content);
-    const isDuplicate = recentContents.some((recent) => stripMarkup(recent) === normalizedNew);
+      const normalizedNew = stripMarkup(content);
+      const isDuplicate = recentContents.some((recent) => stripMarkup(recent) === normalizedNew);
 
-    if (isDuplicate) {
-      console.log(`Dedup: rejected duplicate insight "${content}"`);
-      return {
-        success: false,
-        insightId: "",
-        displayedAt: 0,
-        deduplicated: true,
-      };
+      if (isDuplicate) {
+        console.log(`Dedup: rejected duplicate insight "${content}"`);
+        return {
+          success: false,
+          insightId: "",
+          displayedAt: 0,
+          deduplicated: true,
+        };
+      }
+    } catch (error) {
+      console.error("Dedup check failed, proceeding without deduplication:", error);
     }
   }
 
