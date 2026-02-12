@@ -144,9 +144,9 @@ new aws.iam.RolePolicy("DiabetesAnalystAgentModelPolicy", {
         ],
         resources: [
           // Foundation model (wildcard region for inference profile routing to us-east-1/2, us-west-2)
-          $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:*::foundation-model/anthropic.claude-sonnet-4-5*`,
+          $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:*::foundation-model/anthropic.claude-haiku-4-5*`,
           // Inference profile (required for Claude 4.5)
-          $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}:${callerIdentity.then((id) => id.accountId)}:inference-profile/us.anthropic.claude-sonnet-4-5*`,
+          $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}:${callerIdentity.then((id) => id.accountId)}:inference-profile/us.anthropic.claude-haiku-4-5*`,
         ],
         effect: "Allow",
       },
@@ -161,7 +161,7 @@ new aws.iam.RolePolicy("DiabetesAnalystAgentModelPolicy", {
 export const agent = new aws.bedrock.AgentAgent("DiabetesAnalyst", {
   agentName: $interpolate`diabetes-analyst-${$app.stage}`,
   // Use inference profile ARN for Claude 4.5 (on-demand not supported for this model)
-  foundationModel: $interpolate`arn:aws:bedrock:${currentRegion.then((r) => r.name)}:${callerIdentity.then((id) => id.accountId)}:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0`,
+  foundationModel: $interpolate`arn:aws:bedrock:${currentRegion.then((r) => r.name)}:${callerIdentity.then((id) => id.accountId)}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`,
   agentResourceRoleArn: agentRole.arn,
   instruction: AGENT_INSTRUCTION,
   idleSessionTtlInSeconds: 3600, // 1 hour session timeout
