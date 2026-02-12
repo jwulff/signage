@@ -162,20 +162,25 @@ export const handler: DynamoDBStreamHandler = async (event) => {
   // Extract current glucose and timestamp from the most recent CGM record in the batch
   // When multiple readings arrive in a single batch, pick the one with the latest timestamp
   let currentGlucose: number | null = null;
-  let streamRecordTimestamp: number = now;
+  let streamRecordTimestamp: number | null = null;
   for (const record of relevantRecords) {
     const glucoseVal = record.dynamodb?.NewImage?.data?.M?.glucoseMgDl?.N;
     const tsVal = record.dynamodb?.NewImage?.timestamp?.N;
     if (glucoseVal && tsVal) {
       const tsNum = Number(tsVal);
-      if (currentGlucose === null || tsNum > streamRecordTimestamp) {
+      if (streamRecordTimestamp === null || tsNum > streamRecordTimestamp) {
         currentGlucose = Number(glucoseVal);
         streamRecordTimestamp = tsNum;
       }
-    } else if (glucoseVal && currentGlucose === null) {
-      // Record with glucose but no timestamp — use as fallback only
+    } else if (glucoseVal && currentGlucose === null && streamRecordTimestamp === null) {
+      // Record with glucose but no timestamp — use as fallback only if no
+      // timestamped record has been seen yet
       currentGlucose = Number(glucoseVal);
     }
+  }
+  // Default to now if no timestamp was found (e.g. all records lacked timestamps)
+  if (streamRecordTimestamp === null) {
+    streamRecordTimestamp = now;
   }
 
   if (currentGlucose === null) {
