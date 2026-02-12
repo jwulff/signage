@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { getHourInTimezone, getCurrentLocalTime, formatDateInTimezone } from "./keys.js";
+import { getHourInTimezone, getCurrentLocalTime, formatDateInTimezone, getStartOfDayInTimezone } from "./keys.js";
 
 describe("getHourInTimezone", () => {
   it("returns Pacific hour for a known UTC timestamp", () => {
@@ -65,5 +65,45 @@ describe("formatDateInTimezone (existing, regression)", () => {
     const ts = Date.UTC(2026, 1, 7, 3, 0, 0);
     const date = formatDateInTimezone(ts);
     expect(date).toBe("2026-02-06");
+  });
+});
+
+describe("getStartOfDayInTimezone", () => {
+  it("returns Pacific midnight for a PST date", () => {
+    // 2026-02-07 midnight PST = 2026-02-07 08:00:00 UTC
+    const midnight = getStartOfDayInTimezone("2026-02-07");
+    const expectedUtc = Date.UTC(2026, 1, 7, 8, 0, 0);
+    // Binary search is within 1 second
+    expect(Math.abs(midnight - expectedUtc)).toBeLessThan(1000);
+  });
+
+  it("returns Pacific midnight for a PDT date", () => {
+    // 2026-07-15 midnight PDT = 2026-07-15 07:00:00 UTC
+    const midnight = getStartOfDayInTimezone("2026-07-15");
+    const expectedUtc = Date.UTC(2026, 6, 15, 7, 0, 0);
+    expect(Math.abs(midnight - expectedUtc)).toBeLessThan(1000);
+  });
+
+  it("round-trips correctly with formatDateInTimezone", () => {
+    // This is the exact bug the PR feedback identified:
+    // formatDateInTimezone(Date.now()) produces a Pacific date string,
+    // then getStartOfDayInTimezone should parse it back to the correct day
+    const dateStr = "2026-02-07";
+    const startOfDay = getStartOfDayInTimezone(dateStr);
+    const roundTripped = formatDateInTimezone(startOfDay);
+    expect(roundTripped).toBe(dateStr);
+  });
+
+  it("avoids the new Date() UTC midnight bug", () => {
+    // new Date("2026-02-07") gives UTC midnight = Feb 6 4pm PST
+    // getStartOfDayInTimezone should give Feb 7 midnight PST instead
+    const dateStr = "2026-02-07";
+    const buggyParse = new Date(dateStr).getTime(); // UTC midnight
+    const correctParse = getStartOfDayInTimezone(dateStr); // PST midnight
+
+    // The buggy parse would be Feb 6 in Pacific time
+    expect(formatDateInTimezone(buggyParse)).toBe("2026-02-06"); // wrong day!
+    // The correct parse stays on Feb 7
+    expect(formatDateInTimezone(correctParse)).toBe("2026-02-07"); // right day
   });
 });

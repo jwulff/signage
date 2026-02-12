@@ -10,6 +10,7 @@ import {
   queryByTypeAndTimeRange,
   queryDailyInsulinByDateRange,
   formatDateInTimezone,
+  getStartOfDayInTimezone,
 } from "@diabetes/core";
 import type { BolusRecord, CarbsRecord, ManualInsulinRecord } from "@diabetes/core";
 
@@ -208,8 +209,9 @@ async function getMealBoluses(
   averageCarbRatio: number;
   count: number;
 }> {
-  const startTime = new Date(startDate).getTime();
-  const endTime = new Date(endDate).getTime() + 24 * 60 * 60 * 1000;
+  // Parse dates as local timezone midnight (not UTC midnight)
+  const startTime = getStartOfDayInTimezone(startDate);
+  const endTime = getStartOfDayInTimezone(endDate) + 24 * 60 * 60 * 1000;
 
   const allBoluses = (await queryByTypeAndTimeRange(
     docClient,

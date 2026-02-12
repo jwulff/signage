@@ -12,6 +12,7 @@ import {
   calculateGlucoseStats,
   calculateTimeInRange,
   formatDateInTimezone,
+  getStartOfDayInTimezone,
 } from "@diabetes/core";
 import type { CgmReading, BgReading } from "@diabetes/core";
 
@@ -191,9 +192,9 @@ async function getTimeInRangeForRange(
   readingCount: number;
   periodDays: number;
 }> {
-  // Parse dates (assume YYYY-MM-DD format)
-  const startTime = new Date(startDate).getTime();
-  const endTime = new Date(endDate).getTime() + 24 * 60 * 60 * 1000; // End of day
+  // Parse dates as local timezone midnight (not UTC midnight)
+  const startTime = getStartOfDayInTimezone(startDate);
+  const endTime = getStartOfDayInTimezone(endDate) + 24 * 60 * 60 * 1000; // End of day
 
   const cgmReadings = (await queryByTypeAndTimeRange(
     docClient,
