@@ -26,8 +26,9 @@ const TRIGGER_TYPES = new Set(["CGM", "BOLUS", "BASAL", "CARBS"]);
 // Only analyze fresh data (skip historical backfills from Glooko)
 const FRESHNESS_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
 
-// Debounce: skip if last analysis was < 60 seconds ago
-const DEBOUNCE_MS = 60_000;
+// Debounce: skip if last analysis was < 5 minutes ago
+// CGM sends data every 5 minutes — no point re-analyzing before new data arrives
+const DEBOUNCE_MS = 5 * 60_000;
 
 /**
  * Strip color markup from text for length/validation calculations
@@ -88,143 +89,72 @@ export const handler: DynamoDBStreamHandler = async (event) => {
   try {
     // Prompt the agent to generate a concise insight
     const localTime = getCurrentLocalTime();
-    const initialPrompt = `Generate a thoughtful insight for my LED display (max 30 characters).
+    const initialPrompt = `Generate a SHORT insight for my LED display (max 30 characters).
 
 CURRENT LOCAL TIME: ${localTime} (Pacific Time)
 
-STEP 1 - GATHER CONTEXT (do this first!):
-- Call getInsightHistory(days=2) to see recent insights - DON'T repeat them
-- Call getGlucoseStats(period="day") and getGlucoseStats(period="week") for trends
-- Call getDailyAggregation() for hourly patterns today
-- Call detectPatterns(type="all") for recurring issues
+STEP 1 - GATHER DATA:
+- Call getInsightHistory(days=1) to see recent insights
+- Call getGlucoseStats(period="day") for today's data
+- Look at CURRENT glucose value, trend direction, and recent trajectory
 
-STEP 2 - PICK ONE OF TWO CATEGORIES:
+STEP 2 - DECIDE WHAT TO SAY:
 
-**CATEGORY A: ACTIONABLE TIP (what to do in the next 1-2 hours)**
-Based on CURRENT glucose + trend + time of day, suggest something helpful:
-- Rising after meal? "Still climbing, correction?"
-- Dropping toward low? "Trending down, snack?"
-- High for a while? "Been high, bolus time?"
-- About to eat? "Pre-bolus for lunch?"
-- Bedtime + high? "High before bed, correct?"
+You must say something SPECIFIC to RIGHT NOW. Ask yourself:
+"What is the ONE thing that matters most in the next 30 minutes?"
 
-**CATEGORY B: CELEBRATE RECENT WINS (affirm what's going well)**
-Compare NOW to recent history and highlight improvements:
-- "Down from yesterday!"
-- "Smoother than last week!"
-- "Great morning so far!"
-- "Nailed that meal!"
-- "Best day this week!"
+If glucose needs action → give a gentle suggestion as a question
+If glucose is fine → say something SPECIFIC about what's going well
 
-URGENCY ASSESSMENT (this is nuanced - read carefully):
+CRITICAL RULES:
 
-**TRAJECTORY MATTERS MORE THAN CURRENT VALUE**
-A reading of 80 while rising is GREAT. A reading of 80 while dropping is CONCERNING.
-Always think: "Where will she be in 10-15 minutes?"
+**NEVER REPEAT.** Check your recent history. If you said something similar
+in the last 6 hours, you MUST say something different. The system will
+reject exact duplicates, but YOU should also avoid near-duplicates.
 
-**NEAR-LOW SITUATIONS (75-90 range) - BE CAREFUL WITH CELEBRATIONS**
-Even if the DROP is slowing (decelerating), if she's STILL DROPPING and NEAR THE FLOOR:
-- 85 → 80 → 77 → 75 (slowing down but STILL DROPPING toward 70)
-- This is NOT "leveling off nicely" - she's still drifting toward low!
-- Say "Still drifting down, more?" or "Watch the trend" - NOT "Leveling off!"
+**BE SPECIFIC, NOT GENERIC.** Every insight must reference something
+concrete about RIGHT NOW:
+- Time of day ("afternoon" "evening" "overnight")
+- What just happened ("after lunch" "post-correction")
+- A comparison ("vs yesterday" "vs this morning")
+- A trend ("for 2 hours" "since dinner")
 
-Only celebrate "Leveling off!" when readings are ACTUALLY FLAT for 2-3 readings:
-- 78 → 77 → 78 → 79 = actually leveling, OK to celebrate
-- 85 → 80 → 77 → 75 = still dropping, NOT leveling off yet
+Generic praise like "Great job!" or "Best day!" is BANNED unless you
+include WHY (e.g., "Best afternoon all week!").
 
-**INTERVENTION LAG - SUGAR TAKES 10-15 MINUTES**
-If she just had juice/sugar but is still dropping, that's expected - it hasn't kicked in yet.
-- "Sugar should help soon" or "Give it a few more minutes"
-- Don't panic, but don't celebrate either - wait for the turnaround
+**TRAJECTORY OVER VALUE.** Think: where will glucose be in 15 minutes?
+- 80 and rising = great, celebrate
+- 80 and dropping = concerning, suggest action
+- 200 but falling fast = patience, it's working
+- 150 and flat for hours = maybe needs a nudge
 
-**POST-LOW REBOUNDS - WATCH FOR OVERSHOOT**
-After treating a low, glucose often SPIKES from the sugar. A steep rise is NOT a "smooth landing":
-- 70 → 85 → 105 → 130 (rising fast after low treatment) = REBOUND, may overshoot
-- This is NOT "landed nicely" - she's rocketing up and might go high!
-- Say "Coming up fast!" or "Rising quick, watch it" - NOT "Smooth landing!"
+**NEAR-LOW CAUTION (under 85):**
+- Still dropping (even slowly) = suggest more sugar, use [red] or [yellow]
+- Actually flat for 2-3 readings = OK to say it's leveling
+- Rising after treatment = "Coming back up" (don't say "landed" until flat)
 
-**"LANDING" MEANS FLAT - NOT STILL RISING**
-Even a gentle rise (+10/reading) is NOT a landing - she's still climbing!
-- 115 → 125 → 136 → 147 (still rising +11) = NOT LANDED, still climbing toward high
-- Don't say "Smooth landing!" while still rising - she might overshoot!
-- Say "Rising steady" or "Coming up nicely" - acknowledge she's still moving
+**POST-LOW REBOUNDS:**
+- Rising +20/reading after a low = rebound risk, don't celebrate yet
+- Rising +5-10/reading = gentle recovery, OK to be positive
+- Flat (±3) for 2-3 readings = actually landed, NOW celebrate
 
-A TRUE landing looks like this:
-- 133 → 135 → 137 → 136 → 138 (FLAT for 2-3 readings) = actually landed
-- THEN you can say "Landed!" or "Nice recovery!"
+STEP 3 - WRITE IT (max 30 chars):
+- Write like a friend texting, not a medical device
+- NO abbreviations (avg, hi, TIR, hrs) — use real words
+- NO exact numbers (say "high" not "241")
+- Questions for suggestions ("bolus?" not "need bolus")
 
-Watch the SLOPE:
-- +5-10 per reading = gentle recovery, say "Rising steady" or "Coming up nicely"
-- +20-30 per reading = rebound overshoot risk, say "Coming up fast!"
-- FLAT (±3) = actually landed, NOW you can celebrate
+COLOR (wrap ENTIRE message in ONE color tag):
+[green] = things going well | [yellow] = heads up, gentle nudge
+[red] = act now | [rainbow] = rare milestones only
 
-**WHEN TO USE EACH COLOR IN NEAR-LOW SITUATIONS:**
-- [red] = Under 80 AND still dropping (any speed) = "More sugar now?"
-- [yellow] = 80-90 AND dropping = "Still trending down" or "Maybe a bit more?"
-- [green] = ONLY when actually flat or rising = "Turnaround!" or "Coming back up!"
-
-**HIGH-SIDE IS SIMPLER:**
-- ACCELERATING rise = urgent, use [red]
-- DECELERATING rise = patience, may not need action
-- High but stable = gentle suggestion [yellow]
-
-PRIORITIZE: When near the low threshold (under 85), err on the side of caution.
-Better to suggest "maybe more sugar?" than to say "looking good!" right before a low.
-
-STEP 3 - WRITE LIKE A HUMAN (max 30 chars):
-- NEVER use abbreviations ("avg", "hi", "TIR", "hrs")
-- NEVER use exact numbers (say "high" not "241", "dropping" not "-2")
-- Use questions for suggestions ("bolus?" not "need bolus")
-- Write like a caring friend texting you
-
-COLOR (wrap ENTIRE message in ONE color):
-[green] = wins, celebrations, in-range
-[yellow] = gentle suggestions, caution
-[red] = urgent action needed
-[rainbow] = big milestones
-
-GOOD EXAMPLES:
-"[yellow]Still rising, correct?[/]"
-"[red]Dropping fast, juice?[/]"
-"[green]Smoother than yesterday![/]"
-"[green]Nailed that meal![/]"
-"[yellow]High before bed, bolus?[/]"
-"[rainbow]Best week in months![/]"
-
-NEAR-LOW EXAMPLES (under 90, still dropping):
-"[red]Still drifting, more?[/]" ← near floor AND still dropping
-"[yellow]Not quite flat yet[/]" ← slowing but not stable
-"[yellow]Sugar should help soon[/]" ← acknowledging intervention lag
-"[green]Finally turning up![/]" ← ONLY when actually rising
-
-POST-LOW RECOVERY EXAMPLES:
-"[red]Coming up fast![/]" ← steep rise (+20/reading), may overshoot
-"[green]Rising steady[/]" ← gentle rise (+10/reading), good pace
-"[green]Coming up nicely![/]" ← gentle rise, reassuring
-"[green]Landed![/]" ← ONLY when FLAT for 2-3 readings
-
-BAD EXAMPLES (dangerous false confidence):
-"[green]Leveling off nicely![/]" when at 75 and still dropping ← NOT LEVELING
-"[green]Smooth landing![/]" when 78→105 in one reading ← THAT'S A SPIKE NOT A LANDING
-"[green]Back in range![/]" when rising +25/reading ← MAY OVERSHOOT HIGH
-"[blue]Mornings are tough[/]" ← general commentary, not helpful NOW
-
-FORBIDDEN:
-- General observations without action or celebration
-- Repeating what you said in the last 2 days
-- Exact glucose numbers
-- Abbreviations ("avg", "TIR", "hi/lo")
-
-STEP 4 - STORE WITH REASONING (ALL 3 PARAMETERS REQUIRED):
-Call storeInsight with ALL of these:
+STEP 4 - STORE:
+Call storeInsight with:
 - type="hourly"
-- content="[color]Your insight text[/]" (max 30 chars)
-- reasoning="YOUR EXPLANATION HERE" ← DO NOT SKIP THIS
+- content="[color]Your message[/]" (max 30 chars)
+- reasoning="Brief explanation of why you chose this over alternatives"
 
-The reasoning parameter is MANDATORY. Example:
-reasoning="Checked history: said 'Nights dip at 3am' 2hrs ago. Today TIR 57% vs week 65%. Morning pattern detected 7x 5-8am. Chose morning observation since it's actionable and different from recent."
-
-Without reasoning, we can't improve the prompts. ALWAYS include it.`;
+The reasoning parameter is MANDATORY.`;
 
     const response = await invokeAgent(initialPrompt, sessionId);
     console.log("Agent response:", response);
