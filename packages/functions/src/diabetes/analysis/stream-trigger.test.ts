@@ -4,7 +4,7 @@ import type { DynamoDBRecord } from "aws-lambda";
 // Constants matching stream-trigger.ts
 const TRIGGER_TYPES = new Set(["CGM", "BOLUS", "BASAL", "CARBS"]);
 const FRESHNESS_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
-const DEBOUNCE_MS = 60_000; // 60 seconds
+const DEBOUNCE_MS = 5 * 60_000; // 5 minutes
 const MAX_INSIGHT_LENGTH = 30;
 
 // Helper to create a mock DynamoDB stream record
@@ -158,9 +158,9 @@ describe("stream-trigger", () => {
       expect(shouldDebounce).toBe(false);
     });
 
-    it("allows analysis when last insight is 61 seconds old", () => {
+    it("allows analysis when last insight is 6 minutes old", () => {
       const now = Date.now();
-      const generatedAt = now - 61_000;
+      const generatedAt = now - 6 * 60_000;
       const timeSinceLastAnalysis = now - generatedAt;
       expect(timeSinceLastAnalysis >= DEBOUNCE_MS).toBe(true);
     });
@@ -172,16 +172,16 @@ describe("stream-trigger", () => {
       expect(timeSinceLastAnalysis < DEBOUNCE_MS).toBe(true);
     });
 
-    it("skips analysis when last insight is 59 seconds old", () => {
+    it("skips analysis when last insight is 4 minutes old", () => {
       const now = Date.now();
-      const generatedAt = now - 59_000;
+      const generatedAt = now - 4 * 60_000;
       const timeSinceLastAnalysis = now - generatedAt;
       expect(timeSinceLastAnalysis < DEBOUNCE_MS).toBe(true);
     });
 
-    it("allows analysis when last insight is exactly 60 seconds old", () => {
+    it("allows analysis when last insight is exactly 5 minutes old", () => {
       const now = Date.now();
-      const generatedAt = now - 60_000;
+      const generatedAt = now - 5 * 60_000;
       const timeSinceLastAnalysis = now - generatedAt;
       expect(timeSinceLastAnalysis >= DEBOUNCE_MS).toBe(true);
     });

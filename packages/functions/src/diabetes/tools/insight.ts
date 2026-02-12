@@ -12,6 +12,7 @@ import {
   getCurrentInsight,
   getInsightHistory,
   getInsightStatus,
+  getRecentInsightContents,
 } from "@diabetes/core";
 import type { InsightType, InsightMetrics, StoredInsight } from "@diabetes/core";
 
@@ -62,7 +63,14 @@ function formatResponse(event: BedrockAgentEvent, body: unknown): BedrockAgentRe
 }
 
 /**
- * Store a new insight
+ * Strip color markup for comparison (e.g., "[green]Hello[/]" -> "Hello")
+ */
+function stripMarkup(text: string): string {
+  return text.replace(/\[(\w+)\](.*?)\[\/\]/g, "$2").replace(/\[\w+\]/g, "").replace(/\[\/\]/g, "").trim().toLowerCase();
+}
+
+/**
+ * Store a new insight (with dedup — rejects if identical to recent insights)
  */
 async function saveInsight(
   type: InsightType,
@@ -73,7 +81,31 @@ async function saveInsight(
   success: boolean;
   insightId: string;
   displayedAt: number;
+  deduplicated?: boolean;
 }> {
+  // Dedup: reject if this exact message was sent in the last 6 hours
+  if (type === "hourly") {
+    const recentContents = await getRecentInsightContents(
+      docClient,
+      Resource.SignageTable.name,
+      DEFAULT_USER_ID,
+      6 // hours
+    );
+
+    const normalizedNew = stripMarkup(content);
+    const isDuplicate = recentContents.some((recent) => stripMarkup(recent) === normalizedNew);
+
+    if (isDuplicate) {
+      console.log(`Dedup: rejected duplicate insight "${content}"`);
+      return {
+        success: false,
+        insightId: "",
+        displayedAt: 0,
+        deduplicated: true,
+      };
+    }
+  }
+
   const result = await storeInsight(
     docClient,
     Resource.SignageTable.name,

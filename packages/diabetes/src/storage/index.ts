@@ -37,6 +37,7 @@ export {
   storeInsight,
   getCurrentInsight,
   getInsightHistory,
+  getRecentInsightContents,
   updateCurrentInsightReasoning,
   isInsightStale,
   getInsightStatus,

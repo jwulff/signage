@@ -159,6 +159,39 @@ export async function updateCurrentInsightReasoning(
 }
 
 /**
+ * Get recent insight content strings for dedup checking
+ * Returns just the content strings from the last N hours
+ */
+export async function getRecentInsightContents(
+  docClient: DynamoDBDocumentClient,
+  tableName: string,
+  userId: string,
+  hours: number = 6
+): Promise<string[]> {
+  const now = Date.now();
+  const startTime = now - hours * 60 * 60 * 1000;
+
+  const startTs = startTime.toString().padStart(15, "0");
+  const endTs = now.toString().padStart(15, "0");
+
+  const result = await docClient.send(
+    new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: "pk = :pk AND sk BETWEEN :start AND :end",
+      ExpressionAttributeValues: {
+        ":pk": `USR#${userId}#INSIGHT#HISTORY`,
+        ":start": startTs,
+        ":end": endTs,
+      },
+      ProjectionExpression: "content",
+      ScanIndexForward: false,
+    })
+  );
+
+  return (result.Items || []).map((item) => (item as { content: string }).content);
+}
+
+/**
  * Check if an insight is stale (older than threshold)
  */
 export function isInsightStale(insight: Insight, thresholdHours: number = 2): boolean {
