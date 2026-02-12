@@ -90,43 +90,33 @@ export const weeklyAnalysisCron = new sst.aws.Cron("WeeklyAnalysisCron", {
 // Inference profile ARN pattern for all Sonnet 4.5 versions
 const inferenceProfileArn = $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}:${callerIdentity.then((id) => id.accountId)}:inference-profile/us.anthropic.claude-sonnet-4-5*`;
 
+// Foundation model ARN — Bedrock checks IAM against both the inference profile
+// and the underlying foundation model when using InvokeModel
+const foundationModelArn = $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}::foundation-model/anthropic.claude-sonnet-4-5*`;
+
+const invokeModelPolicy = aws.iam.getPolicyDocumentOutput({
+  statements: [
+    {
+      actions: ["bedrock:InvokeModel"],
+      resources: [inferenceProfileArn, foundationModelArn],
+      effect: "Allow",
+    },
+  ],
+});
+
 new aws.iam.RolePolicy("AnalysisStreamModelPolicy", {
   role: analysisStreamConsumer.nodes.function.role,
-  policy: aws.iam.getPolicyDocumentOutput({
-    statements: [
-      {
-        actions: ["bedrock:InvokeModel"],
-        resources: [inferenceProfileArn],
-        effect: "Allow",
-      },
-    ],
-  }).json,
+  policy: invokeModelPolicy.json,
 });
 
 new aws.iam.RolePolicy("DailyAnalysisModelPolicy", {
   role: dailyAnalysisCron.nodes.function.role,
-  policy: aws.iam.getPolicyDocumentOutput({
-    statements: [
-      {
-        actions: ["bedrock:InvokeModel"],
-        resources: [inferenceProfileArn],
-        effect: "Allow",
-      },
-    ],
-  }).json,
+  policy: invokeModelPolicy.json,
 });
 
 new aws.iam.RolePolicy("WeeklyAnalysisModelPolicy", {
   role: weeklyAnalysisCron.nodes.function.role,
-  policy: aws.iam.getPolicyDocumentOutput({
-    statements: [
-      {
-        actions: ["bedrock:InvokeModel"],
-        resources: [inferenceProfileArn],
-        effect: "Allow",
-      },
-    ],
-  }).json,
+  policy: invokeModelPolicy.json,
 });
 
 // =============================================================================
