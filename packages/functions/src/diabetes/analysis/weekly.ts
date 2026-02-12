@@ -68,6 +68,10 @@ export const handler: ScheduledHandler = async () => {
 
     // Compute week-level stats
     const totalReadings = dailyAggs.reduce((sum, d) => sum + d.glucose.readings, 0);
+    if (totalReadings === 0) {
+      console.log(`No glucose readings across ${dailyAggs.length} days, skipping`);
+      return;
+    }
     const weightedTir = dailyAggs.reduce((sum, d) => sum + d.glucose.tir * d.glucose.readings, 0) / totalReadings;
     const weekMean = dailyAggs.reduce((sum, d) => sum + d.glucose.mean * d.glucose.readings, 0) / totalReadings;
     const weekMin = Math.min(...dailyAggs.map((d) => d.glucose.min));
@@ -87,17 +91,26 @@ Highlight the week's trend or achievement. Call the respond tool.`;
     const result = await invokeModel(SYSTEM_PROMPT, userMessage);
     console.log("Model response:", JSON.stringify(result));
 
+    // Validate length before storing
+    let { content, reasoning } = result;
+    const visibleLength = content.replace(/\[(\w+)\](.*?)\[\/\]/g, "$2").replace(/\[\w+\]/g, "").replace(/\[\/\]/g, "").length;
+    if (visibleLength > 30) {
+      console.warn(`Weekly insight too long (${visibleLength} chars): "${content}", using fallback`);
+      content = "[green]Check weekly recap[/]";
+      reasoning = "Fallback: model output exceeded 30 visible chars";
+    }
+
     await storeInsight(
       docClient,
       Resource.SignageTable.name,
       DEFAULT_USER_ID,
       "weekly",
-      result.content,
+      content,
       undefined, // metrics
-      result.reasoning
+      reasoning
     );
 
-    console.log(`Weekly insight stored: "${result.content}"`);
+    console.log(`Weekly insight stored: "${content}"`);
   } catch (error) {
     console.error("Weekly analysis error:", error);
     throw error;

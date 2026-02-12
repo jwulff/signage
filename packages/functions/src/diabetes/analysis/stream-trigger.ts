@@ -21,8 +21,9 @@ import {
   getRecentInsightContents,
 } from "@diabetes/core";
 import type { DynamoDBStreamHandler } from "aws-lambda";
-import type { CgmReading, InsightZone } from "@diabetes/core";
+import type { CgmReading, InsightZone, BolusRecord } from "@diabetes/core";
 import { invokeModel } from "./invoke-model.js";
+import { stripMarkup } from "./insight-utils.js";
 
 const docClient = createDocClient();
 
@@ -134,13 +135,6 @@ function shouldGenerateInsight(input: {
  */
 function stripColorMarkup(text: string): string {
   return text.replace(/\[(\w+)\](.*?)\[\/\]/g, "$2").replace(/\[\w+\]/g, "").replace(/\[\/\]/g, "");
-}
-
-/**
- * Strip color markup for comparison (lowercase, trimmed)
- */
-function stripMarkup(text: string): string {
-  return text.replace(/\[(?:\/|\w+)\]/g, "").trim().toLowerCase();
 }
 
 // =============================================================================
@@ -320,13 +314,17 @@ export const handler: DynamoDBStreamHandler = async (event) => {
       return `[${time}] ${i.content}`;
     });
 
-    // Format treatments
-    const treatmentLines = treatmentReadings.map((t) => {
+    // Format treatments (bolus records)
+    const treatmentLines = (treatmentReadings as BolusRecord[]).map((t) => {
       const time = new Date(t.timestamp).toLocaleTimeString("en-US", {
         hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles",
       });
-      const data = t as { timestamp: number; units?: number; type: string };
-      return `${time}: ${data.units ?? "?"}u ${data.type}`;
+      const parts = [
+        `${t.insulinDeliveredUnits}u`,
+        t.carbsInputGrams > 0 ? `${t.carbsInputGrams}g carbs` : "",
+        t.bolusType !== "Normal" ? t.bolusType : "",
+      ].filter(Boolean);
+      return `${time}: ${parts.join(" ")}`;
     });
 
     const localTime = getCurrentLocalTime();

@@ -70,17 +70,26 @@ Highlight the key win or area to watch. Call the respond tool.`;
     const result = await invokeModel(SYSTEM_PROMPT, userMessage);
     console.log("Model response:", JSON.stringify(result));
 
+    // Validate length before storing
+    let { content, reasoning } = result;
+    const visibleLength = content.replace(/\[(\w+)\](.*?)\[\/\]/g, "$2").replace(/\[\w+\]/g, "").replace(/\[\/\]/g, "").length;
+    if (visibleLength > 30) {
+      console.warn(`Daily insight too long (${visibleLength} chars): "${content}", using fallback`);
+      content = "[green]Check daily recap[/]";
+      reasoning = "Fallback: model output exceeded 30 visible chars";
+    }
+
     await storeInsight(
       docClient,
       Resource.SignageTable.name,
       DEFAULT_USER_ID,
       "daily",
-      result.content,
+      content,
       undefined, // metrics
-      result.reasoning
+      reasoning
     );
 
-    console.log(`Daily insight stored: "${result.content}"`);
+    console.log(`Daily insight stored: "${content}"`);
   } catch (error) {
     console.error("Daily analysis error:", error);
     throw error;
