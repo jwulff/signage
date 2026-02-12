@@ -133,7 +133,9 @@ new aws.iam.RolePolicy("DiabetesAnalystAgentDynamoPolicy", {
 });
 
 // Policy for the agent to use the foundation model via inference profile
-new aws.iam.RolePolicy("DiabetesAnalystAgentModelPolicy", {
+// Includes both Sonnet and Haiku families because the alias may route to older
+// versions that use a different model than the current DRAFT.
+const agentModelPolicy = new aws.iam.RolePolicy("DiabetesAnalystAgentModelPolicy", {
   role: agentRole.id,
   policy: aws.iam.getPolicyDocumentOutput({
     statements: [
@@ -144,10 +146,12 @@ new aws.iam.RolePolicy("DiabetesAnalystAgentModelPolicy", {
           "bedrock:GetInferenceProfile",
         ],
         resources: [
-          // Foundation model (wildcard region for inference profile routing to us-east-1/2, us-west-2)
+          // Haiku 4.5 (current model)
           $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:*::foundation-model/anthropic.claude-haiku-4-5*`,
-          // Inference profile (required for Claude 4.5)
           $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}:${callerIdentity.then((id) => id.accountId)}:inference-profile/us.anthropic.claude-haiku-4-5*`,
+          // Sonnet 4.5 (previous model — needed while alias routes to older versions)
+          $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:*::foundation-model/anthropic.claude-sonnet-4-5*`,
+          $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}:${callerIdentity.then((id) => id.accountId)}:inference-profile/us.anthropic.claude-sonnet-4-5*`,
         ],
         effect: "Allow",
       },
@@ -179,7 +183,10 @@ export const agent = new aws.bedrock.AgentAgent("DiabetesAnalyst", {
   // Prepare agent after updates to create new versions
   // Action groups use dependsOn chains to avoid race conditions
   prepareAgent: true,
-});
+  // Model policy must be applied BEFORE the agent model is changed.
+  // Bedrock validates the agent role has permission for the new inference profile
+  // during UpdateAgent — if the policy isn't applied yet, the deploy fails.
+}, { dependsOn: [agentModelPolicy] });
 
 // =============================================================================
 // Action Groups (created sequentially to avoid PrepareAgent race conditions)
