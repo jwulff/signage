@@ -21,6 +21,10 @@ export interface Insight {
   metrics?: InsightMetrics;
   /** Agent's reasoning for generating this insight (for prompt refinement) */
   reasoning?: string;
+  /** Glucose value (mg/dL) when this insight was generated, for drift detection */
+  glucoseAtGeneration?: number;
+  /** Glucose zone when this insight was generated, for zone-change detection */
+  zoneAtGeneration?: string;
 }
 
 /**

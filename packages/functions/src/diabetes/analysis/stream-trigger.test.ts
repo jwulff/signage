@@ -2,10 +2,95 @@ import { describe, it, expect } from "vitest";
 import type { DynamoDBRecord } from "aws-lambda";
 
 // Constants matching stream-trigger.ts
-const TRIGGER_TYPES = new Set(["CGM", "BOLUS", "BASAL", "CARBS"]);
+const TRIGGER_TYPES = new Set(["CGM"]);
 const FRESHNESS_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
-const DEBOUNCE_MS = 5 * 60_000; // 5 minutes
 const MAX_INSIGHT_LENGTH = 30;
+
+// Rate limiting constants
+const INSIGHT_INTERVAL_MS = 60 * 60_000; // 60 minutes
+const RAPID_CHANGE_THRESHOLD = 15; // mg/dL between consecutive readings
+const DRIFT_THRESHOLD = 30; // mg/dL from last insight glucose
+const ZONE_CHANGE_COOLDOWN_MS = 15 * 60_000; // 15 min cooldown for zone-only triggers
+
+type InsightZone = "low" | "caution" | "in-range" | "high";
+
+// Replicate getInsightZone logic from stream-trigger.ts
+function getInsightZone(glucose: number): InsightZone {
+  if (glucose < 70) return "low";
+  if (glucose < 85) return "caution";
+  if (glucose <= 180) return "in-range";
+  return "high";
+}
+
+interface TriggerInput {
+  currentGlucose: number;
+  previousGlucose: number | null;
+  lastInsight: {
+    generatedAt: number;
+    type: string;
+    glucoseAtGeneration?: number;
+    zoneAtGeneration?: string;
+  } | null;
+  now: number;
+}
+
+interface TriggerResult {
+  shouldGenerate: boolean;
+  reasons: string[];
+}
+
+// Replicate shouldGenerateInsight logic from stream-trigger.ts
+function shouldGenerateInsight(input: TriggerInput): TriggerResult {
+  const { currentGlucose, previousGlucose, lastInsight, now } = input;
+  const reasons: string[] = [];
+
+  // Cold start: no previous hourly insight or missing glucose data
+  if (
+    !lastInsight ||
+    lastInsight.type !== "hourly" ||
+    lastInsight.glucoseAtGeneration === undefined
+  ) {
+    return { shouldGenerate: true, reasons: ["first-hourly"] };
+  }
+
+  const elapsed = now - lastInsight.generatedAt;
+
+  // Trigger 1: Time elapsed >= 60 min
+  if (elapsed >= INSIGHT_INTERVAL_MS) {
+    reasons.push("time-elapsed");
+  }
+
+  // Trigger 2: Rapid change >= 15 mg/dL between consecutive readings
+  if (previousGlucose !== null) {
+    const delta = Math.abs(currentGlucose - previousGlucose);
+    if (delta >= RAPID_CHANGE_THRESHOLD) {
+      reasons.push("rapid-change");
+    }
+  }
+
+  // Trigger 3: Gradual drift >= 30 mg/dL from last insight glucose
+  const drift = Math.abs(currentGlucose - lastInsight.glucoseAtGeneration);
+  if (drift >= DRIFT_THRESHOLD) {
+    reasons.push("drift");
+  }
+
+  // Trigger 4: Zone change
+  const currentZone = getInsightZone(currentGlucose);
+  if (lastInsight.zoneAtGeneration && currentZone !== lastInsight.zoneAtGeneration) {
+    reasons.push("zone-change");
+  }
+
+  // Zone oscillation cooldown: if ONLY zone-change triggered and elapsed < 15 min, skip
+  if (
+    reasons.length === 1 &&
+    reasons[0] === "zone-change" &&
+    elapsed < ZONE_CHANGE_COOLDOWN_MS
+  ) {
+    return { shouldGenerate: false, reasons: [] };
+  }
+
+  return { shouldGenerate: reasons.length > 0, reasons };
+}
 
 // Helper to create a mock DynamoDB stream record
 function createMockRecord(
@@ -41,22 +126,22 @@ describe("stream-trigger", () => {
       expect(TRIGGER_TYPES.has(recordType)).toBe(true);
     });
 
-    it("triggers on BOLUS records", () => {
+    it("does NOT trigger on BOLUS records", () => {
       const pk = "USR#john#BOLUS#2026-02-01";
       const recordType = pk.split("#")[2];
-      expect(TRIGGER_TYPES.has(recordType)).toBe(true);
+      expect(TRIGGER_TYPES.has(recordType)).toBe(false);
     });
 
-    it("triggers on BASAL records", () => {
+    it("does NOT trigger on BASAL records", () => {
       const pk = "USR#john#BASAL#2026-02-01";
       const recordType = pk.split("#")[2];
-      expect(TRIGGER_TYPES.has(recordType)).toBe(true);
+      expect(TRIGGER_TYPES.has(recordType)).toBe(false);
     });
 
-    it("triggers on CARBS records", () => {
+    it("does NOT trigger on CARBS records", () => {
       const pk = "USR#john#CARBS#2026-02-01";
       const recordType = pk.split("#")[2];
-      expect(TRIGGER_TYPES.has(recordType)).toBe(true);
+      expect(TRIGGER_TYPES.has(recordType)).toBe(false);
     });
 
     it("does NOT trigger on INSIGHT records", () => {
@@ -151,39 +236,358 @@ describe("stream-trigger", () => {
     });
   });
 
-  describe("debounce logic", () => {
-    it("allows analysis when no previous insight exists", () => {
-      const currentInsight = null;
-      const shouldDebounce = currentInsight !== null;
-      expect(shouldDebounce).toBe(false);
+  describe("getInsightZone", () => {
+    it("returns low for glucose < 70", () => {
+      expect(getInsightZone(69)).toBe("low");
+      expect(getInsightZone(54)).toBe("low");
+      expect(getInsightZone(0)).toBe("low");
     });
 
-    it("allows analysis when last insight is 6 minutes old", () => {
-      const now = Date.now();
-      const generatedAt = now - 6 * 60_000;
-      const timeSinceLastAnalysis = now - generatedAt;
-      expect(timeSinceLastAnalysis >= DEBOUNCE_MS).toBe(true);
+    it("returns caution for glucose 70-84", () => {
+      expect(getInsightZone(70)).toBe("caution");
+      expect(getInsightZone(75)).toBe("caution");
+      expect(getInsightZone(84)).toBe("caution");
     });
 
-    it("skips analysis when last insight is 30 seconds old", () => {
-      const now = Date.now();
-      const generatedAt = now - 30_000;
-      const timeSinceLastAnalysis = now - generatedAt;
-      expect(timeSinceLastAnalysis < DEBOUNCE_MS).toBe(true);
+    it("returns in-range for glucose 85-180", () => {
+      expect(getInsightZone(85)).toBe("in-range");
+      expect(getInsightZone(120)).toBe("in-range");
+      expect(getInsightZone(180)).toBe("in-range");
     });
 
-    it("skips analysis when last insight is 4 minutes old", () => {
-      const now = Date.now();
-      const generatedAt = now - 4 * 60_000;
-      const timeSinceLastAnalysis = now - generatedAt;
-      expect(timeSinceLastAnalysis < DEBOUNCE_MS).toBe(true);
+    it("returns high for glucose > 180", () => {
+      expect(getInsightZone(181)).toBe("high");
+      expect(getInsightZone(250)).toBe("high");
+      expect(getInsightZone(400)).toBe("high");
     });
 
-    it("allows analysis when last insight is exactly 5 minutes old", () => {
-      const now = Date.now();
-      const generatedAt = now - 5 * 60_000;
-      const timeSinceLastAnalysis = now - generatedAt;
-      expect(timeSinceLastAnalysis >= DEBOUNCE_MS).toBe(true);
+    it("handles boundary at 70 correctly", () => {
+      expect(getInsightZone(69)).toBe("low");
+      expect(getInsightZone(70)).toBe("caution");
+    });
+
+    it("handles boundary at 85 correctly", () => {
+      expect(getInsightZone(84)).toBe("caution");
+      expect(getInsightZone(85)).toBe("in-range");
+    });
+
+    it("handles boundary at 180 correctly", () => {
+      expect(getInsightZone(180)).toBe("in-range");
+      expect(getInsightZone(181)).toBe("high");
+    });
+  });
+
+  describe("shouldGenerateInsight", () => {
+    const now = Date.now();
+
+    function makeInsight(overrides: {
+      generatedAt?: number;
+      type?: string;
+      glucoseAtGeneration?: number;
+      zoneAtGeneration?: string;
+    }) {
+      return {
+        generatedAt: overrides.generatedAt ?? now - 30 * 60_000,
+        type: overrides.type ?? "hourly",
+        glucoseAtGeneration: "glucoseAtGeneration" in overrides ? overrides.glucoseAtGeneration : 120,
+        zoneAtGeneration: overrides.zoneAtGeneration ?? "in-range",
+      };
+    }
+
+    describe("cold start", () => {
+      it("generates when no previous insight exists", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 120,
+          previousGlucose: 115,
+          lastInsight: null,
+          now,
+        });
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("first-hourly");
+      });
+
+      it("generates when last insight is daily type", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 120,
+          previousGlucose: 115,
+          lastInsight: makeInsight({ type: "daily", glucoseAtGeneration: 120 }),
+          now,
+        });
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("first-hourly");
+      });
+
+      it("generates when last insight is weekly type", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 120,
+          previousGlucose: 115,
+          lastInsight: makeInsight({ type: "weekly", glucoseAtGeneration: 120 }),
+          now,
+        });
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("first-hourly");
+      });
+
+      it("generates when glucoseAtGeneration is missing", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 120,
+          previousGlucose: 115,
+          lastInsight: makeInsight({ glucoseAtGeneration: undefined }),
+          now,
+        });
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("first-hourly");
+      });
+    });
+
+    describe("time elapsed trigger", () => {
+      it("generates when 60+ minutes have elapsed", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 120,
+          previousGlucose: 118,
+          lastInsight: makeInsight({ generatedAt: now - 61 * 60_000 }),
+          now,
+        });
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("time-elapsed");
+      });
+
+      it("generates at exactly 60 minutes", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 120,
+          previousGlucose: 118,
+          lastInsight: makeInsight({ generatedAt: now - 60 * 60_000 }),
+          now,
+        });
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("time-elapsed");
+      });
+
+      it("does not trigger at 59 minutes alone", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 120,
+          previousGlucose: 118,
+          lastInsight: makeInsight({ generatedAt: now - 59 * 60_000 }),
+          now,
+        });
+        expect(result.reasons).not.toContain("time-elapsed");
+      });
+    });
+
+    describe("rapid change trigger", () => {
+      it("generates when consecutive delta >= 15", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 135,
+          previousGlucose: 120,
+          lastInsight: makeInsight({ generatedAt: now - 10 * 60_000 }),
+          now,
+        });
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("rapid-change");
+      });
+
+      it("generates on rapid drop", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 100,
+          previousGlucose: 120,
+          lastInsight: makeInsight({ generatedAt: now - 10 * 60_000 }),
+          now,
+        });
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("rapid-change");
+      });
+
+      it("does not trigger when delta is 14", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 134,
+          previousGlucose: 120,
+          lastInsight: makeInsight({ generatedAt: now - 10 * 60_000 }),
+          now,
+        });
+        expect(result.reasons).not.toContain("rapid-change");
+      });
+
+      it("handles null previousGlucose gracefully", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 120,
+          previousGlucose: null,
+          lastInsight: makeInsight({ generatedAt: now - 10 * 60_000 }),
+          now,
+        });
+        expect(result.reasons).not.toContain("rapid-change");
+      });
+    });
+
+    describe("drift trigger", () => {
+      it("generates when drift >= 30 from last insight", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 150,
+          previousGlucose: 148,
+          lastInsight: makeInsight({
+            generatedAt: now - 45 * 60_000,
+            glucoseAtGeneration: 120,
+          }),
+          now,
+        });
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("drift");
+      });
+
+      it("generates on downward drift", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 85,
+          previousGlucose: 87,
+          lastInsight: makeInsight({
+            generatedAt: now - 45 * 60_000,
+            glucoseAtGeneration: 120,
+          }),
+          now,
+        });
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("drift");
+      });
+
+      it("does not trigger when drift is 29", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 149,
+          previousGlucose: 147,
+          lastInsight: makeInsight({
+            generatedAt: now - 10 * 60_000,
+            glucoseAtGeneration: 120,
+          }),
+          now,
+        });
+        expect(result.reasons).not.toContain("drift");
+      });
+    });
+
+    describe("zone change trigger", () => {
+      it("generates when zone changes from in-range to high", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 185,
+          previousGlucose: 178,
+          lastInsight: makeInsight({
+            generatedAt: now - 20 * 60_000,
+            zoneAtGeneration: "in-range",
+          }),
+          now,
+        });
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("zone-change");
+      });
+
+      it("generates when zone changes from in-range to caution", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 82,
+          previousGlucose: 84,
+          lastInsight: makeInsight({
+            generatedAt: now - 20 * 60_000,
+            zoneAtGeneration: "in-range",
+          }),
+          now,
+        });
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("zone-change");
+      });
+
+      it("does not trigger when zone is the same", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 130,
+          previousGlucose: 125,
+          lastInsight: makeInsight({
+            generatedAt: now - 10 * 60_000,
+            zoneAtGeneration: "in-range",
+          }),
+          now,
+        });
+        expect(result.reasons).not.toContain("zone-change");
+      });
+    });
+
+    describe("zone oscillation cooldown", () => {
+      it("suppresses zone-only trigger within 15 minutes", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 69,
+          previousGlucose: 71,
+          lastInsight: makeInsight({
+            generatedAt: now - 8 * 60_000, // 8 min ago
+            glucoseAtGeneration: 71,
+            zoneAtGeneration: "caution",
+          }),
+          now,
+        });
+        // Zone changed (caution -> low) but < 15 min and no other trigger
+        expect(result.shouldGenerate).toBe(false);
+      });
+
+      it("allows zone-change trigger after 15 minutes", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 69,
+          previousGlucose: 71,
+          lastInsight: makeInsight({
+            generatedAt: now - 16 * 60_000, // 16 min ago
+            glucoseAtGeneration: 71,
+            zoneAtGeneration: "caution",
+          }),
+          now,
+        });
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("zone-change");
+      });
+
+      it("allows zone-change within 15 min if other triggers also fire", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 55,
+          previousGlucose: 71,
+          lastInsight: makeInsight({
+            generatedAt: now - 8 * 60_000,
+            glucoseAtGeneration: 71,
+            zoneAtGeneration: "caution",
+          }),
+          now,
+        });
+        // Zone change AND rapid change (16 delta) both triggered
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("zone-change");
+        expect(result.reasons).toContain("rapid-change");
+      });
+    });
+
+    describe("skip scenarios", () => {
+      it("skips when no triggers are met", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 123,
+          previousGlucose: 120,
+          lastInsight: makeInsight({
+            generatedAt: now - 35 * 60_000,
+            glucoseAtGeneration: 118,
+            zoneAtGeneration: "in-range",
+          }),
+          now,
+        });
+        expect(result.shouldGenerate).toBe(false);
+        expect(result.reasons).toEqual([]);
+      });
+    });
+
+    describe("multiple triggers", () => {
+      it("reports all matching triggers", () => {
+        const result = shouldGenerateInsight({
+          currentGlucose: 65,
+          previousGlucose: 85,
+          lastInsight: makeInsight({
+            generatedAt: now - 90 * 60_000,
+            glucoseAtGeneration: 140,
+            zoneAtGeneration: "in-range",
+          }),
+          now,
+        });
+        expect(result.shouldGenerate).toBe(true);
+        expect(result.reasons).toContain("time-elapsed");
+        expect(result.reasons).toContain("rapid-change");
+        expect(result.reasons).toContain("drift");
+        expect(result.reasons).toContain("zone-change");
+      });
     });
   });
 
