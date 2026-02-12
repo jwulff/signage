@@ -3,19 +3,26 @@
  *
  * Event-driven pipeline that triggers AI analysis when new diabetes data arrives.
  * Uses DynamoDB Streams for real-time analysis and EventBridge for daily/weekly summaries.
+ *
+ * Each Lambda pre-fetches its own data from DynamoDB and calls Claude via
+ * Bedrock InvokeModel directly — no agent framework.
  */
 
 import { table } from "./storage";
-import { agent, agentAlias } from "./agent";
 
 // =============================================================================
-// Shared Configuration
+// Model Configuration
 // =============================================================================
 
-// Function config for analysis handlers
+const callerIdentity = aws.getCallerIdentity({});
+const currentPartition = aws.getPartition({});
+const currentRegion = aws.getRegion({});
+
+// Inference profile ARN for Claude Sonnet 4.5
+const modelId = $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}:${callerIdentity.then((id) => id.accountId)}:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0`;
+
 const analysisEnvironment = {
-  AGENT_ID: agent.agentId,
-  AGENT_ALIAS_ID: agentAlias.agentAliasId,
+  MODEL_ID: modelId,
 };
 
 // =============================================================================
@@ -23,7 +30,7 @@ const analysisEnvironment = {
 // =============================================================================
 
 // Stream-triggered analysis - runs when new diabetes data arrives
-// Filters for CGM, BOLUS, BASAL, CARBS records and applies freshness/debounce checks
+// Filters for CGM records and applies freshness/debounce checks
 const analysisStreamConsumer = table.subscribe(
   "AnalysisStreamConsumer",
   {
@@ -38,7 +45,6 @@ const analysisStreamConsumer = table.subscribe(
     transform: {
       eventSourceMapping: {
         // Serial processing for batch writes (Glooko sends 285 records at once)
-        // This prevents concurrent Bedrock Agent invocations
         parallelizationFactor: 1,
       },
     },
@@ -78,43 +84,45 @@ export const weeklyAnalysisCron = new sst.aws.Cron("WeeklyAnalysisCron", {
 });
 
 // =============================================================================
-// IAM Permissions for Agent Invocation
+// IAM Permissions for InvokeModel
 // =============================================================================
 
-// Allow stream consumer to invoke the Bedrock Agent
-new aws.iam.RolePolicy("AnalysisStreamAgentPolicy", {
+// Inference profile ARN pattern for all Sonnet 4.5 versions
+const inferenceProfileArn = $interpolate`arn:${currentPartition.then((p) => p.partition)}:bedrock:${currentRegion.then((r) => r.name)}:${callerIdentity.then((id) => id.accountId)}:inference-profile/us.anthropic.claude-sonnet-4-5*`;
+
+new aws.iam.RolePolicy("AnalysisStreamModelPolicy", {
   role: analysisStreamConsumer.nodes.function.role,
   policy: aws.iam.getPolicyDocumentOutput({
     statements: [
       {
-        actions: ["bedrock:InvokeAgent"],
-        resources: [agentAlias.agentAliasArn],
+        actions: ["bedrock:InvokeModel"],
+        resources: [inferenceProfileArn],
         effect: "Allow",
       },
     ],
   }).json,
 });
 
-new aws.iam.RolePolicy("DailyAnalysisAgentPolicy", {
+new aws.iam.RolePolicy("DailyAnalysisModelPolicy", {
   role: dailyAnalysisCron.nodes.function.role,
   policy: aws.iam.getPolicyDocumentOutput({
     statements: [
       {
-        actions: ["bedrock:InvokeAgent"],
-        resources: [agentAlias.agentAliasArn],
+        actions: ["bedrock:InvokeModel"],
+        resources: [inferenceProfileArn],
         effect: "Allow",
       },
     ],
   }).json,
 });
 
-new aws.iam.RolePolicy("WeeklyAnalysisAgentPolicy", {
+new aws.iam.RolePolicy("WeeklyAnalysisModelPolicy", {
   role: weeklyAnalysisCron.nodes.function.role,
   policy: aws.iam.getPolicyDocumentOutput({
     statements: [
       {
-        actions: ["bedrock:InvokeAgent"],
-        resources: [agentAlias.agentAliasArn],
+        actions: ["bedrock:InvokeModel"],
+        resources: [inferenceProfileArn],
         effect: "Allow",
       },
     ],

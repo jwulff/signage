@@ -3,17 +3,27 @@
  *
  * Triggered by DynamoDB Streams when new diabetes data arrives.
  * Filters for relevant record types, applies freshness and debounce checks,
- * then invokes the Bedrock Agent to generate insights for the display.
+ * then calls Claude via Bedrock InvokeModel to generate insights for the display.
+ *
+ * All data is pre-fetched from DynamoDB and passed inline in the prompt.
+ * The model returns structured JSON via forced tool_use — no agent framework.
  */
 
-import { BedrockAgentRuntimeClient, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
-import { createDocClient, storeInsight, getCurrentInsight, updateCurrentInsightReasoning, getCurrentLocalTime, queryByTypeAndTimeRange, generateInsightKeys } from "@diabetes/core";
+import {
+  createDocClient,
+  storeInsight,
+  getCurrentInsight,
+  getCurrentLocalTime,
+  queryByTypeAndTimeRange,
+  calculateGlucoseStats,
+  getInsightHistory,
+  getRecentInsightContents,
+} from "@diabetes/core";
 import type { DynamoDBStreamHandler } from "aws-lambda";
 import type { CgmReading, InsightZone } from "@diabetes/core";
+import { invokeModel } from "./invoke-model.js";
 
-const bedrockClient = new BedrockAgentRuntimeClient({});
 const docClient = createDocClient();
 
 const DEFAULT_USER_ID = "john";
@@ -127,6 +137,39 @@ function stripColorMarkup(text: string): string {
 }
 
 /**
+ * Strip color markup for comparison (lowercase, trimmed)
+ */
+function stripMarkup(text: string): string {
+  return text.replace(/\[(?:\/|\w+)\]/g, "").trim().toLowerCase();
+}
+
+// =============================================================================
+// System Prompt
+// =============================================================================
+
+const SYSTEM_PROMPT = `You are a friendly diabetes analyst for a Type 1 diabetic using an insulin pump.
+Target range: 70-180 mg/dL. Time in range goal: >70%.
+
+Your job: analyze glucose data and write a short insight for the Pixoo64 LED display.
+The display fits ONLY 30 characters (2 lines x 15 chars). Count carefully.
+
+Writing style:
+- Write like a caring friend texting — warm, natural, specific
+- NO abbreviations (avg, hi, TIR, hrs, chk, stdy, grt, ovrnt)
+- NO exact glucose numbers (say "high" not "241")
+- Frame suggestions as questions ("bolus?" not "need bolus")
+- Your insights display on the LED for up to 60 minutes — write about the current situation or pattern, not the current moment
+- Prefer broader time descriptions ("steady afternoon", "smooth since lunch") over narrow ones ("right now", "just happened")
+- NEVER repeat a recent insight — always say something new
+
+Colors (wrap entire message in ONE tag):
+[green] = wins, in-range | [yellow] = caution, nudge | [red] = act now | [rainbow] = rare milestone`;
+
+// =============================================================================
+// Handler
+// =============================================================================
+
+/**
  * Stream-triggered analysis handler
  */
 export const handler: DynamoDBStreamHandler = async (event) => {
@@ -173,12 +216,9 @@ export const handler: DynamoDBStreamHandler = async (event) => {
         streamRecordTimestamp = tsNum;
       }
     } else if (glucoseVal && currentGlucose === null && streamRecordTimestamp === null) {
-      // Record with glucose but no timestamp — use as fallback only if no
-      // timestamped record has been seen yet
       currentGlucose = Number(glucoseVal);
     }
   }
-  // Default to now if no timestamp was found (e.g. all records lacked timestamps)
   if (streamRecordTimestamp === null) {
     streamRecordTimestamp = now;
   }
@@ -196,8 +236,6 @@ export const handler: DynamoDBStreamHandler = async (event) => {
   );
 
   // Query previous CGM reading for consecutive delta
-  // Use stream record timestamp as upper bound so we get the reading
-  // immediately before this one, not the one we just inserted
   let previousGlucose: number | null = null;
   try {
     const recentReadings = await queryByTypeAndTimeRange(
@@ -205,16 +243,15 @@ export const handler: DynamoDBStreamHandler = async (event) => {
       Resource.SignageTable.name,
       DEFAULT_USER_ID,
       "cgm",
-      streamRecordTimestamp - 60 * 60_000, // look back 1 hour
-      streamRecordTimestamp - 1, // exclude current reading
-      1 // only need the most recent prior reading
+      streamRecordTimestamp - 60 * 60_000,
+      streamRecordTimestamp - 1,
+      1
     );
     if (recentReadings.length >= 1) {
       const prev = recentReadings[0] as CgmReading;
       previousGlucose = prev.glucoseMgDl;
     }
   } catch {
-    // Non-critical: proceed without previous reading
     console.log("Could not query previous CGM reading");
   }
 
@@ -246,22 +283,72 @@ export const handler: DynamoDBStreamHandler = async (event) => {
     `Insight triggered: ${triggerResult.reasons.join(",")} | glucose=${currentGlucose} zone=${currentZone} elapsed=${Math.round(elapsed / 60_000)}min delta=${delta > 0 ? "+" : ""}${delta} drift=${drift}`
   );
 
-  // Run comprehensive analysis for the sign's two-line insight
-  const sessionId = `stream-${now}`;
-
   try {
-    // Prompt the agent to generate a concise insight
+    // Pre-fetch all data for the prompt
+    const [glucoseReadings, glucoseStats, insightHistory, recentInsightContents, treatmentReadings] =
+      await Promise.all([
+        queryByTypeAndTimeRange(
+          docClient, Resource.SignageTable.name, DEFAULT_USER_ID,
+          "cgm", now - 3 * 60 * 60_000, now
+        ),
+        queryByTypeAndTimeRange(
+          docClient, Resource.SignageTable.name, DEFAULT_USER_ID,
+          "cgm", now - 24 * 60 * 60_000, now
+        ).then((readings) => calculateGlucoseStats(readings as CgmReading[])),
+        getInsightHistory(docClient, Resource.SignageTable.name, DEFAULT_USER_ID, 1),
+        getRecentInsightContents(docClient, Resource.SignageTable.name, DEFAULT_USER_ID, 6),
+        queryByTypeAndTimeRange(
+          docClient, Resource.SignageTable.name, DEFAULT_USER_ID,
+          "bolus", now - 3 * 60 * 60_000, now
+        ),
+      ]);
+
+    // Format glucose trajectory
+    const cgmReadings = (glucoseReadings as CgmReading[]).sort((a, b) => b.timestamp - a.timestamp);
+    const trajectoryLines = cgmReadings.map((r) => {
+      const time = new Date(r.timestamp).toLocaleTimeString("en-US", {
+        hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles",
+      });
+      return `${time}: ${r.glucoseMgDl}`;
+    });
+
+    // Format recent insights
+    const insightLines = insightHistory.map((i) => {
+      const time = new Date(i.generatedAt).toLocaleTimeString("en-US", {
+        hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles",
+      });
+      return `[${time}] ${i.content}`;
+    });
+
+    // Format treatments
+    const treatmentLines = treatmentReadings.map((t) => {
+      const time = new Date(t.timestamp).toLocaleTimeString("en-US", {
+        hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles",
+      });
+      const data = t as { timestamp: number; units?: number; type: string };
+      return `${time}: ${data.units ?? "?"}u ${data.type}`;
+    });
+
     const localTime = getCurrentLocalTime();
-    const initialPrompt = `Generate a SHORT insight for my LED display (max 30 characters).
 
-CURRENT LOCAL TIME: ${localTime} (Pacific Time)
+    const userMessage = `## Current Context
+Time: ${localTime} (Pacific) | Glucose: ${currentGlucose} mg/dL (${currentZone}) | Delta: ${delta > 0 ? "+" : ""}${delta} mg/dL
 
-STEP 1 - GATHER DATA:
-- Call getRecentGlucose(hours=3) to see the full 3-hour trajectory
-- Call getInsightHistory(days=1) to see recent insights
-- Call getGlucoseStats(period="day") for today's stats
+## 3-Hour Glucose Trajectory (most recent first)
+${trajectoryLines.length > 0 ? trajectoryLines.join("  ") : "No readings available"}
 
-STEP 2 - SUMMARIZE WHAT YOU SEE (do this before writing):
+## Today's Stats
+TIR: ${glucoseStats.tir}% | Mean: ${Math.round(glucoseStats.mean)} | Range: ${glucoseStats.min}-${glucoseStats.max} | Readings: ${glucoseStats.readingCount}
+
+## Recent Treatments (3hr)
+${treatmentLines.length > 0 ? treatmentLines.join("  ") : "None"}
+
+## Recent Insights (last day)
+${insightLines.length > 0 ? insightLines.join("\n") : "None yet"}
+
+Generate a SHORT insight for my LED display (max 30 characters).
+
+STEP 1 - SUMMARIZE WHAT YOU SEE (do this before writing):
 Before choosing what to say, state the facts from the data:
 - What was glucose 3 hours ago? 2 hours ago? 1 hour ago? Now?
 - Each reading is 5 minutes apart. 12 readings = 1 hour. Do the math.
@@ -269,9 +356,9 @@ Before choosing what to say, state the facts from the data:
 - When did the current trend START? (count the readings, multiply by 5 min)
 - Is glucose in-range (70-180), above, or below?
 
-STEP 3 - DECIDE WHAT TO SAY:
+STEP 2 - DECIDE WHAT TO SAY:
 
-Based on your STEP 2 summary, ask: "What is the real story here?"
+Based on your summary, ask: "What is the real story here?"
 
 This insight will display for up to 60 minutes. Write about the
 situation or pattern, not the exact moment. Avoid narrow time references
@@ -281,24 +368,21 @@ like "right now" or "just happened". Instead use broader descriptions:
 IMPORTANT: Do not claim a trend lasted longer than the data shows.
 If only 5 readings are falling, that's ~25 minutes, not 90 minutes.
 
-If glucose needs action → give a gentle suggestion as a question
-If glucose is fine → say something SPECIFIC about what's going well
+If glucose needs action -> give a gentle suggestion as a question
+If glucose is fine -> say something SPECIFIC about what's going well
 
 CRITICAL RULES:
 
-**NEVER REPEAT.** Check your recent history. If you said something similar
-in the last 6 hours, you MUST say something different. The system will
-reject exact duplicates, but YOU should also avoid near-duplicates.
+**NEVER REPEAT.** Check your recent insights above. If you said something similar
+in the last 6 hours, you MUST say something different.
 
 **BE SPECIFIC, NOT GENERIC.** Every insight must reference something
 concrete about the current situation:
 - Time of day ("afternoon" "evening" "overnight")
 - What's been happening ("after lunch" "post-correction")
-- A comparison ("vs yesterday" "vs this morning")
 - A pattern ("for 2 hours" "since dinner" "all afternoon")
 
-Generic praise like "Great job!" or "Best day!" is BANNED unless you
-include WHY (e.g., "Best afternoon all week!").
+Generic praise like "Great job!" is BANNED unless you include WHY.
 
 **TRAJECTORY OVER VALUE.** Think: where will glucose be in 15 minutes?
 - 80 and rising = great, celebrate
@@ -307,16 +391,11 @@ include WHY (e.g., "Best afternoon all week!").
 - 150 and flat for hours = maybe needs a nudge
 
 **NEAR-LOW CAUTION (under 85):**
-- Still dropping (even slowly) = suggest more sugar, use [red] or [yellow]
-- Actually flat for 2-3 readings = OK to say it's leveling
+- Still dropping = suggest more sugar, use [red] or [yellow]
+- Flat for 2-3 readings = OK to say it's leveling
 - Rising after treatment = "Coming back up" (don't say "landed" until flat)
 
-**POST-LOW REBOUNDS:**
-- Rising +20/reading after a low = rebound risk, don't celebrate yet
-- Rising +5-10/reading = gentle recovery, OK to be positive
-- Flat (±3) for 2-3 readings = actually landed, NOW celebrate
-
-STEP 4 - WRITE IT (max 30 chars):
+STEP 3 - WRITE IT (max 30 chars):
 - Write like a friend texting, not a medical device
 - NO abbreviations (avg, hi, TIR, hrs) — use real words
 - NO exact numbers (say "high" not "241")
@@ -326,179 +405,29 @@ COLOR (wrap ENTIRE message in ONE color tag):
 [green] = things going well | [yellow] = heads up, gentle nudge
 [red] = act now | [rainbow] = rare milestones only
 
-STEP 5 - STORE:
-Call storeInsight with:
-- type="hourly"
-- content="[color]Your message[/]" (max 30 chars)
-- reasoning="Brief explanation of why you chose this over alternatives"
+Call the respond tool with content and reasoning.`;
 
-The reasoning parameter is MANDATORY.`;
+    // Call the model
+    let result = await invokeModel(SYSTEM_PROMPT, userMessage);
+    console.log("Model response:", JSON.stringify(result));
 
-    const response = await invokeAgent(initialPrompt, sessionId);
-    console.log("Agent response:", response);
+    // Validate before storing
+    let { content, reasoning } = result;
+    for (let attempt = 0; attempt < MAX_SHORTEN_ATTEMPTS; attempt++) {
+      const visibleContent = stripColorMarkup(content);
+      const visibleLength = visibleContent.length;
+      const valid = isValidInsight(content);
 
-    // The agent should have called storeInsight via the tool
-    // If it didn't, store a fallback insight (case-insensitive check)
-    const lowerResponse = response.toLowerCase();
-    if (!lowerResponse.includes("stored") && !lowerResponse.includes("insight")) {
-      const insightText = extractInsightFromResponse(response);
-      if (insightText) {
-        await storeInsight(
-          docClient,
-          Resource.SignageTable.name,
-          DEFAULT_USER_ID,
-          "hourly",
-          insightText.slice(0, MAX_INSIGHT_LENGTH)
-        );
+      if (visibleLength <= MAX_INSIGHT_LENGTH && valid) {
+        break; // Insight is good
       }
-    }
 
-    // Check if the stored insight is valid (length + quality) and retry if needed
-    const wasRewritten = await enforceInsightQuality(sessionId);
+      const issue = !valid ? "INVALID" : `TOO LONG (${visibleLength} chars)`;
+      console.log(`Insight ${issue}: "${content}", retrying (attempt ${attempt + 1}/${MAX_SHORTEN_ATTEMPTS})`);
 
-    // Fetch the stored insight once for subsequent updates
-    const storedInsight = await getCurrentInsight(
-      docClient,
-      Resource.SignageTable.name,
-      DEFAULT_USER_ID
-    );
+      const fixMessage = `The insight you wrote doesn't work for my LED display.
 
-    // Extract reasoning from agent response and update the insight
-    // Skip if insight was rewritten (reasoning no longer matches the stored insight)
-    if (!wasRewritten && storedInsight) {
-      const reasoning = extractReasoningFromResponse(response);
-      if (reasoning) {
-        await updateCurrentInsightReasoning(
-          docClient,
-          Resource.SignageTable.name,
-          DEFAULT_USER_ID,
-          reasoning,
-          storedInsight.generatedAt
-        );
-        console.log("Stored reasoning:", reasoning.slice(0, 100) + "...");
-      }
-    } else if (wasRewritten) {
-      console.log("Skipping reasoning update - insight was rewritten");
-    }
-
-    // Set glucoseAtGeneration and zoneAtGeneration on both current and history records
-    // These fields enable rate-limiting trigger evaluation for future readings
-    if (storedInsight) {
-      try {
-        const historyKeys = generateInsightKeys(DEFAULT_USER_ID, "HISTORY", storedInsight.generatedAt);
-        await Promise.all([
-          docClient.send(
-            new UpdateCommand({
-              TableName: Resource.SignageTable.name,
-              Key: { pk: `USR#${DEFAULT_USER_ID}#INSIGHT#CURRENT`, sk: "_" },
-              UpdateExpression: "SET glucoseAtGeneration = :glucose, zoneAtGeneration = :zone",
-              ExpressionAttributeValues: {
-                ":glucose": currentGlucose,
-                ":zone": currentZone,
-              },
-            })
-          ),
-          docClient.send(
-            new UpdateCommand({
-              TableName: Resource.SignageTable.name,
-              Key: { pk: historyKeys.pk, sk: historyKeys.sk },
-              UpdateExpression: "SET glucoseAtGeneration = :glucose, zoneAtGeneration = :zone",
-              ExpressionAttributeValues: {
-                ":glucose": currentGlucose,
-                ":zone": currentZone,
-              },
-            })
-          ),
-        ]);
-      } catch (updateError) {
-        // Non-critical: next reading will trigger cold-start path
-        console.error("Failed to set glucose/zone on insight:", updateError);
-      }
-    }
-
-    console.log("Stream-triggered analysis complete");
-  } catch (error) {
-    console.error("Stream-triggered analysis error:", error);
-    // Rethrow to trigger Lambda retry mechanism for transient errors
-    throw error;
-  }
-};
-
-/**
- * Invoke the diabetes analyst agent with a prompt
- */
-async function invokeAgent(prompt: string, sessionId: string): Promise<string> {
-  const agentId = process.env.AGENT_ID;
-  const agentAliasId = process.env.AGENT_ALIAS_ID;
-
-  if (!agentId || !agentAliasId) {
-    throw new Error("AGENT_ID and AGENT_ALIAS_ID must be set");
-  }
-
-  const response = await bedrockClient.send(
-    new InvokeAgentCommand({
-      agentId,
-      agentAliasId,
-      sessionId,
-      inputText: prompt,
-    })
-  );
-
-  // Collect response chunks
-  let responseText = "";
-  if (response.completion) {
-    for await (const chunk of response.completion) {
-      if (chunk.chunk?.bytes) {
-        responseText += new TextDecoder().decode(chunk.chunk.bytes);
-      }
-    }
-  }
-
-  return responseText;
-}
-
-/**
- * Check the stored insight and fix if too long or invalid
- * Returns true if the insight was rewritten (original reasoning no longer applies)
- */
-async function enforceInsightQuality(sessionId: string): Promise<boolean> {
-  for (let attempt = 0; attempt < MAX_SHORTEN_ATTEMPTS; attempt++) {
-    const insight = await getCurrentInsight(
-      docClient,
-      Resource.SignageTable.name,
-      DEFAULT_USER_ID
-    );
-
-    if (!insight) {
-      console.log("No insight found to check");
-      return false;
-    }
-
-    // Only fix hourly insights
-    if (insight.type !== "hourly") {
-      console.log(`Skipping quality check for ${insight.type} insight`);
-      return false;
-    }
-
-    // Strip color markup for length calculation (markup doesn't count as visible chars)
-    const visibleContent = stripColorMarkup(insight.content);
-    const visibleLength = visibleContent.length;
-    const valid = isValidInsight(insight.content);
-    console.log(`Insight check: "${insight.content}" (${visibleLength} visible chars, valid=${valid})`);
-
-    // Check both length AND quality (using visible length, not raw length)
-    if (visibleLength <= MAX_INSIGHT_LENGTH && valid) {
-      console.log("Insight OK");
-      return false; // Not rewritten
-    }
-
-    // Insight needs fixing
-    const issue = !valid ? "INVALID (missing data or has markdown)" : "TOO LONG";
-    console.log(`Insight ${issue}, asking agent to fix (attempt ${attempt + 1}/${MAX_SHORTEN_ATTEMPTS})`);
-
-    const fixPrompt = `The insight you stored doesn't work for my LED display.
-
-Current: "${insight.content}"
+Current: "${content}"
 Problem: ${!valid ? "Contains markdown or isn't a real insight" : `Too long (${visibleLength} visible chars, max ${MAX_INSIGHT_LENGTH})`}
 
 Try again. Write like a HUMAN, not a robot:
@@ -507,37 +436,50 @@ Try again. Write like a HUMAN, not a robot:
 - "[red]Dropping fast, eat![/]"
 
 NO abbreviations. NO cramming numbers. Sound like a caring friend.
-ONE color, max ${MAX_INSIGHT_LENGTH} chars. storeInsight type="hourly".`;
+ONE color, max ${MAX_INSIGHT_LENGTH} chars. Call the respond tool.`;
 
-    const response = await invokeAgent(fixPrompt, sessionId);
-    console.log("Fix response:", response);
-  }
-
-  // After max attempts, generate a fallback
-  const finalInsight = await getCurrentInsight(
-    docClient,
-    Resource.SignageTable.name,
-    DEFAULT_USER_ID
-  );
-
-  if (finalInsight && finalInsight.type === "hourly") {
-    const needsFix = finalInsight.content.length > MAX_INSIGHT_LENGTH || !isValidInsight(finalInsight.content);
-    if (needsFix) {
-      console.warn(`Insight still invalid after ${MAX_SHORTEN_ATTEMPTS} attempts, using fallback`);
-      await storeInsight(
-        docClient,
-        Resource.SignageTable.name,
-        DEFAULT_USER_ID,
-        "hourly",
-        "Data updated chk app"
-      );
-      return true; // Rewritten with fallback
+      result = await invokeModel(SYSTEM_PROMPT, fixMessage);
+      content = result.content;
+      reasoning = result.reasoning;
     }
-  }
 
-  // If we got here, the insight was rewritten by fix attempts
-  return true;
-}
+    // Final validation — use fallback if still invalid
+    const finalVisible = stripColorMarkup(content);
+    if (finalVisible.length > MAX_INSIGHT_LENGTH || !isValidInsight(content)) {
+      console.warn(`Insight still invalid after ${MAX_SHORTEN_ATTEMPTS} attempts, using fallback`);
+      content = "[yellow]Check your app[/]";
+      reasoning = "Fallback: model could not generate a valid insight within length constraints";
+    }
+
+    // Dedup check — reject if identical to recent insight
+    const normalizedNew = stripMarkup(content);
+    const isDuplicate = recentInsightContents.some((recent) => stripMarkup(recent) === normalizedNew);
+
+    if (isDuplicate) {
+      console.log(`Dedup: rejected duplicate insight "${content}", keeping existing`);
+      return;
+    }
+
+    // Store insight with all metadata in a single call
+    await storeInsight(
+      docClient,
+      Resource.SignageTable.name,
+      DEFAULT_USER_ID,
+      "hourly",
+      content,
+      undefined, // metrics
+      reasoning,
+      currentGlucose,
+      currentZone
+    );
+
+    console.log(`Insight stored: "${content}" | reasoning: ${reasoning.slice(0, 100)}...`);
+    console.log("Stream-triggered analysis complete");
+  } catch (error) {
+    console.error("Stream-triggered analysis error:", error);
+    throw error;
+  }
+};
 
 /**
  * Check if an insight is valid (not garbage)
@@ -545,74 +487,16 @@ ONE color, max ${MAX_INSIGHT_LENGTH} chars. storeInsight type="hourly".`;
 function isValidInsight(content: string): boolean {
   const trimmed = content.trim();
 
-  // Strip color markup for validation (e.g., [green]text[/] -> text)
+  // Strip color markup for validation
   const withoutMarkup = trimmed.replace(/\[(\w+)\](.*?)\[\/\]/g, "$2").replace(/\[\w+\]/g, "").replace(/\[\/\]/g, "");
 
-  // Reject empty or too short (after stripping markup)
   if (withoutMarkup.length < 8) return false;
-
-  // Reject markdown headers
   if (withoutMarkup.startsWith("#") || withoutMarkup.startsWith("**")) return false;
-
-  // Reject lines that are just labels
   if (withoutMarkup.endsWith(":")) return false;
-
-  // Reject JSON (but allow color markup which also starts with [)
-  // Color markup starts with [word] not [{ or ["
   if (trimmed.startsWith("{")) return false;
   if (trimmed.startsWith("[") && !trimmed.match(/^\[\w+\]/)) return false;
-
-  // Reject obvious non-insights
   if (withoutMarkup.toLowerCase().includes("key findings")) return false;
   if (withoutMarkup.toLowerCase().includes("analysis")) return false;
 
   return true;
-}
-
-/**
- * Extract insight text from agent response
- */
-function extractInsightFromResponse(response: string): string | null {
-  const lines = response.split("\n").filter((l) => l.trim());
-
-  // Look for a valid insight line
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.length <= MAX_INSIGHT_LENGTH && isValidInsight(trimmed)) {
-      return trimmed;
-    }
-  }
-
-  // No valid insight found
-  return null;
-}
-
-/**
- * Extract reasoning from agent response text
- * The agent typically explains its reasoning in sections like "Why this insight:"
- */
-function extractReasoningFromResponse(response: string): string | null {
-  // Look for common reasoning section headers
-  const reasoningPatterns = [
-    /\*\*Why this insight[?:]?\*\*:?\s*([\s\S]*?)(?=\n\n|\n\*\*|$)/i,
-    /Why this insight[?:]?\s*([\s\S]*?)(?=\n\n|\n\*\*|$)/i,
-    /\*\*Reasoning[?:]?\*\*:?\s*([\s\S]*?)(?=\n\n|\n\*\*|$)/i,
-  ];
-
-  for (const pattern of reasoningPatterns) {
-    const match = response.match(pattern);
-    if (match && match[1]) {
-      // Clean up the reasoning text
-      let reasoning = match[1].trim();
-      // Remove markdown formatting
-      reasoning = reasoning.replace(/\*\*/g, "").replace(/\*/g, "");
-      // Truncate to 500 chars (schema limit)
-      if (reasoning.length > 500) {
-        reasoning = reasoning.slice(0, 497) + "...";
-      }
-      return reasoning;
-    }
-  }
-
-  return null;
 }

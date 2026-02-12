@@ -2,51 +2,38 @@
  * Weekly Analysis Lambda
  *
  * Triggered Sunday at 8 AM Pacific to review weekly patterns and trends.
+ * Pre-fetches the past 7 days of daily aggregations from DynamoDB and passes
+ * them inline to Claude via Bedrock InvokeModel. No agent framework.
  */
 
-import { BedrockAgentRuntimeClient, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
 import { Resource } from "sst";
-import { createDocClient, storeInsight } from "@diabetes/core";
+import {
+  createDocClient,
+  storeInsight,
+  getDailyAggregations,
+  formatDateInTimezone,
+} from "@diabetes/core";
 import type { ScheduledHandler } from "aws-lambda";
+import { invokeModel } from "./invoke-model.js";
 
-const bedrockClient = new BedrockAgentRuntimeClient({});
 const docClient = createDocClient();
 
 const DEFAULT_USER_ID = "john";
 
-/**
- * Invoke the diabetes analyst agent
- */
-async function invokeAgent(prompt: string): Promise<string> {
-  const agentId = process.env.AGENT_ID;
-  const agentAliasId = process.env.AGENT_ALIAS_ID;
+const SYSTEM_PROMPT = `You are a friendly diabetes analyst for a Type 1 diabetic using an insulin pump.
+Target range: 70-180 mg/dL. Time in range goal: >70%.
 
-  if (!agentId || !agentAliasId) {
-    throw new Error("AGENT_ID and AGENT_ALIAS_ID must be set");
-  }
+Your job: write a short weekly summary for the Pixoo64 LED display.
+The display fits ONLY 30 characters (2 lines x 15 chars). Count carefully.
 
-  const sessionId = `weekly-${Date.now()}`;
+Writing style:
+- Write like a caring friend texting — warm, natural, specific
+- NO abbreviations (avg, hi, TIR, hrs, chk, stdy, grt, ovrnt)
+- Highlight the week's trend or achievement
+- Celebrate consistency, gently note patterns
 
-  const response = await bedrockClient.send(
-    new InvokeAgentCommand({
-      agentId,
-      agentAliasId,
-      sessionId,
-      inputText: prompt,
-    })
-  );
-
-  let responseText = "";
-  if (response.completion) {
-    for await (const chunk of response.completion) {
-      if (chunk.chunk?.bytes) {
-        responseText += new TextDecoder().decode(chunk.chunk.bytes);
-      }
-    }
-  }
-
-  return responseText;
-}
+Colors (wrap entire message in ONE tag):
+[green] = great week | [yellow] = mixed week | [red] = tough week | [rainbow] = best week ever`;
 
 /**
  * Weekly analysis handler
@@ -55,53 +42,64 @@ export const handler: ScheduledHandler = async () => {
   console.log("Weekly analysis triggered");
 
   try {
-    const prompt = `Analyze my glucose data for the past week.
+    const now = Date.now();
+    const weekAgoMs = now - 7 * 24 * 60 * 60_000;
+    const startDate = formatDateInTimezone(weekAgoMs);
+    const endDate = formatDateInTimezone(now);
 
-Please:
-1. Get the weekly aggregation (current week)
-2. Detect any patterns (overnight lows, meal spikes, dawn phenomenon)
-3. Compare daily TIR values across the week
-4. Note any day-of-week patterns
+    // Pre-fetch daily aggregations for the past week
+    const dailyAggs = await getDailyAggregations(
+      docClient,
+      Resource.SignageTable.name,
+      DEFAULT_USER_ID,
+      startDate,
+      endDate
+    );
 
-Generate a SHORT weekly summary insight (max 80 characters) that:
-- Highlights the week's TIR or key achievement
-- Identifies one pattern to address (if any)
-- Provides encouragement
-
-Store the insight using the storeInsight tool with type="weekly".`;
-
-    const response = await invokeAgent(prompt);
-    console.log("Agent response:", response);
-
-    // Fallback if agent didn't store insight (case-insensitive check)
-    if (!response.toLowerCase().includes("stored")) {
-      const insightText = extractInsightFromResponse(response);
-      if (insightText) {
-        await storeInsight(
-          docClient,
-          Resource.SignageTable.name,
-          DEFAULT_USER_ID,
-          "weekly",
-          insightText
-        );
-      }
+    if (dailyAggs.length === 0) {
+      console.log(`No daily aggregations found for ${startDate} to ${endDate}, skipping`);
+      return;
     }
 
-    console.log("Weekly analysis complete");
+    // Format daily summaries for the prompt
+    const dailyLines = dailyAggs.map((d) =>
+      `${d.date}: TIR ${d.glucose.tir}% | Mean ${Math.round(d.glucose.mean)} | Range ${d.glucose.min}-${d.glucose.max} | ${d.glucose.readings} readings`
+    );
+
+    // Compute week-level stats
+    const totalReadings = dailyAggs.reduce((sum, d) => sum + d.glucose.readings, 0);
+    const weightedTir = dailyAggs.reduce((sum, d) => sum + d.glucose.tir * d.glucose.readings, 0) / totalReadings;
+    const weekMean = dailyAggs.reduce((sum, d) => sum + d.glucose.mean * d.glucose.readings, 0) / totalReadings;
+    const weekMin = Math.min(...dailyAggs.map((d) => d.glucose.min));
+    const weekMax = Math.max(...dailyAggs.map((d) => d.glucose.max));
+
+    const userMessage = `## Weekly Summary (${startDate} to ${endDate})
+
+### Week Totals
+TIR: ${Math.round(weightedTir)}% | Mean: ${Math.round(weekMean)} | Range: ${weekMin}-${weekMax} | Days: ${dailyAggs.length}
+
+### Daily Breakdown
+${dailyLines.join("\n")}
+
+Generate a SHORT weekly summary (max 30 characters) for my LED display.
+Highlight the week's trend or achievement. Call the respond tool.`;
+
+    const result = await invokeModel(SYSTEM_PROMPT, userMessage);
+    console.log("Model response:", JSON.stringify(result));
+
+    await storeInsight(
+      docClient,
+      Resource.SignageTable.name,
+      DEFAULT_USER_ID,
+      "weekly",
+      result.content,
+      undefined, // metrics
+      result.reasoning
+    );
+
+    console.log(`Weekly insight stored: "${result.content}"`);
   } catch (error) {
     console.error("Weekly analysis error:", error);
-    // Rethrow to trigger Lambda retry mechanism for transient errors
     throw error;
   }
 };
-
-function extractInsightFromResponse(response: string): string | null {
-  const lines = response.split("\n").filter((l) => l.trim());
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.length > 10 && trimmed.length <= 80 && !trimmed.includes("?") && !trimmed.startsWith("{")) {
-      return trimmed;
-    }
-  }
-  return response.length > 0 ? response.slice(0, 80).trim() : null;
-}
