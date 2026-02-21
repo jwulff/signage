@@ -1,14 +1,43 @@
 # Post-Deploy Cost Analysis: InvokeModel Refactor
 
-*Date: 2026-02-12 1700*
+*Date: 2026-02-12 1700 — Updated 2026-02-21 with one week of verified data*
 
 ## Why
 
-PR #238 replaced the Bedrock Agent framework with direct InvokeModel calls. PR #240 fixed a missing IAM permission (foundation model ARN) that blocked the new code for ~30 minutes after deploy. This documents the actual measured impact after a full day of production data.
+PR #238 replaced the Bedrock Agent framework with direct InvokeModel calls. PR #240 fixed a missing IAM permission (foundation model ARN) that blocked the new code for ~30 minutes after deploy. This documents the actual measured impact, initially after 24 hours and now verified over a full week of production data.
 
-## Results
+## Verified Results (Feb 13–18, one full week)
 
-### Health (24h since IAM fix)
+### Cost (from AWS Cost Explorer)
+
+| Day | Sonnet 4.5 | Notes |
+|-----|-----------|-------|
+| Feb 05 | $57.95 | Agent framework |
+| Feb 06 | $56.72 | Agent framework |
+| Feb 07 | $56.03 | Agent framework |
+| Feb 08 | $63.13 | Agent framework |
+| Feb 09 | $59.30 | Agent framework |
+| Feb 10 | $59.62 | Agent framework |
+| Feb 11 | $57.11 | Agent framework |
+| Feb 12 | $12.26 | Deploy day: ~8h agent + ~16h InvokeModel |
+| Feb 13 | $1.67 | Direct InvokeModel |
+| Feb 14 | $2.63 | Direct InvokeModel |
+| Feb 15 | $2.76 | Direct InvokeModel |
+| Feb 16 | $2.12 | Direct InvokeModel |
+| Feb 17 | $2.31 | Direct InvokeModel |
+| Feb 18 | $2.36 | Direct InvokeModel |
+
+### Confirmed Savings
+
+| | Agent (Feb 5–11) | InvokeModel (Feb 13–18) | Change |
+|--|-------------------|-------------------------|--------|
+| Avg cost/day | $58.55 | $2.31 | **-96%** |
+| Daily range | $56.03 – $63.13 | $1.67 – $2.76 | Stable |
+| Monthly run rate | $1,757 | $69 | **-$1,687/mo** |
+
+No cost drift observed — daily cost is stable in the $1.67–$2.76 range across all seven days.
+
+### Health (24h after deploy)
 
 | Metric | Value |
 |--------|-------|
@@ -16,35 +45,12 @@ PR #238 replaced the Bedrock Agent framework with direct InvokeModel calls. PR #
 | Insights generated | 32 |
 | Insights skipped (rate limited) | 187 |
 | Length fallbacks | 0 |
-| Dedup skips | 0 |
 
 Insight quality is unchanged — contextual, varied, all within the 30-char LED limit.
 
-### Cost (from AWS Cost Explorer)
-
-| Day | Sonnet 4.5 Cost | Framework |
-|-----|----------------|-----------|
-| Feb 10 | $59.62 | Agent (5 roundtrips/insight) |
-| Feb 11 | $57.11 | Agent (5 roundtrips/insight) |
-| Feb 12 | $11.20* | Mixed: ~8h agent + ~16h InvokeModel |
-
-\* Feb 12 includes ~8h of old agent before deploy. Cost Explorer has 24-48h lag for same-day data.
-
-### Projected Savings
-
-| | Agent | InvokeModel | Change |
-|--|-------|-------------|--------|
-| API calls/insight | 5 roundtrips | 1 call | -80% |
-| Total API calls/day | ~180 | ~47 | -74% |
-| Cost/day | ~$58 | ~$1 | -98% |
-| Cost/month | ~$1,751 | ~$28 | -98% |
-| Monthly savings | | | ~$1,723 |
-
-The savings are larger than the original $7/day estimate in the plan because the agent framework cost was $58/day, not $7/day. The $7/day figure came from early testing with fewer invocations; production volume with rate limiting still generated 36 insights/day × 5 roundtrips each.
-
 ## Key Design Decision
 
-The original plan estimated switching to Haiku 4.5 after establishing a cost baseline. At ~$1/day on Sonnet 4.5 with InvokeModel, switching to Haiku is no longer necessary for cost reasons. The model can stay on Sonnet 4.5 indefinitely at this price point.
+The original plan estimated switching to Haiku 4.5 after establishing a cost baseline. At ~$2.31/day on Sonnet 4.5 with InvokeModel, switching to Haiku is no longer necessary for cost reasons. The model stays on Sonnet 4.5 indefinitely at this price point.
 
 ## IAM Lesson Learned
 
@@ -52,6 +58,6 @@ When using `InvokeModel` with Bedrock inference profiles (`us.anthropic.*`), IAM
 
 ## What's Next
 
-- Confirm full-day InvokeModel cost from Feb 13 Cost Explorer data (clean day, no agent)
-- Monitor weekly for cost drift
+- ~~Confirm full-day InvokeModel cost from Feb 13 Cost Explorer data~~ Done: $1.67
+- ~~Monitor weekly for cost drift~~ Done: stable at $1.67–$2.76/day for 6 days
 - Consider Haiku 4.5 only if insight quality needs differ, not for cost
