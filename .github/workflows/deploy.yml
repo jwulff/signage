@@ -66,25 +66,27 @@ jobs:
           SIGNAGE_DOMAIN: ${{ secrets.SIGNAGE_DOMAIN }}
 
       - name: Trigger fresh insight
+        continue-on-error: true
         run: |
           # Reset the insight timer so the next CGM reading generates a fresh insight.
           # This ensures new prompt/model changes take effect immediately.
           # Uses sst shell to get the table name from SST resources (avoids needing dynamodb:ListTables).
+          # continue-on-error: insight trigger failure should not block deploys.
           TABLE=$(pnpm sst shell --stage prod -- node -e "
             const r = JSON.parse(process.env.SST_RESOURCE_SignageTable || '{}');
             process.stdout.write(r.name || '');
           ")
-          if [ -n "$TABLE" ]; then
-            OLD_TS=$(python3 -c "import time; print(int((time.time() - 3700) * 1000))")
-            aws dynamodb update-item \
-              --table-name "$TABLE" \
-              --key '{"pk": {"S": "USR#john#INSIGHT#CURRENT"}, "sk": {"S": "_"}}' \
-              --update-expression "SET generatedAt = :ts" \
-              --expression-attribute-values "{\":ts\": {\"N\": \"$OLD_TS\"}}"
-            echo "Insight timer reset — next CGM reading will generate a fresh insight"
-          else
-            echo "Warning: Could not find SignageTable, skipping insight trigger"
+          if [ -z "$TABLE" ]; then
+            echo "::error::Could not resolve SignageTable from SST resources"
+            exit 1
           fi
+          OLD_TS=$(python3 -c "import time; print(int((time.time() - 3700) * 1000))")
+          aws dynamodb update-item \
+            --table-name "$TABLE" \
+            --key '{"pk": {"S": "USR#john#INSIGHT#CURRENT"}, "sk": {"S": "_"}}' \
+            --update-expression "SET generatedAt = :ts" \
+            --expression-attribute-values "{\":ts\": {\"N\": \"$OLD_TS\"}}"
+          echo "Insight timer reset — next CGM reading will generate a fresh insight"
 
       - name: Output URLs
         run: |
