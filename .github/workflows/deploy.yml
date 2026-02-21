@@ -69,7 +69,11 @@ jobs:
         run: |
           # Reset the insight timer so the next CGM reading generates a fresh insight.
           # This ensures new prompt/model changes take effect immediately.
-          TABLE=$(aws dynamodb list-tables --query 'TableNames[?contains(@, `prod`) && contains(@, `SignageTable`)]' --output text)
+          # Uses sst shell to get the table name from SST resources (avoids needing dynamodb:ListTables).
+          TABLE=$(pnpm sst shell --stage prod -- node -e "
+            const r = JSON.parse(process.env.SST_RESOURCE_SignageTable || '{}');
+            process.stdout.write(r.name || '');
+          ")
           if [ -n "$TABLE" ]; then
             OLD_TS=$(python3 -c "import time; print(int((time.time() - 3700) * 1000))")
             aws dynamodb update-item \
