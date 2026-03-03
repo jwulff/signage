@@ -10,9 +10,10 @@
 import {
   ApiGatewayManagementApiClient,
   PostToConnectionCommand,
+  GoneException,
 } from "@aws-sdk/client-apigatewaymanagementapi";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, QueryCommand, PutCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import { Resource } from "sst";
 import type { ScheduledHandler } from "aws-lambda";
 import { encodeFrameToBase64 } from "@signage/core";
@@ -108,29 +109,90 @@ interface ChartPoint {
 }
 
 /**
- * Fetch blood sugar data and history from Dexcom
+ * Cache the last successful BG data in DynamoDB.
+ * Used as fallback when Dexcom API returns errors (500s happen ~24% of the time).
+ */
+async function cacheBgData(
+  current: BloodSugarDisplayData,
+  history: ChartPoint[]
+): Promise<void> {
+  try {
+    await ddb.send(
+      new PutCommand({
+        TableName: Resource.SignageTable.name,
+        Item: {
+          pk: "BG_CACHE",
+          sk: "LATEST",
+          current,
+          history,
+          cachedAt: Date.now(),
+        },
+      })
+    );
+  } catch (error) {
+    console.error("Failed to cache BG data:", error);
+  }
+}
+
+/**
+ * Retrieve cached BG data as fallback when Dexcom API fails.
+ * Returns the data with isStale set to true so it renders dimmed.
+ */
+async function getCachedBgData(): Promise<{
+  current: BloodSugarDisplayData | null;
+  history: ChartPoint[];
+}> {
+  try {
+    const result = await ddb.send(
+      new GetCommand({
+        TableName: Resource.SignageTable.name,
+        Key: { pk: "BG_CACHE", sk: "LATEST" },
+      })
+    );
+
+    if (result.Item?.current) {
+      const current = result.Item.current as BloodSugarDisplayData;
+      const history = (result.Item.history as ChartPoint[]) || [];
+      // Mark as stale so it renders dimmed (gray) instead of "BG ERR"
+      return {
+        current: { ...current, isStale: true },
+        history,
+      };
+    }
+  } catch (error) {
+    console.error("Failed to read cached BG data:", error);
+  }
+  return { current: null, history: [] };
+}
+
+/**
+ * Fetch blood sugar data and history from Dexcom.
+ * Falls back to cached data (shown dimmed) when Dexcom API fails.
+ * Handles partial failures: preserves fresh current reading even if history fetch fails.
  */
 async function fetchBloodSugarData(): Promise<{
   current: BloodSugarDisplayData | null;
   history: ChartPoint[];
 }> {
+  let sessionId: string;
   try {
-    const sessionId = await getSessionId({
+    sessionId = await getSessionId({
       username: Resource.DexcomUsername.value,
       password: Resource.DexcomPassword.value,
     });
+  } catch (error) {
+    console.error("Dexcom auth failed:", error);
+    console.log("Falling back to cached BG data");
+    return getCachedBgData();
+  }
 
-    // Fetch current reading (last 30 min, 2 values for delta)
+  // Fetch current and history independently so a history failure
+  // doesn't discard a successful current reading
+  let current: BloodSugarDisplayData | null = null;
+  let history: ChartPoint[] = [];
+
+  try {
     const readings = await fetchGlucoseReadings(sessionId, 30, 2);
-
-    // Fetch history (24 hours for split chart: 21h compressed + 3h detailed)
-    const historyReadings = await fetchGlucoseReadings(sessionId, 1440, 300);
-
-    // Dual-write: store readings for agent analysis (fire-and-forget)
-    // Use historyReadings since it includes all recent data
-    void storeCgmReadingsForAgent(historyReadings || []);
-
-    let current: BloodSugarDisplayData | null = null;
 
     if (readings && readings.length > 0) {
       const latest = readings[0];
@@ -149,21 +211,36 @@ async function fetchBloodSugarData(): Promise<{
         isStale: isStale(timestamp),
       };
     }
+  } catch (error) {
+    console.error("Failed to fetch current BG reading:", error);
+  }
 
-    // Convert history readings to chart points
-    const history: ChartPoint[] = historyReadings
+  try {
+    const historyReadings = await fetchGlucoseReadings(sessionId, 1440, 300);
+
+    // Dual-write: store readings for agent analysis (fire-and-forget)
+    void storeCgmReadingsForAgent(historyReadings || []);
+
+    history = historyReadings
       .map((r) => ({
         timestamp: parseDexcomTimestamp(r.WT),
         glucose: r.Value,
       }))
       .filter((p) => p.timestamp > 0)
       .reverse(); // Oldest first
-
-    return { current, history };
   } catch (error) {
-    console.error("Failed to fetch blood sugar data:", error);
-    return { current: null, history: [] };
+    console.error("Failed to fetch BG history:", error);
   }
+
+  // Cache successful data for future fallback
+  if (current) {
+    void cacheBgData(current, history);
+    return { current, history };
+  }
+
+  // No current reading from API — fall back to cache
+  console.log("No current BG reading, falling back to cached data");
+  return getCachedBgData();
 }
 
 // Seattle coordinates (Fremont area)
@@ -457,13 +534,31 @@ async function getActiveConnections() {
 }
 
 /**
- * Broadcast a frame to all connections
+ * Remove a stale connection from DynamoDB.
+ */
+async function removeStaleConnection(connectionId: string): Promise<void> {
+  try {
+    await ddb.send(
+      new DeleteCommand({
+        TableName: Resource.SignageTable.name,
+        Key: { pk: "CONNECTIONS", sk: connectionId },
+      })
+    );
+    console.log(`Removed stale connection: ${connectionId}`);
+  } catch (error) {
+    console.error(`Failed to remove stale connection ${connectionId}:`, error);
+  }
+}
+
+/**
+ * Broadcast a frame to all connections.
+ * Automatically cleans up stale connections that return 410 Gone.
  */
 async function broadcastFrame(
   apiClient: ApiGatewayManagementApiClient,
   connections: Array<{ connectionId: string }>,
   frame: Frame
-): Promise<{ success: number; failed: number }> {
+): Promise<{ success: number; failed: number; cleaned: number }> {
   const frameData = encodeFrameToBase64(frame);
   const message = JSON.stringify({
     type: "frame",
@@ -479,6 +574,7 @@ async function broadcastFrame(
 
   let success = 0;
   let failed = 0;
+  let cleaned = 0;
 
   await Promise.all(
     connections.map(async (conn) => {
@@ -490,13 +586,18 @@ async function broadcastFrame(
           })
         );
         success++;
-      } catch {
+      } catch (error) {
         failed++;
+        // Clean up stale connections (410 Gone = connection no longer exists)
+        if (error instanceof GoneException) {
+          await removeStaleConnection(conn.connectionId);
+          cleaned++;
+        }
       }
     })
   );
 
-  return { success, failed };
+  return { success, failed, cleaned };
 }
 
 /**
@@ -508,7 +609,7 @@ async function updateDisplay(): Promise<{
   time?: string;
   glucose?: number;
   connections?: number;
-  broadcast?: { success: number; failed: number };
+  broadcast?: { success: number; failed: number; cleaned: number };
   error?: string;
 }> {
   // Check for active connections first
@@ -544,9 +645,10 @@ async function updateDisplay(): Promise<{
   const { current: bloodSugarData, history } = bloodSugarResult;
 
   if (bloodSugarData) {
-    console.log(`Blood sugar: ${bloodSugarData.glucose} mg/dL, Trend: ${bloodSugarData.trend}, History: ${history.length} points`);
+    const staleSuffix = bloodSugarData.isStale ? " (cached/stale)" : "";
+    console.log(`Blood sugar: ${bloodSugarData.glucose} mg/dL, Trend: ${bloodSugarData.trend}, History: ${history.length} points${staleSuffix}`);
   } else {
-    console.log("Blood sugar data unavailable");
+    console.log("Blood sugar data unavailable (no cache)");
   }
 
   // Weather logging disabled (see comment above)
@@ -596,7 +698,7 @@ async function updateDisplay(): Promise<{
     frame
   );
 
-  console.log(`Broadcast complete: ${broadcast.success} sent, ${broadcast.failed} failed`);
+  console.log(`Broadcast complete: ${broadcast.success} sent, ${broadcast.failed} failed${broadcast.cleaned > 0 ? `, ${broadcast.cleaned} stale removed` : ""}`);
 
   // Cache frame for new connections
   const frameData = encodeFrameToBase64(frame);
