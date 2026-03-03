@@ -153,9 +153,10 @@ async function getCachedBgData(): Promise<{
     if (result.Item?.current) {
       const current = result.Item.current as BloodSugarDisplayData;
       const history = (result.Item.history as ChartPoint[]) || [];
-      // Mark as stale so it renders dimmed (gray) instead of "BG ERR"
+      // Re-evaluate staleness from the reading's actual timestamp —
+      // Dexcom only reports every 5 min so a recently cached value is still fresh
       return {
-        current: { ...current, isStale: true },
+        current: { ...current, isStale: isStale(current.timestamp) },
         history,
       };
     }
