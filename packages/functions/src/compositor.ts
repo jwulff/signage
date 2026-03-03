@@ -168,28 +168,31 @@ async function getCachedBgData(): Promise<{
 /**
  * Fetch blood sugar data and history from Dexcom.
  * Falls back to cached data (shown dimmed) when Dexcom API fails.
+ * Handles partial failures: preserves fresh current reading even if history fetch fails.
  */
 async function fetchBloodSugarData(): Promise<{
   current: BloodSugarDisplayData | null;
   history: ChartPoint[];
 }> {
+  let sessionId: string;
   try {
-    const sessionId = await getSessionId({
+    sessionId = await getSessionId({
       username: Resource.DexcomUsername.value,
       password: Resource.DexcomPassword.value,
     });
+  } catch (error) {
+    console.error("Dexcom auth failed:", error);
+    console.log("Falling back to cached BG data");
+    return getCachedBgData();
+  }
 
-    // Fetch current reading (last 30 min, 2 values for delta)
+  // Fetch current and history independently so a history failure
+  // doesn't discard a successful current reading
+  let current: BloodSugarDisplayData | null = null;
+  let history: ChartPoint[] = [];
+
+  try {
     const readings = await fetchGlucoseReadings(sessionId, 30, 2);
-
-    // Fetch history (24 hours for split chart: 21h compressed + 3h detailed)
-    const historyReadings = await fetchGlucoseReadings(sessionId, 1440, 300);
-
-    // Dual-write: store readings for agent analysis (fire-and-forget)
-    // Use historyReadings since it includes all recent data
-    void storeCgmReadingsForAgent(historyReadings || []);
-
-    let current: BloodSugarDisplayData | null = null;
 
     if (readings && readings.length > 0) {
       const latest = readings[0];
@@ -208,27 +211,36 @@ async function fetchBloodSugarData(): Promise<{
         isStale: isStale(timestamp),
       };
     }
+  } catch (error) {
+    console.error("Failed to fetch current BG reading:", error);
+  }
 
-    // Convert history readings to chart points
-    const history: ChartPoint[] = historyReadings
+  try {
+    const historyReadings = await fetchGlucoseReadings(sessionId, 1440, 300);
+
+    // Dual-write: store readings for agent analysis (fire-and-forget)
+    void storeCgmReadingsForAgent(historyReadings || []);
+
+    history = historyReadings
       .map((r) => ({
         timestamp: parseDexcomTimestamp(r.WT),
         glucose: r.Value,
       }))
       .filter((p) => p.timestamp > 0)
       .reverse(); // Oldest first
-
-    // Cache successful data for future fallback
-    if (current) {
-      void cacheBgData(current, history);
-    }
-
-    return { current, history };
   } catch (error) {
-    console.error("Failed to fetch blood sugar data:", error);
-    console.log("Falling back to cached BG data");
-    return getCachedBgData();
+    console.error("Failed to fetch BG history:", error);
   }
+
+  // Cache successful data for future fallback
+  if (current) {
+    void cacheBgData(current, history);
+    return { current, history };
+  }
+
+  // No current reading from API — fall back to cache
+  console.log("No current BG reading, falling back to cached data");
+  return getCachedBgData();
 }
 
 // Seattle coordinates (Fremont area)
@@ -597,7 +609,7 @@ async function updateDisplay(): Promise<{
   time?: string;
   glucose?: number;
   connections?: number;
-  broadcast?: { success: number; failed: number };
+  broadcast?: { success: number; failed: number; cleaned: number };
   error?: string;
 }> {
   // Check for active connections first
