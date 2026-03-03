@@ -136,7 +136,8 @@ async function cacheBgData(
 
 /**
  * Retrieve cached BG data as fallback when Dexcom API fails.
- * Returns the data with isStale set to true so it renders dimmed.
+ * Staleness is re-evaluated from the reading's timestamp (10-min threshold),
+ * so a recently cached value still renders at full brightness.
  */
 async function getCachedBgData(): Promise<{
   current: BloodSugarDisplayData | null;
@@ -153,9 +154,10 @@ async function getCachedBgData(): Promise<{
     if (result.Item?.current) {
       const current = result.Item.current as BloodSugarDisplayData;
       const history = (result.Item.history as ChartPoint[]) || [];
-      // Mark as stale so it renders dimmed (gray) instead of "BG ERR"
+      // Re-evaluate staleness from the reading's actual timestamp —
+      // Dexcom only reports every 5 min so a recently cached value is still fresh
       return {
-        current: { ...current, isStale: true },
+        current: { ...current, isStale: isStale(current.timestamp) },
         history,
       };
     }
@@ -167,7 +169,7 @@ async function getCachedBgData(): Promise<{
 
 /**
  * Fetch blood sugar data and history from Dexcom.
- * Falls back to cached data (shown dimmed) when Dexcom API fails.
+ * Falls back to cached data when Dexcom API fails.
  * Handles partial failures: preserves fresh current reading even if history fetch fails.
  */
 async function fetchBloodSugarData(): Promise<{
