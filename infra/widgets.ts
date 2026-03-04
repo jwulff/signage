@@ -65,3 +65,32 @@ export const glookoScraperCron = new sst.aws.Cron("GlookoScraper", {
     },
   },
 });
+
+// Check Lightsail instance health hourly and auto-reboot if status checks fail
+export const lightsailHealthCheckCron = new sst.aws.Cron(
+  "LightsailHealthCheck",
+  {
+    schedule: "rate(1 hour)",
+    function: {
+      handler: "packages/functions/src/lightsail/health-check.handler",
+      link: [table],
+      timeout: "30 seconds",
+      memory: "256 MB",
+    },
+  }
+);
+
+new aws.iam.RolePolicy("LightsailHealthCheckPolicy", {
+  role: lightsailHealthCheckCron.nodes.function.role,
+  policy: aws.iam.getPolicyDocumentOutput({
+    statements: [
+      {
+        actions: [
+          "lightsail:GetInstanceMetricData",
+          "lightsail:RebootInstance",
+        ],
+        resources: ["*"],
+      },
+    ],
+  }).json,
+});
