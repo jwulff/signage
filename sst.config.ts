@@ -31,7 +31,9 @@ export default $config({
       webUrl: web.url,
       compositorCron: compositorCron.nodes.rule.name,
       reconcileCron: reconcileCron.nodes.rule.name,
-      lightsailHealthCheckCron: lightsailHealthCheckCron.nodes.rule.name,
+      ...(lightsailHealthCheckCron && {
+        lightsailHealthCheckCron: lightsailHealthCheckCron.nodes.rule.name,
+      }),
       knowledgeBaseId: kbOutputs.knowledgeBaseId,
       knowledgeBaseBucket: kbOutputs.bucketName,
     };
