@@ -20,7 +20,8 @@ export default $config({
     const { api } = await import("./infra/api");
     const { testApi } = await import("./infra/test-api");
     const { web } = await import("./infra/web");
-    const { compositorCron, reconcileCron } = await import("./infra/widgets");
+    const { compositorCron, reconcileCron, lightsailHealthCheckCron } =
+      await import("./infra/widgets");
     const { outputs: kbOutputs } = await import("./infra/knowledge-base");
     await import("./infra/analysis-pipeline");
 
@@ -30,6 +31,9 @@ export default $config({
       webUrl: web.url,
       compositorCron: compositorCron.nodes.rule.name,
       reconcileCron: reconcileCron.nodes.rule.name,
+      ...(lightsailHealthCheckCron && {
+        lightsailHealthCheckCron: lightsailHealthCheckCron.nodes.rule.name,
+      }),
       knowledgeBaseId: kbOutputs.knowledgeBaseId,
       knowledgeBaseBucket: kbOutputs.bucketName,
     };
