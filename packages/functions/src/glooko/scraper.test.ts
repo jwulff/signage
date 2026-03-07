@@ -199,18 +199,20 @@ function buildZipEntry(
 
 /**
  * Build a complete ZIP with data descriptor entries + central directory.
- * Tracks actual entry sizes to compute central directory offset deterministically.
+ * When sentinelSizes is true, the central directory also stores 0xFFFFFFFF
+ * for sizes (matching Glooko's actual ZIP output).
  */
 function buildZipWithDataDescriptors(
-  files: Array<{ fileName: string; content: string }>
+  files: Array<{ fileName: string; content: string }>,
+  options: { sentinelSizes?: boolean } = {}
 ): Buffer {
+  const { sentinelSizes = false } = options;
   const localEntries: Buffer[] = [];
   const entryMeta: Array<{
     fileName: string;
     compressedSize: number;
     uncompressedSize: number;
     localHeaderOffset: number;
-    useDataDescriptor: boolean;
   }> = [];
   let offset = 0;
 
@@ -223,7 +225,6 @@ function buildZipWithDataDescriptors(
       compressedSize: compressedBuf.length,
       uncompressedSize: uncompressedBuf.length,
       localHeaderOffset: offset,
-      useDataDescriptor: true,
     });
 
     const entry = buildZipEntry(file.fileName, file.content, { useDataDescriptor: true });
@@ -238,19 +239,18 @@ function buildZipWithDataDescriptors(
   const centralEntries: Buffer[] = [];
   for (const entry of entryMeta) {
     const fileNameBuf = Buffer.from(entry.fileName, "utf-8");
-    const flags = entry.useDataDescriptor ? 0x0008 : 0x0000;
 
     const centralHeader = Buffer.alloc(46);
     centralHeader.writeUInt32LE(0x02014b50, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
-    centralHeader.writeUInt16LE(flags, 8);
+    centralHeader.writeUInt16LE(0x0008, 8); // data descriptor flag
     centralHeader.writeUInt16LE(8, 10);
     centralHeader.writeUInt16LE(0, 12);
     centralHeader.writeUInt16LE(0, 14);
     centralHeader.writeUInt32LE(0, 16); // crc32
-    centralHeader.writeUInt32LE(entry.compressedSize, 20);
-    centralHeader.writeUInt32LE(entry.uncompressedSize, 24);
+    centralHeader.writeUInt32LE(sentinelSizes ? 0xffffffff : entry.compressedSize, 20);
+    centralHeader.writeUInt32LE(sentinelSizes ? 0xffffffff : entry.uncompressedSize, 24);
     centralHeader.writeUInt16LE(fileNameBuf.length, 28);
     centralHeader.writeUInt16LE(0, 30);
     centralHeader.writeUInt16LE(0, 32);
@@ -314,6 +314,27 @@ describe("extractCsvFilesFromZip", () => {
     ];
 
     const zip = buildZipWithDataDescriptors(files);
+    const result = await extractCsvFilesFromZip(zip);
+
+    expect(result).toHaveLength(3);
+    expect(result.map((f) => f.fileName)).toEqual([
+      "cgm_data_1.csv",
+      "bolus_data_1.csv",
+      "insulin_data_1.csv",
+    ]);
+    expect(result[0].content).toContain("Timestamp,Value");
+    expect(result[1].content).toContain("Timestamp,Insulin");
+    expect(result[2].content).toContain("Timestamp,Total");
+  });
+
+  it("extracts files when central directory also has 0xFFFFFFFF sizes (Glooko format)", async () => {
+    const files = [
+      { fileName: "cgm_data_1.csv", content: "Timestamp,Value\n2024-01-01,100\n" },
+      { fileName: "bolus_data_1.csv", content: "Timestamp,Insulin\n2024-01-01,5.0\n" },
+      { fileName: "insulin_data_1.csv", content: "Timestamp,Total\n2024-01-01,42.0\n" },
+    ];
+
+    const zip = buildZipWithDataDescriptors(files, { sentinelSizes: true });
     const result = await extractCsvFilesFromZip(zip);
 
     expect(result).toHaveLength(3);

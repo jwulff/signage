@@ -115,25 +115,53 @@ function parseCentralDirectory(buffer: Buffer): Array<{
 }
 
 /**
+ * Find the EOCD record and return the central directory offset.
+ * Returns -1 if not found.
+ */
+function findCentralDirOffset(buffer: Buffer): number {
+  for (let i = buffer.length - 22; i >= 0; i--) {
+    if (buffer.readUInt32LE(i) === 0x06054b50) {
+      return buffer.readUInt32LE(i + 16);
+    }
+  }
+  return -1;
+}
+
+/**
+ * Compute the data start offset for a local file header at the given position.
+ */
+function localHeaderDataOffset(buffer: Buffer, headerOffset: number): number {
+  const fileNameLength = buffer.readUInt16LE(headerOffset + 26);
+  const extraFieldLength = buffer.readUInt16LE(headerOffset + 28);
+  return headerOffset + 30 + fileNameLength + extraFieldLength;
+}
+
+/**
  * Extract CSV files from a ZIP file buffer.
- * Uses the central directory for accurate sizes, handling ZIPs that use
- * data descriptors (bit 3 of general purpose flags) where local file
- * headers have 0xFFFFFFFF for sizes.
+ * Handles ZIPs where both local headers and central directory store 0xFFFFFFFF
+ * for sizes (data descriptor ZIPs). Uses central directory for file names and
+ * local header offsets, then computes data regions from consecutive offsets
+ * and lets inflateRawSync find the actual deflate stream boundary.
  */
 export async function extractCsvFilesFromZip(buffer: Buffer): Promise<ExtractedCsv[]> {
   const { inflateRawSync } = await import("zlib");
   const csvFiles: ExtractedCsv[] = [];
 
-  // Try central directory first (handles data descriptors correctly)
+  // Try central directory first (gives us file names and local header offsets)
   const centralEntries = parseCentralDirectory(buffer);
+  const centralDirOffset = findCentralDirOffset(buffer);
 
-  if (centralEntries.length > 0) {
-    for (const entry of centralEntries) {
+  if (centralEntries.length > 0 && centralDirOffset > 0) {
+    // Sort entries by local header offset to compute data boundaries
+    const sorted = [...centralEntries].sort((a, b) => a.localHeaderOffset - b.localHeaderOffset);
+
+    for (let idx = 0; idx < sorted.length; idx++) {
+      const entry = sorted[idx];
       console.log(`ZIP entry: ${entry.fileName} (compressed: ${entry.compressedSize}, uncompressed: ${entry.uncompressedSize}, method: ${entry.compressionMethod})`);
 
       if (!entry.fileName.toLowerCase().endsWith(".csv")) continue;
 
-      // Validate local header before reading variable-length fields
+      // Validate local header
       if (entry.localHeaderOffset + 30 > buffer.length) {
         console.warn(`Skipping ${entry.fileName}: local header offset out of bounds`);
         continue;
@@ -143,17 +171,27 @@ export async function extractCsvFilesFromZip(buffer: Buffer): Promise<ExtractedC
         continue;
       }
 
-      // Read local file header to find data offset (skip variable-length fields)
-      const localFileNameLength = buffer.readUInt16LE(entry.localHeaderOffset + 26);
-      const localExtraFieldLength = buffer.readUInt16LE(entry.localHeaderOffset + 28);
-      const dataOffset = entry.localHeaderOffset + 30 + localFileNameLength + localExtraFieldLength;
+      const dataOffset = localHeaderDataOffset(buffer, entry.localHeaderOffset);
 
-      if (dataOffset + entry.compressedSize > buffer.length) {
-        console.warn(`Skipping ${entry.fileName}: data extends beyond buffer`);
+      // Determine compressed size: use central directory value if valid,
+      // otherwise compute from the gap between this entry's data and the
+      // next entry's local header (or the central directory)
+      let compressedSize = entry.compressedSize;
+      if (compressedSize === 0xffffffff || dataOffset + compressedSize > buffer.length) {
+        const nextBoundary = idx + 1 < sorted.length
+          ? sorted[idx + 1].localHeaderOffset
+          : centralDirOffset;
+        // The gap contains: compressed data + optional data descriptor (16 bytes)
+        // Give inflateRawSync the full region; it stops at the deflate stream end
+        compressedSize = nextBoundary - dataOffset;
+      }
+
+      if (dataOffset + compressedSize > buffer.length || compressedSize <= 0) {
+        console.warn(`Skipping ${entry.fileName}: computed data region out of bounds`);
         continue;
       }
 
-      const compressedData = buffer.slice(dataOffset, dataOffset + entry.compressedSize);
+      const compressedData = buffer.slice(dataOffset, dataOffset + compressedSize);
 
       let csvContent: string;
       if (entry.compressionMethod === 0) {
