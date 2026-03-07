@@ -1,9 +1,10 @@
 /**
- * Tests for Glooko CSV parser
+ * Tests for Glooko CSV parser and ZIP extraction
  */
 
 import { describe, it, expect } from "vitest";
-import { parseCsv } from "./scraper.js";
+import { parseCsv, extractCsvFilesFromZip } from "./scraper.js";
+import { deflateRawSync } from "zlib";
 
 describe("parseCsv", () => {
   it("parses insulin treatments from CSV", () => {
@@ -147,5 +148,198 @@ invalid-date,5.0,
 
     expect(treatments).toHaveLength(1);
     expect(treatments[0].value).toBe(3.0);
+  });
+});
+
+/**
+ * Helper to build a ZIP local file entry with optional data descriptor
+ */
+function buildZipEntry(
+  fileName: string,
+  content: string,
+  options: { useDataDescriptor?: boolean } = {}
+): Buffer {
+  const { useDataDescriptor = false } = options;
+  const fileNameBuf = Buffer.from(fileName, "utf-8");
+  const uncompressedBuf = Buffer.from(content, "utf-8");
+  const compressedBuf = deflateRawSync(uncompressedBuf);
+
+  const generalPurposeFlags = useDataDescriptor ? 0x0008 : 0x0000;
+  const headerCompressedSize = useDataDescriptor ? 0xffffffff : compressedBuf.length;
+  const headerUncompressedSize = useDataDescriptor ? 0xffffffff : uncompressedBuf.length;
+
+  // Local file header (30 bytes + fileName)
+  const header = Buffer.alloc(30);
+  header.writeUInt32LE(0x04034b50, 0); // signature
+  header.writeUInt16LE(20, 4); // version needed
+  header.writeUInt16LE(generalPurposeFlags, 6);
+  header.writeUInt16LE(8, 8); // compression method: deflate
+  header.writeUInt16LE(0, 10); // mod time
+  header.writeUInt16LE(0, 12); // mod date
+  header.writeUInt32LE(0, 14); // crc32 (placeholder)
+  header.writeUInt32LE(headerCompressedSize, 18);
+  header.writeUInt32LE(headerUncompressedSize, 22);
+  header.writeUInt16LE(fileNameBuf.length, 26);
+  header.writeUInt16LE(0, 28); // extra field length
+
+  const parts = [header, fileNameBuf, compressedBuf];
+
+  if (useDataDescriptor) {
+    // Data descriptor: signature + crc32 + compressed size + uncompressed size
+    const descriptor = Buffer.alloc(16);
+    descriptor.writeUInt32LE(0x08074b50, 0); // data descriptor signature
+    descriptor.writeUInt32LE(0, 4); // crc32 (placeholder)
+    descriptor.writeUInt32LE(compressedBuf.length, 8);
+    descriptor.writeUInt32LE(uncompressedBuf.length, 12);
+    parts.push(descriptor);
+  }
+
+  return Buffer.concat(parts);
+}
+
+/**
+ * Helper to build a ZIP central directory + EOCD for given entries
+ */
+function buildZipCentralDirectory(
+  entries: Array<{ fileName: string; content: string; localHeaderOffset: number }>
+): Buffer {
+  const centralEntries: Buffer[] = [];
+  let centralDirSize = 0;
+
+  for (const entry of entries) {
+    const fileNameBuf = Buffer.from(entry.fileName, "utf-8");
+    const uncompressedBuf = Buffer.from(entry.content, "utf-8");
+    const compressedBuf = deflateRawSync(uncompressedBuf);
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0); // central directory signature
+    centralHeader.writeUInt16LE(20, 4); // version made by
+    centralHeader.writeUInt16LE(20, 6); // version needed
+    centralHeader.writeUInt16LE(0, 8); // flags
+    centralHeader.writeUInt16LE(8, 10); // compression method
+    centralHeader.writeUInt16LE(0, 12); // mod time
+    centralHeader.writeUInt16LE(0, 14); // mod date
+    centralHeader.writeUInt32LE(0, 16); // crc32
+    centralHeader.writeUInt32LE(compressedBuf.length, 20); // compressed size
+    centralHeader.writeUInt32LE(uncompressedBuf.length, 24); // uncompressed size
+    centralHeader.writeUInt16LE(fileNameBuf.length, 28); // file name length
+    centralHeader.writeUInt16LE(0, 30); // extra field length
+    centralHeader.writeUInt16LE(0, 32); // file comment length
+    centralHeader.writeUInt16LE(0, 34); // disk number start
+    centralHeader.writeUInt16LE(0, 36); // internal file attributes
+    centralHeader.writeUInt32LE(0, 38); // external file attributes
+    centralHeader.writeUInt32LE(entry.localHeaderOffset, 42); // local header offset
+
+    centralEntries.push(Buffer.concat([centralHeader, fileNameBuf]));
+    centralDirSize += 46 + fileNameBuf.length;
+  }
+
+  const centralDirBuf = Buffer.concat(centralEntries);
+  const centralDirOffset = entries.length > 0
+    ? entries[entries.length - 1].localHeaderOffset +
+      30 +
+      Buffer.from(entries[entries.length - 1].fileName).length +
+      deflateRawSync(Buffer.from(entries[entries.length - 1].content)).length +
+      (16) // data descriptor size
+    : 0;
+
+  // End of central directory record
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0); // EOCD signature
+  eocd.writeUInt16LE(0, 4); // disk number
+  eocd.writeUInt16LE(0, 6); // disk with central dir
+  eocd.writeUInt16LE(entries.length, 8); // entries on this disk
+  eocd.writeUInt16LE(entries.length, 10); // total entries
+  eocd.writeUInt32LE(centralDirSize, 12); // central dir size
+  eocd.writeUInt32LE(centralDirOffset, 16); // central dir offset
+  eocd.writeUInt16LE(0, 20); // comment length
+
+  return Buffer.concat([centralDirBuf, eocd]);
+}
+
+/**
+ * Build a complete ZIP with data descriptor entries + central directory
+ */
+function buildZipWithDataDescriptors(
+  files: Array<{ fileName: string; content: string }>
+): Buffer {
+  const localEntries: Buffer[] = [];
+  const entryMeta: Array<{ fileName: string; content: string; localHeaderOffset: number }> = [];
+  let offset = 0;
+
+  for (const file of files) {
+    entryMeta.push({ ...file, localHeaderOffset: offset });
+    const entry = buildZipEntry(file.fileName, file.content, { useDataDescriptor: true });
+    localEntries.push(entry);
+    offset += entry.length;
+  }
+
+  const localData = Buffer.concat(localEntries);
+  const centralDir = buildZipCentralDirectory(entryMeta);
+
+  return Buffer.concat([localData, centralDir]);
+}
+
+describe("extractCsvFilesFromZip", () => {
+  it("extracts all CSV files from a ZIP without data descriptors", async () => {
+    const files = [
+      { fileName: "cgm_data_1.csv", content: "Timestamp,Value\n2024-01-01,100\n" },
+      { fileName: "bolus_data_1.csv", content: "Timestamp,Insulin\n2024-01-01,5.0\n" },
+      { fileName: "insulin_data_1.csv", content: "Timestamp,Total\n2024-01-01,42.0\n" },
+    ];
+
+    // Build ZIP without data descriptors (standard)
+    const localEntries = files.map((f) =>
+      buildZipEntry(f.fileName, f.content, { useDataDescriptor: false })
+    );
+    const localData = Buffer.concat(localEntries);
+    // No central directory needed for standard ZIPs (existing parser works)
+    const zip = localData;
+
+    const result = await extractCsvFilesFromZip(zip);
+
+    expect(result).toHaveLength(3);
+    expect(result.map((f) => f.fileName)).toEqual([
+      "cgm_data_1.csv",
+      "bolus_data_1.csv",
+      "insulin_data_1.csv",
+    ]);
+    expect(result[0].content).toContain("Timestamp,Value");
+    expect(result[1].content).toContain("Timestamp,Insulin");
+    expect(result[2].content).toContain("Timestamp,Total");
+  });
+
+  it("extracts all CSV files from a ZIP with data descriptors (bit 3 flag)", async () => {
+    const files = [
+      { fileName: "cgm_data_1.csv", content: "Timestamp,Value\n2024-01-01,100\n" },
+      { fileName: "bolus_data_1.csv", content: "Timestamp,Insulin\n2024-01-01,5.0\n" },
+      { fileName: "insulin_data_1.csv", content: "Timestamp,Total\n2024-01-01,42.0\n" },
+    ];
+
+    const zip = buildZipWithDataDescriptors(files);
+    const result = await extractCsvFilesFromZip(zip);
+
+    expect(result).toHaveLength(3);
+    expect(result.map((f) => f.fileName)).toEqual([
+      "cgm_data_1.csv",
+      "bolus_data_1.csv",
+      "insulin_data_1.csv",
+    ]);
+    expect(result[0].content).toContain("Timestamp,Value");
+    expect(result[1].content).toContain("Timestamp,Insulin");
+    expect(result[2].content).toContain("Timestamp,Total");
+  });
+
+  it("skips non-CSV files in ZIP", async () => {
+    const files = [
+      { fileName: "readme.txt", content: "Not a CSV" },
+      { fileName: "cgm_data_1.csv", content: "Timestamp,Value\n2024-01-01,100\n" },
+    ];
+
+    const zip = buildZipWithDataDescriptors(files);
+    const result = await extractCsvFilesFromZip(zip);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].fileName).toBe("cgm_data_1.csv");
   });
 });

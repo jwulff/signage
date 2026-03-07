@@ -48,51 +48,131 @@ const NAVIGATION_TIMEOUT = 30000;
 // ExtractedCsv is imported from types.ts
 
 /**
- * Extract CSV files from a ZIP file buffer
- * Glooko exports data as a ZIP containing multiple CSV files
+ * Parse the central directory to get accurate file metadata.
+ * The central directory (at end of ZIP) always has correct sizes,
+ * unlike local file headers which may use data descriptors (0xFFFFFFFF).
  */
-async function extractCsvFilesFromZip(buffer: Buffer): Promise<ExtractedCsv[]> {
+function parseCentralDirectory(buffer: Buffer): Array<{
+  fileName: string;
+  compressedSize: number;
+  uncompressedSize: number;
+  compressionMethod: number;
+  localHeaderOffset: number;
+}> {
+  // Find End of Central Directory record (EOCD) by scanning backwards
+  // EOCD signature: 0x06054b50
+  let eocdOffset = -1;
+  for (let i = buffer.length - 22; i >= 0; i--) {
+    if (buffer.readUInt32LE(i) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
+  }
+
+  if (eocdOffset === -1) return [];
+
+  const entryCount = buffer.readUInt16LE(eocdOffset + 10);
+  const centralDirOffset = buffer.readUInt32LE(eocdOffset + 16);
+
+  const entries: Array<{
+    fileName: string;
+    compressedSize: number;
+    uncompressedSize: number;
+    compressionMethod: number;
+    localHeaderOffset: number;
+  }> = [];
+
+  let offset = centralDirOffset;
+  for (let i = 0; i < entryCount && offset < eocdOffset; i++) {
+    if (buffer.readUInt32LE(offset) !== 0x02014b50) break;
+
+    const compressionMethod = buffer.readUInt16LE(offset + 10);
+    const compressedSize = buffer.readUInt32LE(offset + 20);
+    const uncompressedSize = buffer.readUInt32LE(offset + 24);
+    const fileNameLength = buffer.readUInt16LE(offset + 28);
+    const extraFieldLength = buffer.readUInt16LE(offset + 30);
+    const commentLength = buffer.readUInt16LE(offset + 32);
+    const localHeaderOffset = buffer.readUInt32LE(offset + 42);
+    const fileName = buffer.toString("utf-8", offset + 46, offset + 46 + fileNameLength);
+
+    entries.push({ fileName, compressedSize, uncompressedSize, compressionMethod, localHeaderOffset });
+    offset += 46 + fileNameLength + extraFieldLength + commentLength;
+  }
+
+  return entries;
+}
+
+/**
+ * Extract CSV files from a ZIP file buffer.
+ * Uses the central directory for accurate sizes, handling ZIPs that use
+ * data descriptors (bit 3 of general purpose flags) where local file
+ * headers have 0xFFFFFFFF for sizes.
+ */
+export async function extractCsvFilesFromZip(buffer: Buffer): Promise<ExtractedCsv[]> {
   const { inflateRawSync } = await import("zlib");
-
-  // ZIP file format:
-  // Local file header starts with 0x04034b50 (PK\003\004)
-  // We need to find the CSV files and extract them
-
-  let offset = 0;
   const csvFiles: ExtractedCsv[] = [];
 
-  while (offset < buffer.length - 30) {
-    // Check for local file header signature
-    const signature = buffer.readUInt32LE(offset);
-    if (signature !== 0x04034b50) {
-      break; // No more files
+  // Try central directory first (handles data descriptors correctly)
+  const centralEntries = parseCentralDirectory(buffer);
+
+  if (centralEntries.length > 0) {
+    for (const entry of centralEntries) {
+      console.log(`ZIP entry: ${entry.fileName} (compressed: ${entry.compressedSize}, uncompressed: ${entry.uncompressedSize}, method: ${entry.compressionMethod})`);
+
+      if (!entry.fileName.toLowerCase().endsWith(".csv")) continue;
+
+      // Read local file header to find data offset (skip variable-length fields)
+      const localFileNameLength = buffer.readUInt16LE(entry.localHeaderOffset + 26);
+      const localExtraFieldLength = buffer.readUInt16LE(entry.localHeaderOffset + 28);
+      const dataOffset = entry.localHeaderOffset + 30 + localFileNameLength + localExtraFieldLength;
+
+      const compressedData = buffer.slice(dataOffset, dataOffset + entry.compressedSize);
+
+      let csvContent: string;
+      if (entry.compressionMethod === 0) {
+        csvContent = compressedData.toString("utf-8");
+      } else if (entry.compressionMethod === 8) {
+        try {
+          const decompressed = inflateRawSync(compressedData);
+          csvContent = decompressed.toString("utf-8");
+        } catch (err) {
+          console.error(`Failed to decompress ${entry.fileName}: ${err}`);
+          continue;
+        }
+      } else {
+        console.warn(`Unknown compression method ${entry.compressionMethod} for ${entry.fileName}`);
+        continue;
+      }
+
+      console.log(`Extracted ${entry.fileName}: ${csvContent.length} bytes`);
+      csvFiles.push({ fileName: entry.fileName, content: csvContent });
     }
 
-    // Parse local file header
+    return csvFiles;
+  }
+
+  // Fallback: parse local file headers (works for ZIPs without data descriptors)
+  let offset = 0;
+  while (offset < buffer.length - 30) {
+    const signature = buffer.readUInt32LE(offset);
+    if (signature !== 0x04034b50) break;
+
     const compressionMethod = buffer.readUInt16LE(offset + 8);
     const compressedSize = buffer.readUInt32LE(offset + 18);
-    const uncompressedSize = buffer.readUInt32LE(offset + 22);
     const fileNameLength = buffer.readUInt16LE(offset + 26);
     const extraFieldLength = buffer.readUInt16LE(offset + 28);
-
-    // Get filename
     const fileName = buffer.toString("utf-8", offset + 30, offset + 30 + fileNameLength);
-
-    // Calculate data offset
     const dataOffset = offset + 30 + fileNameLength + extraFieldLength;
 
-    console.log(`ZIP entry: ${fileName} (compressed: ${compressedSize}, uncompressed: ${uncompressedSize}, method: ${compressionMethod})`);
+    console.log(`ZIP entry (fallback): ${fileName} (compressed: ${compressedSize}, method: ${compressionMethod})`);
 
-    // Check if this is a CSV file
     if (fileName.toLowerCase().endsWith(".csv")) {
       const compressedData = buffer.slice(dataOffset, dataOffset + compressedSize);
 
       let csvContent: string;
       if (compressionMethod === 0) {
-        // Stored (no compression)
         csvContent = compressedData.toString("utf-8");
       } else if (compressionMethod === 8) {
-        // Deflate
         try {
           const decompressed = inflateRawSync(compressedData);
           csvContent = decompressed.toString("utf-8");
@@ -111,7 +191,6 @@ async function extractCsvFilesFromZip(buffer: Buffer): Promise<ExtractedCsv[]> {
       csvFiles.push({ fileName, content: csvContent });
     }
 
-    // Move to next file
     offset = dataOffset + compressedSize;
   }
 
