@@ -177,13 +177,18 @@ export async function extractCsvFilesFromZip(buffer: Buffer): Promise<ExtractedC
       // otherwise compute from the gap between this entry's data and the
       // next entry's local header (or the central directory)
       let compressedSize = entry.compressedSize;
+      const hasDataDescriptor = (buffer.readUInt16LE(entry.localHeaderOffset + 6) & 0x0008) !== 0;
       if (compressedSize === 0xffffffff || dataOffset + compressedSize > buffer.length) {
         const nextBoundary = idx + 1 < sorted.length
           ? sorted[idx + 1].localHeaderOffset
           : centralDirOffset;
-        // The gap contains: compressed data + optional data descriptor (16 bytes)
-        // Give inflateRawSync the full region; it stops at the deflate stream end
-        compressedSize = nextBoundary - dataOffset;
+        const regionSize = nextBoundary - dataOffset;
+        // For deflate (method 8), inflateRawSync stops at stream end so extra
+        // trailing bytes (data descriptor) are harmless. For stored (method 0),
+        // we must subtract the 16-byte data descriptor to avoid corrupting content.
+        compressedSize = hasDataDescriptor && entry.compressionMethod === 0
+          ? regionSize - 16
+          : regionSize;
       }
 
       if (dataOffset + compressedSize > buffer.length || compressedSize <= 0) {

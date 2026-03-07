@@ -157,15 +157,15 @@ invalid-date,5.0,
 function buildZipEntry(
   fileName: string,
   content: string,
-  options: { useDataDescriptor?: boolean } = {}
+  options: { useDataDescriptor?: boolean; stored?: boolean } = {}
 ): Buffer {
-  const { useDataDescriptor = false } = options;
+  const { useDataDescriptor = false, stored = false } = options;
   const fileNameBuf = Buffer.from(fileName, "utf-8");
   const uncompressedBuf = Buffer.from(content, "utf-8");
-  const compressedBuf = deflateRawSync(uncompressedBuf);
+  const dataBuf = stored ? uncompressedBuf : deflateRawSync(uncompressedBuf);
 
   const generalPurposeFlags = useDataDescriptor ? 0x0008 : 0x0000;
-  const headerCompressedSize = useDataDescriptor ? 0xffffffff : compressedBuf.length;
+  const headerDataSize = useDataDescriptor ? 0xffffffff : dataBuf.length;
   const headerUncompressedSize = useDataDescriptor ? 0xffffffff : uncompressedBuf.length;
 
   // Local file header (30 bytes + fileName)
@@ -173,23 +173,23 @@ function buildZipEntry(
   header.writeUInt32LE(0x04034b50, 0); // signature
   header.writeUInt16LE(20, 4); // version needed
   header.writeUInt16LE(generalPurposeFlags, 6);
-  header.writeUInt16LE(8, 8); // compression method: deflate
+  header.writeUInt16LE(stored ? 0 : 8, 8); // compression method
   header.writeUInt16LE(0, 10); // mod time
   header.writeUInt16LE(0, 12); // mod date
   header.writeUInt32LE(0, 14); // crc32 (placeholder)
-  header.writeUInt32LE(headerCompressedSize, 18);
+  header.writeUInt32LE(headerDataSize, 18);
   header.writeUInt32LE(headerUncompressedSize, 22);
   header.writeUInt16LE(fileNameBuf.length, 26);
   header.writeUInt16LE(0, 28); // extra field length
 
-  const parts = [header, fileNameBuf, compressedBuf];
+  const parts: Buffer[] = [header, fileNameBuf, dataBuf];
 
   if (useDataDescriptor) {
     // Data descriptor: signature + crc32 + compressed size + uncompressed size
     const descriptor = Buffer.alloc(16);
     descriptor.writeUInt32LE(0x08074b50, 0); // data descriptor signature
     descriptor.writeUInt32LE(0, 4); // crc32 (placeholder)
-    descriptor.writeUInt32LE(compressedBuf.length, 8);
+    descriptor.writeUInt32LE(dataBuf.length, 8);
     descriptor.writeUInt32LE(uncompressedBuf.length, 12);
     parts.push(descriptor);
   }
@@ -203,7 +203,7 @@ function buildZipEntry(
  * for sizes (matching Glooko's actual ZIP output).
  */
 function buildZipWithDataDescriptors(
-  files: Array<{ fileName: string; content: string }>,
+  files: Array<{ fileName: string; content: string; stored?: boolean }>,
   options: { sentinelSizes?: boolean } = {}
 ): Buffer {
   const { sentinelSizes = false } = options;
@@ -212,22 +212,27 @@ function buildZipWithDataDescriptors(
     fileName: string;
     compressedSize: number;
     uncompressedSize: number;
+    compressionMethod: number;
     localHeaderOffset: number;
   }> = [];
   let offset = 0;
 
   for (const file of files) {
     const uncompressedBuf = Buffer.from(file.content, "utf-8");
-    const compressedBuf = deflateRawSync(uncompressedBuf);
+    const dataBuf = file.stored ? uncompressedBuf : deflateRawSync(uncompressedBuf);
 
     entryMeta.push({
       fileName: file.fileName,
-      compressedSize: compressedBuf.length,
+      compressedSize: dataBuf.length,
       uncompressedSize: uncompressedBuf.length,
+      compressionMethod: file.stored ? 0 : 8,
       localHeaderOffset: offset,
     });
 
-    const entry = buildZipEntry(file.fileName, file.content, { useDataDescriptor: true });
+    const entry = buildZipEntry(file.fileName, file.content, {
+      useDataDescriptor: true,
+      stored: file.stored,
+    });
     localEntries.push(entry);
     offset += entry.length;
   }
@@ -245,7 +250,7 @@ function buildZipWithDataDescriptors(
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
     centralHeader.writeUInt16LE(0x0008, 8); // data descriptor flag
-    centralHeader.writeUInt16LE(8, 10);
+    centralHeader.writeUInt16LE(entry.compressionMethod, 10);
     centralHeader.writeUInt16LE(0, 12);
     centralHeader.writeUInt16LE(0, 14);
     centralHeader.writeUInt32LE(0, 16); // crc32
@@ -346,6 +351,21 @@ describe("extractCsvFilesFromZip", () => {
     expect(result[0].content).toContain("Timestamp,Value");
     expect(result[1].content).toContain("Timestamp,Insulin");
     expect(result[2].content).toContain("Timestamp,Total");
+  });
+
+  it("handles stored (uncompressed) entries with sentinel sizes without descriptor corruption", async () => {
+    const files = [
+      { fileName: "cgm_data_1.csv", content: "Timestamp,Value\n2024-01-01,100\n", stored: true },
+      { fileName: "bolus_data_1.csv", content: "Timestamp,Insulin\n2024-01-01,5.0\n", stored: true },
+    ];
+
+    const zip = buildZipWithDataDescriptors(files, { sentinelSizes: true });
+    const result = await extractCsvFilesFromZip(zip);
+
+    expect(result).toHaveLength(2);
+    // Content must NOT contain data descriptor bytes
+    expect(result[0].content).toBe("Timestamp,Value\n2024-01-01,100\n");
+    expect(result[1].content).toBe("Timestamp,Insulin\n2024-01-01,5.0\n");
   });
 
   it("skips non-CSV files in ZIP", async () => {
