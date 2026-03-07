@@ -48,9 +48,12 @@ const NAVIGATION_TIMEOUT = 30000;
 // ExtractedCsv is imported from types.ts
 
 /**
- * Parse the central directory to get accurate file metadata.
- * The central directory (at end of ZIP) always has correct sizes,
- * unlike local file headers which may use data descriptors (0xFFFFFFFF).
+ * Parse the central directory to get file metadata using the standard ZIP fields.
+ * This relies on the 32-bit size values stored in the central directory and does
+ * not interpret ZIP64 extra fields, so ZIP64 archives that store 0xFFFFFFFF here
+ * are not fully supported.
+ *
+ * Returns an empty array if the central directory cannot be found or parsed.
  */
 function parseCentralDirectory(buffer: Buffer): Array<{
   fileName: string;
@@ -59,47 +62,56 @@ function parseCentralDirectory(buffer: Buffer): Array<{
   compressionMethod: number;
   localHeaderOffset: number;
 }> {
-  // Find End of Central Directory record (EOCD) by scanning backwards
-  // EOCD signature: 0x06054b50
-  let eocdOffset = -1;
-  for (let i = buffer.length - 22; i >= 0; i--) {
-    if (buffer.readUInt32LE(i) === 0x06054b50) {
-      eocdOffset = i;
-      break;
+  try {
+    // Find End of Central Directory record (EOCD) by scanning backwards
+    // EOCD signature: 0x06054b50
+    let eocdOffset = -1;
+    for (let i = buffer.length - 22; i >= 0; i--) {
+      if (buffer.readUInt32LE(i) === 0x06054b50) {
+        eocdOffset = i;
+        break;
+      }
     }
+
+    if (eocdOffset === -1) return [];
+
+    const entryCount = buffer.readUInt16LE(eocdOffset + 10);
+    const centralDirOffset = buffer.readUInt32LE(eocdOffset + 16);
+
+    if (centralDirOffset >= eocdOffset) return [];
+
+    const entries: Array<{
+      fileName: string;
+      compressedSize: number;
+      uncompressedSize: number;
+      compressionMethod: number;
+      localHeaderOffset: number;
+    }> = [];
+
+    let offset = centralDirOffset;
+    for (let i = 0; i < entryCount && offset + 46 <= eocdOffset; i++) {
+      if (buffer.readUInt32LE(offset) !== 0x02014b50) break;
+
+      const compressionMethod = buffer.readUInt16LE(offset + 10);
+      const compressedSize = buffer.readUInt32LE(offset + 20);
+      const uncompressedSize = buffer.readUInt32LE(offset + 24);
+      const fileNameLength = buffer.readUInt16LE(offset + 28);
+      const extraFieldLength = buffer.readUInt16LE(offset + 30);
+      const commentLength = buffer.readUInt16LE(offset + 32);
+      const localHeaderOffset = buffer.readUInt32LE(offset + 42);
+
+      if (offset + 46 + fileNameLength > buffer.length) break;
+      const fileName = buffer.toString("utf-8", offset + 46, offset + 46 + fileNameLength);
+
+      entries.push({ fileName, compressedSize, uncompressedSize, compressionMethod, localHeaderOffset });
+      offset += 46 + fileNameLength + extraFieldLength + commentLength;
+    }
+
+    return entries;
+  } catch {
+    // Malformed/truncated ZIP — fall back to local file header parsing
+    return [];
   }
-
-  if (eocdOffset === -1) return [];
-
-  const entryCount = buffer.readUInt16LE(eocdOffset + 10);
-  const centralDirOffset = buffer.readUInt32LE(eocdOffset + 16);
-
-  const entries: Array<{
-    fileName: string;
-    compressedSize: number;
-    uncompressedSize: number;
-    compressionMethod: number;
-    localHeaderOffset: number;
-  }> = [];
-
-  let offset = centralDirOffset;
-  for (let i = 0; i < entryCount && offset < eocdOffset; i++) {
-    if (buffer.readUInt32LE(offset) !== 0x02014b50) break;
-
-    const compressionMethod = buffer.readUInt16LE(offset + 10);
-    const compressedSize = buffer.readUInt32LE(offset + 20);
-    const uncompressedSize = buffer.readUInt32LE(offset + 24);
-    const fileNameLength = buffer.readUInt16LE(offset + 28);
-    const extraFieldLength = buffer.readUInt16LE(offset + 30);
-    const commentLength = buffer.readUInt16LE(offset + 32);
-    const localHeaderOffset = buffer.readUInt32LE(offset + 42);
-    const fileName = buffer.toString("utf-8", offset + 46, offset + 46 + fileNameLength);
-
-    entries.push({ fileName, compressedSize, uncompressedSize, compressionMethod, localHeaderOffset });
-    offset += 46 + fileNameLength + extraFieldLength + commentLength;
-  }
-
-  return entries;
 }
 
 /**
@@ -121,10 +133,25 @@ export async function extractCsvFilesFromZip(buffer: Buffer): Promise<ExtractedC
 
       if (!entry.fileName.toLowerCase().endsWith(".csv")) continue;
 
+      // Validate local header before reading variable-length fields
+      if (entry.localHeaderOffset + 30 > buffer.length) {
+        console.warn(`Skipping ${entry.fileName}: local header offset out of bounds`);
+        continue;
+      }
+      if (buffer.readUInt32LE(entry.localHeaderOffset) !== 0x04034b50) {
+        console.warn(`Skipping ${entry.fileName}: invalid local header signature`);
+        continue;
+      }
+
       // Read local file header to find data offset (skip variable-length fields)
       const localFileNameLength = buffer.readUInt16LE(entry.localHeaderOffset + 26);
       const localExtraFieldLength = buffer.readUInt16LE(entry.localHeaderOffset + 28);
       const dataOffset = entry.localHeaderOffset + 30 + localFileNameLength + localExtraFieldLength;
+
+      if (dataOffset + entry.compressedSize > buffer.length) {
+        console.warn(`Skipping ${entry.fileName}: data extends beyond buffer`);
+        continue;
+      }
 
       const compressedData = buffer.slice(dataOffset, dataOffset + entry.compressedSize);
 

@@ -198,86 +198,83 @@ function buildZipEntry(
 }
 
 /**
- * Helper to build a ZIP central directory + EOCD for given entries
- */
-function buildZipCentralDirectory(
-  entries: Array<{ fileName: string; content: string; localHeaderOffset: number }>
-): Buffer {
-  const centralEntries: Buffer[] = [];
-  let centralDirSize = 0;
-
-  for (const entry of entries) {
-    const fileNameBuf = Buffer.from(entry.fileName, "utf-8");
-    const uncompressedBuf = Buffer.from(entry.content, "utf-8");
-    const compressedBuf = deflateRawSync(uncompressedBuf);
-
-    const centralHeader = Buffer.alloc(46);
-    centralHeader.writeUInt32LE(0x02014b50, 0); // central directory signature
-    centralHeader.writeUInt16LE(20, 4); // version made by
-    centralHeader.writeUInt16LE(20, 6); // version needed
-    centralHeader.writeUInt16LE(0, 8); // flags
-    centralHeader.writeUInt16LE(8, 10); // compression method
-    centralHeader.writeUInt16LE(0, 12); // mod time
-    centralHeader.writeUInt16LE(0, 14); // mod date
-    centralHeader.writeUInt32LE(0, 16); // crc32
-    centralHeader.writeUInt32LE(compressedBuf.length, 20); // compressed size
-    centralHeader.writeUInt32LE(uncompressedBuf.length, 24); // uncompressed size
-    centralHeader.writeUInt16LE(fileNameBuf.length, 28); // file name length
-    centralHeader.writeUInt16LE(0, 30); // extra field length
-    centralHeader.writeUInt16LE(0, 32); // file comment length
-    centralHeader.writeUInt16LE(0, 34); // disk number start
-    centralHeader.writeUInt16LE(0, 36); // internal file attributes
-    centralHeader.writeUInt32LE(0, 38); // external file attributes
-    centralHeader.writeUInt32LE(entry.localHeaderOffset, 42); // local header offset
-
-    centralEntries.push(Buffer.concat([centralHeader, fileNameBuf]));
-    centralDirSize += 46 + fileNameBuf.length;
-  }
-
-  const centralDirBuf = Buffer.concat(centralEntries);
-  const centralDirOffset = entries.length > 0
-    ? entries[entries.length - 1].localHeaderOffset +
-      30 +
-      Buffer.from(entries[entries.length - 1].fileName).length +
-      deflateRawSync(Buffer.from(entries[entries.length - 1].content)).length +
-      (16) // data descriptor size
-    : 0;
-
-  // End of central directory record
-  const eocd = Buffer.alloc(22);
-  eocd.writeUInt32LE(0x06054b50, 0); // EOCD signature
-  eocd.writeUInt16LE(0, 4); // disk number
-  eocd.writeUInt16LE(0, 6); // disk with central dir
-  eocd.writeUInt16LE(entries.length, 8); // entries on this disk
-  eocd.writeUInt16LE(entries.length, 10); // total entries
-  eocd.writeUInt32LE(centralDirSize, 12); // central dir size
-  eocd.writeUInt32LE(centralDirOffset, 16); // central dir offset
-  eocd.writeUInt16LE(0, 20); // comment length
-
-  return Buffer.concat([centralDirBuf, eocd]);
-}
-
-/**
- * Build a complete ZIP with data descriptor entries + central directory
+ * Build a complete ZIP with data descriptor entries + central directory.
+ * Tracks actual entry sizes to compute central directory offset deterministically.
  */
 function buildZipWithDataDescriptors(
   files: Array<{ fileName: string; content: string }>
 ): Buffer {
   const localEntries: Buffer[] = [];
-  const entryMeta: Array<{ fileName: string; content: string; localHeaderOffset: number }> = [];
+  const entryMeta: Array<{
+    fileName: string;
+    compressedSize: number;
+    uncompressedSize: number;
+    localHeaderOffset: number;
+    useDataDescriptor: boolean;
+  }> = [];
   let offset = 0;
 
   for (const file of files) {
-    entryMeta.push({ ...file, localHeaderOffset: offset });
+    const uncompressedBuf = Buffer.from(file.content, "utf-8");
+    const compressedBuf = deflateRawSync(uncompressedBuf);
+
+    entryMeta.push({
+      fileName: file.fileName,
+      compressedSize: compressedBuf.length,
+      uncompressedSize: uncompressedBuf.length,
+      localHeaderOffset: offset,
+      useDataDescriptor: true,
+    });
+
     const entry = buildZipEntry(file.fileName, file.content, { useDataDescriptor: true });
     localEntries.push(entry);
     offset += entry.length;
   }
 
   const localData = Buffer.concat(localEntries);
-  const centralDir = buildZipCentralDirectory(entryMeta);
+  const centralDirOffset = localData.length;
 
-  return Buffer.concat([localData, centralDir]);
+  // Build central directory entries
+  const centralEntries: Buffer[] = [];
+  for (const entry of entryMeta) {
+    const fileNameBuf = Buffer.from(entry.fileName, "utf-8");
+    const flags = entry.useDataDescriptor ? 0x0008 : 0x0000;
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(flags, 8);
+    centralHeader.writeUInt16LE(8, 10);
+    centralHeader.writeUInt16LE(0, 12);
+    centralHeader.writeUInt16LE(0, 14);
+    centralHeader.writeUInt32LE(0, 16); // crc32
+    centralHeader.writeUInt32LE(entry.compressedSize, 20);
+    centralHeader.writeUInt32LE(entry.uncompressedSize, 24);
+    centralHeader.writeUInt16LE(fileNameBuf.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(entry.localHeaderOffset, 42);
+    centralEntries.push(Buffer.concat([centralHeader, fileNameBuf]));
+  }
+
+  const centralDirBuf = Buffer.concat(centralEntries);
+
+  // End of central directory record
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);
+  eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(entryMeta.length, 8);
+  eocd.writeUInt16LE(entryMeta.length, 10);
+  eocd.writeUInt32LE(centralDirBuf.length, 12);
+  eocd.writeUInt32LE(centralDirOffset, 16);
+  eocd.writeUInt16LE(0, 20);
+
+  return Buffer.concat([localData, centralDirBuf, eocd]);
 }
 
 describe("extractCsvFilesFromZip", () => {
