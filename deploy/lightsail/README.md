@@ -470,7 +470,7 @@ PORT=51820                            # WireGuard listen port on your router
 STALE_SEC=180                         # Heal if handshake older than this
 ```
 
-Multi-peer tunnels are supported — the script iterates every peer line in the dump.
+Single-peer tunnels only. The script errors out if `wg show <iface> dump` reports zero or multiple peers — the design assumption is one home router behind DDNS. Per-peer DDNS config is out of scope; if you need it, fork the script.
 
 ### Install
 
@@ -533,9 +533,10 @@ sudo journalctl -fu wg-reresolve.service
 
 | Symptom | Likely cause |
 |---------|-------------|
-| `DDNS ... did not resolve` in journald | DDNS record missing, TTL expiring, or DNS blocked. Check `dig +short <DDNS>`. |
+| `DDNS ... did not resolve` in journald | DDNS record missing, TTL expiring, or DNS blocked. Check `getent ahostsv4 <DDNS>`. |
+| `expected exactly 1 peer on wg0, found N` | The watchdog is single-peer only; either remove extra peers or fork the script. |
+| `wg show wg0 failed` | `wg-quick@wg0` isn't running, or `wireguard-tools` is missing. Check `sudo systemctl status wg-quick@wg0`. |
 | Watchdog fires but handshake stays stale | Home router's WireGuard server is down, firewall is dropping UDP, or the DDNS IP is stale. SSH into the router and verify the WG server status. |
-| `wg: command not found` | Run `sudo apt install wireguard-tools`. The setup script installs it; standalone installs may miss it. |
 | Timer shows `NEXT: n/a` | Run `sudo systemctl start wg-reresolve.timer` once to arm it. |
 
 ---
