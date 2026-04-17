@@ -436,6 +436,110 @@ Frame sent to Pixoo
 
 ---
 
+## Step 8: Auto-Heal DDNS Drift (Recommended)
+
+WireGuard resolves peer hostnames **only at tunnel start**. If your home WAN IP changes (common with residential ISPs even when DDNS updates the record), the tunnel silently dies until someone restarts `wg-quick@wg0`. Symptoms: `latest handshake` on `sudo wg show` grows past a few minutes, frames stop reaching the Pixoo, and the relay logs `ConnectTimeoutError` to the Pixoo IP.
+
+The fix is a lightweight watchdog that runs every 60 seconds, checks the handshake age, and — if stale — re-resolves the DDNS hostname and updates the peer endpoint without bouncing the tunnel.
+
+### Files
+
+Three files, all in `deploy/lightsail/`:
+
+| File | Installed To | Mode |
+|------|-------------|------|
+| `wg-reresolve.sh` | `/usr/local/sbin/wg-reresolve.sh` | 755 |
+| `wg-reresolve.service` | `/etc/systemd/system/wg-reresolve.service` | 644 |
+| `wg-reresolve.timer` | `/etc/systemd/system/wg-reresolve.timer` | 644 |
+
+### How It Works
+
+1. Timer fires every 60s, invoking the oneshot service.
+2. Script reads `wg show wg0 dump` to get the peer pubkey, current endpoint, and last-handshake unix timestamp.
+3. If `now - handshake > 180s` (or handshake is `0` — never handshook), it calls `getent ahostsv4 <DDNS>` to resolve the current IP and runs `wg set wg0 peer <pubkey> endpoint <ip>:<port>`.
+4. No-op when healthy — silent in the logs.
+
+### Configuration
+
+Edit `wg-reresolve.sh` before installing to match your tunnel:
+
+```bash
+IFACE=wg0                             # WireGuard interface name
+DDNS=your-home.example.com            # Your home DDNS hostname
+PORT=51820                            # WireGuard listen port on your router
+STALE_SEC=180                         # Heal if handshake older than this
+```
+
+Multi-peer tunnels are supported — the script iterates every peer line in the dump.
+
+### Install
+
+Upload and enable:
+
+```bash
+scp -i ~/.ssh/lightsail-signage.pem \
+  deploy/lightsail/wg-reresolve.sh \
+  deploy/lightsail/wg-reresolve.service \
+  deploy/lightsail/wg-reresolve.timer \
+  ubuntu@<LIGHTSAIL_IP>:/tmp/
+
+ssh -i ~/.ssh/lightsail-signage.pem ubuntu@<LIGHTSAIL_IP> '
+  sudo install -m 755 /tmp/wg-reresolve.sh     /usr/local/sbin/wg-reresolve.sh &&
+  sudo install -m 644 /tmp/wg-reresolve.service /etc/systemd/system/wg-reresolve.service &&
+  sudo install -m 644 /tmp/wg-reresolve.timer   /etc/systemd/system/wg-reresolve.timer &&
+  sudo systemctl daemon-reload &&
+  sudo systemctl enable --now wg-reresolve.timer
+'
+```
+
+### Verify
+
+```bash
+# Timer is scheduled
+systemctl list-timers wg-reresolve.timer
+
+# Next firing time and last run status
+sudo systemctl status wg-reresolve.timer wg-reresolve.service
+
+# Recent heal actions (quiet = healthy)
+sudo journalctl -u wg-reresolve.service -n 20
+```
+
+A healed drift logs a single line per firing:
+
+```
+re-resolved your-home.example.com -> 203.0.113.42:51820 (was 203.0.113.17:51820, handshake age 240s)
+```
+
+### Simulating a Failure (Optional)
+
+To confirm the watchdog works without waiting for a real IP drift:
+
+```bash
+# Point the peer at a bogus IP
+sudo wg set wg0 peer <PEER_PUBKEY> endpoint 10.0.0.1:51820
+
+# Wait ~4 minutes (180s stale threshold + up to 60s timer cadence)
+# The next firing will re-resolve the real DDNS and heal the tunnel.
+sudo journalctl -fu wg-reresolve.service
+```
+
+### Tuning
+
+- **Faster recovery:** lower `STALE_SEC` (e.g. 90) and/or `OnUnitActiveSec` in the timer (e.g. 30s). Don't go below ~60s for `STALE_SEC` — WireGuard's own rekey interval can briefly exceed that during idle periods and you'll thrash.
+- **Quieter logs:** the script only prints on action, so logs stay quiet in steady state. If you want a heartbeat, add an `else` branch that prints `handshake age ${age}s (ok)` — but journald grows fast at 1/min forever.
+
+### Troubleshooting
+
+| Symptom | Likely cause |
+|---------|-------------|
+| `DDNS ... did not resolve` in journald | DDNS record missing, TTL expiring, or DNS blocked. Check `dig +short <DDNS>`. |
+| Watchdog fires but handshake stays stale | Home router's WireGuard server is down, firewall is dropping UDP, or the DDNS IP is stale. SSH into the router and verify the WG server status. |
+| `wg: command not found` | Run `sudo apt install wireguard-tools`. The setup script installs it; standalone installs may miss it. |
+| Timer shows `NEXT: n/a` | Run `sudo systemctl start wg-reresolve.timer` once to arm it. |
+
+---
+
 ## Maintenance
 
 ### Updating the Relay
@@ -628,8 +732,11 @@ Oracle Cloud's free tier is genuinely free forever and includes 2 ARM instances,
 
 ```
 deploy/lightsail/
-├── README.md              # This guide
-├── setup.sh               # Instance setup script
-├── deploy-relay.sh        # Deployment script
-└── wireguard.conf.template # WireGuard config reference
+├── README.md                 # This guide
+├── setup.sh                  # Instance setup script
+├── deploy-relay.sh           # Deployment script
+├── wireguard.conf.template   # WireGuard config reference
+├── wg-reresolve.sh           # DDNS drift watchdog (Step 8)
+├── wg-reresolve.service      # systemd oneshot for the watchdog
+└── wg-reresolve.timer        # systemd timer (every 60s)
 ```
