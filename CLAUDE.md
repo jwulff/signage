@@ -642,6 +642,66 @@ Follow TDD for all changes:
 
 ---
 
+## Pre-Push Checklist
+
+Before pushing, verify:
+
+1. **Run full test suite** - `pnpm test` passes all packages
+2. **Run linting** - `pnpm lint` reports no errors
+3. **Check schema consistency** - Types in `packages/core/src/types.ts` match usage across packages
+4. **Review changed files** - `git diff --stat` shows only intended changes (no accidental config modifications, stray files, or leftover debug code)
+5. **Test attestation present** - Commit messages include `[tests-passed: X tests in Ys]`
+6. **No secrets in diff** - `git diff` contains no API keys, tokens, credentials, or personal info
+
+---
+
+## Debugging Discipline
+
+### Check Assumptions Early
+
+- **Verify API response formats** before writing parsing code. Strings vs integers, date formats, units, and nullable fields cause subtle bugs.
+- **Log raw responses** from external APIs during development. Do not assume the shape matches documentation.
+- **Check null/nil handling** at every boundary: API responses, DynamoDB reads, WebSocket messages, and environment variables.
+
+### Reproduce Before Fixing
+
+1. Write a failing test that reproduces the bug
+2. Confirm the test fails for the right reason
+3. Fix the bug
+4. Confirm the test passes
+5. Check for similar patterns elsewhere in the codebase
+
+This matches the existing Bug Fix Workflow in the TDD section -- follow it every time.
+
+---
+
+## API Integration Rules
+
+When integrating with external APIs (Dexcom, Pixoo, etc.):
+
+1. **Validate the contract first** - Fetch a sample response and verify actual types, units, and formats before writing integration code
+2. **Log raw responses** - Always log the raw API response at debug level. When something breaks, the raw response is the first thing you need.
+3. **Handle edge cases explicitly** - Empty arrays, null fields, rate limits, network timeouts, and unexpected status codes all need handling
+4. **Type external data at the boundary** - Parse and validate API responses into typed structures immediately. Do not pass raw API data through the system.
+5. **Test with real response shapes** - Use actual API response samples in tests, not idealized mocks
+
+---
+
+## Deployment Checklist
+
+Before considering a deployment complete:
+
+1. **All changes committed and pushed** - `git status` shows clean working tree
+2. **CI green** - `gh pr checks <number>` shows all checks passing
+3. **Docker image rebuilt** - Verify the image was actually rebuilt with the latest code; do not assume a push triggered a build
+4. **Environment variables present** - All required SST secrets are set for the target stage (`sst secret list --stage <stage>`)
+5. **Memory limits sufficient** - If adding new dependencies or processing, verify Lambda memory configuration in `sst.config.ts`
+6. **Verify deploy took effect** - After deploy completes, confirm the change is live (check CloudWatch logs, test the endpoint, verify WebSocket behavior). Do not assume a successful deploy means the new code is running.
+
+**Note**: Production deploys go through GitHub Actions only. See the Production Deployment section above.
+
+---
+
 ## Environment Variables
 
 ### SST Secrets
