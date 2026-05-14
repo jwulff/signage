@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mockClient } from "aws-sdk-client-mock";
 import {
   DynamoDBClient,
@@ -12,6 +12,10 @@ beforeEach(() => {
   ddbMock.reset();
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-05-13T07:20:00.000Z"));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("noopHeartbeat", () => {

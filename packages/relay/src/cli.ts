@@ -107,19 +107,20 @@ async function getPixooIp(providedIp?: string): Promise<string | null> {
   return selectedIp;
 }
 
-// Build the health heartbeat sink from env vars. All three must be present;
-// otherwise heartbeats are disabled (noop). This keeps local/dev runs from
-// needing AWS credentials.
+// Build the health heartbeat sink from env vars. The table and region are
+// required; deviceId defaults to "pixoo-home" for the single-device
+// deployment. If either required var is unset, heartbeats are disabled
+// (noop), which keeps local/dev runs from needing AWS credentials.
 function buildHeartbeat(): HealthHeartbeat {
-  const deviceId = process.env.PIXOO_DEVICE_ID;
   const tableName = process.env.GLUCAGENT_RECORDS_TABLE;
   const region = process.env.GLUCAGENT_REGION;
-  if (!deviceId || !tableName || !region) {
+  if (!tableName || !region) {
     console.log(
-      "[heartbeat] disabled (set PIXOO_DEVICE_ID, GLUCAGENT_RECORDS_TABLE, GLUCAGENT_REGION to enable)",
+      "[heartbeat] disabled (set GLUCAGENT_RECORDS_TABLE and GLUCAGENT_REGION to enable)",
     );
     return noopHeartbeat;
   }
+  const deviceId = process.env.PIXOO_DEVICE_ID || "pixoo-home";
   console.log(`[heartbeat] enabled — device=${deviceId} region=${region}`);
   return createHeartbeat({ deviceId, tableName, region });
 }

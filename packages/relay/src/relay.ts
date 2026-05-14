@@ -93,9 +93,15 @@ export async function startRelay(options: RelayOptions): Promise<void> {
           try {
             await sendFrameToPixoo(pixooIp, frame);
             console.log("Frame sent to Pixoo");
-            void heartbeat.reportSuccess();
+            // Fire-and-forget. The HealthHeartbeat contract is never-throws,
+            // but defend against alternate implementations rejecting.
+            heartbeat
+              .reportSuccess()
+              .catch((e) => console.error("[heartbeat] unexpected reject:", e));
           } catch (frameErr) {
-            void heartbeat.reportFailure(extractFailureReason(frameErr));
+            heartbeat
+              .reportFailure(extractFailureReason(frameErr))
+              .catch((e) => console.error("[heartbeat] unexpected reject:", e));
             throw frameErr;
           }
         } else if (message.type === "ping") {

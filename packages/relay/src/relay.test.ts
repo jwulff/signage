@@ -61,6 +61,10 @@ describe("relay", () => {
   });
 
   afterEach(() => {
+    // startRelay creates a long-lived setInterval keepalive that the tests
+    // never tear down; clear it so vitest can exit cleanly.
+    vi.clearAllTimers();
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
