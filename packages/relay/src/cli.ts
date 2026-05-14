@@ -7,6 +7,7 @@ import { program } from "commander";
 import { createInterface } from "readline";
 import { startRelay } from "./relay.js";
 import { scanForDevices, getSavedPixooIp, savePixooIp } from "./discovery.js";
+import { createHeartbeat, noopHeartbeat, type HealthHeartbeat } from "./heartbeat.js";
 
 /**
  * Prompt user for yes/no
@@ -106,6 +107,23 @@ async function getPixooIp(providedIp?: string): Promise<string | null> {
   return selectedIp;
 }
 
+// Build the health heartbeat sink from env vars. All three must be present;
+// otherwise heartbeats are disabled (noop). This keeps local/dev runs from
+// needing AWS credentials.
+function buildHeartbeat(): HealthHeartbeat {
+  const deviceId = process.env.PIXOO_DEVICE_ID;
+  const tableName = process.env.GLUCAGENT_RECORDS_TABLE;
+  const region = process.env.GLUCAGENT_REGION;
+  if (!deviceId || !tableName || !region) {
+    console.log(
+      "[heartbeat] disabled (set PIXOO_DEVICE_ID, GLUCAGENT_RECORDS_TABLE, GLUCAGENT_REGION to enable)",
+    );
+    return noopHeartbeat;
+  }
+  console.log(`[heartbeat] enabled — device=${deviceId} region=${region}`);
+  return createHeartbeat({ deviceId, tableName, region });
+}
+
 program
   .name("signage-relay")
   .description("Relay frames from AWS to local Pixoo device")
@@ -133,6 +151,7 @@ program
         pixooIp,
         wsUrl: options.ws,
         terminalId: options.terminal,
+        heartbeat: buildHeartbeat(),
       });
     } catch (error) {
       console.error("Relay error:", error);
