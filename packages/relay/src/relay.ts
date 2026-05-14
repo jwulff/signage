@@ -9,6 +9,7 @@ import { sendFrameToPixoo, initializePixoo } from "./pixoo-client.js";
 import type { WsMessage, FramePayload } from "@signage/core";
 import { decodeBase64ToPixels } from "@signage/core";
 import { createBackoffController } from "./backoff.js";
+import { noopHeartbeat, type HealthHeartbeat } from "./heartbeat.js";
 
 // Force HTTP/1.1 to prevent ALPN from negotiating HTTP/2 (which doesn't support WebSocket)
 const agent = new https.Agent({
@@ -19,10 +20,12 @@ export interface RelayOptions {
   pixooIp: string;
   wsUrl: string;
   terminalId?: string;
+  heartbeat?: HealthHeartbeat;
 }
 
 export async function startRelay(options: RelayOptions): Promise<void> {
   const { pixooIp, wsUrl, terminalId } = options;
+  const heartbeat = options.heartbeat ?? noopHeartbeat;
 
   // Initialize Pixoo to custom channel mode
   try {
@@ -87,8 +90,20 @@ export async function startRelay(options: RelayOptions): Promise<void> {
             payload.frame.width,
             payload.frame.height
           );
-          await sendFrameToPixoo(pixooIp, frame);
-          console.log("Frame sent to Pixoo");
+          try {
+            await sendFrameToPixoo(pixooIp, frame);
+            console.log("Frame sent to Pixoo");
+            // Fire-and-forget. The HealthHeartbeat contract is never-throws,
+            // but defend against alternate implementations rejecting.
+            heartbeat
+              .reportSuccess()
+              .catch((e) => console.error("[heartbeat] unexpected reject:", e));
+          } catch (frameErr) {
+            heartbeat
+              .reportFailure(extractFailureReason(frameErr))
+              .catch((e) => console.error("[heartbeat] unexpected reject:", e));
+            throw frameErr;
+          }
         } else if (message.type === "ping") {
           const pong: WsMessage = {
             type: "pong",
@@ -130,4 +145,15 @@ export async function startRelay(options: RelayOptions): Promise<void> {
 
   // Keep process alive
   await new Promise(() => {});
+}
+
+// Extract a stable short code from undici/fetch errors. Falls back to the
+// error message and ultimately "unknown" so heartbeat writes always succeed.
+function extractFailureReason(err: unknown): string {
+  if (err instanceof Error) {
+    const cause = (err as Error & { cause?: { code?: string } }).cause;
+    if (cause && typeof cause.code === "string") return cause.code;
+    if (err.message) return err.message;
+  }
+  return "unknown";
 }

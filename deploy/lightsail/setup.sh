@@ -105,6 +105,17 @@ PIXOO_IP=192.168.1.XXX
 
 # Your WebSocket API URL (from SST deployment output)
 WEBSOCKET_URL=wss://ws.your-domain.com
+
+# --- Optional: glucagent Pixoo-health heartbeat (jwulff/glucagent#130) ---
+# Set all three to enable per-frame heartbeats into the glucagent Records
+# table; leave commented out to keep heartbeats disabled (relay still
+# functions normally).
+#
+# PIXOO_DEVICE_ID=pixoo-home
+# GLUCAGENT_RECORDS_TABLE=glucagent-production-RecordsTable-XXXXXXXX
+# GLUCAGENT_REGION=us-east-1
+# AWS_ACCESS_KEY_ID=AKIA...
+# AWS_SECRET_ACCESS_KEY=...
 EOF
     warn "Edit /etc/signage-relay.env with your settings"
 else
