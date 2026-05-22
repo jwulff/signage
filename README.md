@@ -14,8 +14,8 @@ Personal digital signage system for Pixoo64 and other LED matrix displays. Displ
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│   Lambda    │────▶│  WebSocket  │────▶│    Relay     │────▶│   Pixoo64   │
-│  (content)  │     │     API     │     │    (CLI)     │     │  (display)  │
+│   Lambda    │────▶│  WebSocket  │────▶│ Relay (CLI)  │────▶│   Pixoo64   │
+│  (content)  │     │     API     │     │  ↗ glucagent │     │  (display)  │
 └─────────────┘     └──────┬──────┘     └──────────────┘     └─────────────┘
                           │
                           │             ┌──────────────┐
@@ -23,6 +23,8 @@ Personal digital signage system for Pixoo64 and other LED matrix displays. Displ
                                         │  (browser)   │
                                         └──────────────┘
 ```
+
+> **Relay moved.** The local Pixoo relay CLI and Lightsail deploy scripts now live in [`jwulff/glucagent`](https://github.com/jwulff/glucagent) under `packages/relay/` and `deploy/lightsail/`. This repo still hosts the cloud Lambdas, WebSocket API, and web emulator; new Pixoo-side work happens in glucagent.
 
 ## Table of Contents
 
@@ -40,8 +42,7 @@ Personal digital signage system for Pixoo64 and other LED matrix displays. Displ
 - [Architecture](#architecture)
 - [Packages](#packages)
 - [API Reference](#api-reference)
-- [Relay CLI](#relay-cli)
-- [Cloud Relay (Optional)](#cloud-relay-optional)
+- [Connecting a Pixoo display](#connecting-a-pixoo-display)
 - [Cost Estimate](#cost-estimate)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
@@ -317,21 +318,9 @@ Open your web URL in a browser:
 https://signage.yourdomain.com
 ```
 
-#### Option B: Pixoo64 (Local Relay)
+#### Option B: Pixoo64
 
-Run the relay on any computer on the same network as your Pixoo:
-
-```bash
-cd packages/relay
-pnpm build
-node dist/cli.js --ws wss://ws.signage.yourdomain.com
-```
-
-First run will scan for Pixoo devices and save the IP.
-
-#### Option C: Pixoo64 (Cloud Relay)
-
-Run the relay on a cloud server for 24/7 operation without a local computer. See [Cloud Relay](#cloud-relay-optional) below.
+The Pixoo relay CLI (local or Lightsail-hosted) lives in [`jwulff/glucagent`](https://github.com/jwulff/glucagent) — see that repo's `packages/relay/` for the CLI and `deploy/lightsail/` for the cloud-host setup.
 
 ---
 
@@ -363,9 +352,10 @@ Run the relay on a cloud server for 24/7 operation without a local computer. See
 |---------|-------------|
 | `@signage/core` | Shared types and Pixoo protocol (RGB encoding) |
 | `@signage/functions` | Lambda handlers for WebSocket and HTTP APIs |
-| `@signage/relay` | CLI that bridges WebSocket to local Pixoo HTTP API |
 | `@signage/web` | React web emulator with canvas-based display |
 | `@signage/local-dev` | Local development server (no AWS needed) |
+
+The Pixoo relay CLI (`@signage/relay`) and Lightsail deploy scripts moved to [`jwulff/glucagent`](https://github.com/jwulff/glucagent).
 
 ## API Reference
 
@@ -396,53 +386,14 @@ curl "https://api.signage.yourdomain.com/test-bitmap?pattern=text&text=Hello&col
 curl "https://api.signage.yourdomain.com/health"
 ```
 
-## Relay CLI
+## Connecting a Pixoo display
 
-The relay connects a local Pixoo64 to the cloud WebSocket API.
+The Pixoo relay CLI and the optional AWS Lightsail cloud-relay setup live in [`jwulff/glucagent`](https://github.com/jwulff/glucagent):
 
-### Installation
+- `packages/relay/` — Node.js CLI that bridges the cloud WebSocket API to the Pixoo's local HTTP endpoint (local-network or cloud-hosted).
+- `deploy/lightsail/` — Lightsail + WireGuard setup for 24/7 operation without keeping a local computer on (~$3.50/month).
 
-```bash
-cd packages/relay
-pnpm install
-pnpm build
-```
-
-### Usage
-
-```bash
-# Auto-discover Pixoo (saved for future runs)
-node dist/cli.js --ws wss://ws.signage.yourdomain.com
-
-# Specify IP manually
-node dist/cli.js --pixoo 192.168.1.100 --ws wss://ws.signage.yourdomain.com
-
-# Scan network for devices
-node dist/cli.js scan
-
-# Forget saved IP
-node dist/cli.js forget
-```
-
-### Options
-
-| Option | Required | Description |
-|--------|----------|-------------|
-| `--ws <url>` | Yes | WebSocket API URL |
-| `--pixoo <ip>` | No | Pixoo IP (auto-discovered if not provided) |
-| `--terminal <id>` | No | Custom terminal ID |
-
-## Cloud Relay (Optional)
-
-Run the relay on AWS Lightsail for 24/7 operation without keeping a local computer on.
-
-**Cost**: ~$3.50/month
-
-**Requirements**:
-- Router with WireGuard support (UniFi, pfSense, OpenWrt, etc.)
-- Static IP or Dynamic DNS for your home
-
-See the complete guide: [deploy/lightsail/README.md](deploy/lightsail/README.md)
+Point the relay at this repo's WebSocket URL (e.g. `wss://ws.signage.yourdomain.com`) and it will receive frames broadcast by the Lambdas here.
 
 ## Cost Estimate
 
@@ -454,7 +405,8 @@ See the complete guide: [deploy/lightsail/README.md](deploy/lightsail/README.md)
 | CloudFront/S3 | ~$0.50-2 |
 | Secrets Manager | ~$0.40 |
 | **Total AWS** | **~$5-15** |
-| Lightsail relay (optional) | +$3.50 |
+
+The optional Lightsail relay (~$3.50/month) is described in [`jwulff/glucagent`](https://github.com/jwulff/glucagent).
 
 ## Troubleshooting
 
@@ -465,7 +417,7 @@ See the complete guide: [deploy/lightsail/README.md](deploy/lightsail/README.md)
 | Deployment fails with credentials error | Check `aws sts get-caller-identity` works |
 | WebSocket connection fails | Verify domain configuration in `infra/api.ts` |
 | Dexcom widget shows no data | Run `pnpm sst secret list` to verify secrets are set |
-| Relay can't find Pixoo | Ensure Pixoo is on same network, try `node dist/cli.js scan` |
+| Relay can't find Pixoo | See relay troubleshooting in [`jwulff/glucagent`](https://github.com/jwulff/glucagent) |
 | CloudFront shows old content | Wait 5 minutes or invalidate cache in AWS console |
 
 ### Logs
