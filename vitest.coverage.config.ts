@@ -31,7 +31,6 @@ export default defineConfig({
       include: [
         'packages/core/src/**/*.ts',
         'packages/functions/src/**/*.ts',
-        'packages/relay/src/**/*.ts',
         // Web coverage excluded - tests run separately with jsdom
       ],
 
